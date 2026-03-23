@@ -27,7 +27,7 @@
 - **Follow the defined architecture exactly.** Do not invent new layers, modules, services, or data flows unless the user explicitly requests it.
 - **Respect module boundaries.** Each module (Discovery, Cipher Parser, Risk Scorer, Rules Engine, CBOM Generator, RAG Pipeline, Certification Engine, Pipeline Orchestrator, API, Frontend) is a discrete unit. Do not merge responsibilities across modules.
 - **The PQC Compliance Engine is strictly deterministic.** It must remain a boolean rules engine with zero AI, LLM, or probabilistic influence. This is a non-negotiable security constraint.
-- **The RAG pipeline (Dify + Qdrant) is isolated.** It generates HNDL timelines, patches, and migration roadmaps only. It must never read or write risk scores, compliance tiers, or certificate content.
+- **The RAG pipeline (LangChain + Qdrant) is isolated.** It generates HNDL timelines, patches, and migration roadmaps only. It must never read or write risk scores, compliance tiers, or certificate content.
 - **AES-256 is NOT quantum-broken.** Any code, logic, or output that flags AES-256 as a critical quantum vulnerability is incorrect. AES-256 receives a vulnerability value of `0.05`, not `1.00`.
 - **Layers 4 (RAG) and 5 (Certification) run in parallel** after CBOM generation, as defined in `IMPLEMENTATION.md` Section 2.2.
 
@@ -49,7 +49,7 @@
 - **Backend:** Python 3.11, FastAPI, asyncio + httpx, SQLAlchemy (async), PostgreSQL 15.
 - **Frontend:** Next.js 14 (App Router), Tailwind CSS, shadcn/ui, Recharts.
 - **Crypto:** sslyze, pyOpenSSL, `oqs-python` (liboqs), OQS-patched OpenSSL 3.x (compiled from source in Docker).
-- **RAG:** Dify (workflow orchestrator), Qdrant (vector DB).
+- **RAG:** LangChain (workflow orchestrator), Qdrant (vector DB).
 - **Infra:** Docker + Docker Compose.
 
 **Rule:** Do not introduce alternative frameworks, ORMs, or libraries unless the defined tool is provably insufficient and the user approves the change.

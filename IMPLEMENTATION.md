@@ -28,7 +28,7 @@ The system is organized into **7 logical layers** plus a containerization layer:
 | L1 | Discovery Engine | Enumerates public-facing cryptographic surfaces (DNS, ports, TLS probes) |
 | L2 | Cryptographic Analysis Engine | Decomposes cipher suites, analyzes cert chains, computes risk scores, classifies PQC status |
 | L3 | CBOM Generation | Maps data to CycloneDX 1.6 CBOM, stores in PostgreSQL |
-| L4 | Threat Intelligence RAG | Generates HNDL timelines, server-specific patches via Dify + Qdrant |
+| L4 | Threat Intelligence RAG | Generates HNDL timelines, server-specific patches via LangChain + Qdrant |
 | L5 | Certification Engine | Issues signed X.509 compliance certificates in three tiers |
 | Output | Output Layer | Dashboard, dual reports (CISO + Engineer), certificate viewer |
 | Infra | Container Layer | Docker + Compose with OQS-patched OpenSSL compiled from source |
@@ -57,7 +57,7 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 - **Crypto Analyzer** produces structured data for the **CBOM Generator**.
 - **CBOM Generator** writes to **PostgreSQL** and passes records to both the **PQC Rules Engine** and the **Certification Engine**.
 - **PQC Rules Engine** is a deterministic boolean engine that decides the compliance tier — no AI involved.
-- **RAG Pipeline** (Dify + Qdrant) is triggered only for vulnerable/transitioning assets to produce HNDL timelines and patches.
+- **RAG Pipeline** (LangChain + Qdrant) is triggered only for vulnerable/transitioning assets to produce HNDL timelines and patches.
 - **Cert Signer** issues X.509 certificates signed with ML-DSA-65 (via liboqs/OQS OpenSSL).
 
 ---
@@ -134,7 +134,7 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 | **Input** | Algorithm type from CBOM |
 | **Output** | Estimated break year with source attribution |
 | **Formula** | `BreakYear = CurrentYear + (RequiredLogicalQubits / ProjectedQubitGrowthRate)` |
-| **Connects to** | RAG Pipeline (part of Dify workflow) |
+| **Connects to** | RAG Pipeline (part of LangChain workflow) |
 
 ### 3.8 RAG Pipeline (Threat Intelligence)
 
@@ -143,7 +143,7 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 | **Purpose** | Generate HNDL timelines, server-specific patches, and migration roadmaps |
 | **Input** | Vulnerable CBOM data (asset type + cipher details) |
 | **Output** | Three artifacts: HNDL timeline, server-specific PQC config patch, phased migration roadmap |
-| **Stack** | Dify (workflow orchestrator) + Qdrant (vector DB with NIST doc embeddings) |
+| **Stack** | LangChain (workflow orchestrator) + Qdrant (vector DB with NIST doc embeddings) |
 | **Connects to** | PostgreSQL (stores outputs), Output Layer (surfaces in reports) |
 
 ### 3.9 Patch Generator
@@ -154,7 +154,7 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 | **Input** | Detected server type + current cipher config |
 | **Output** | nginx config with `ssl_ecdh_curve X25519MLKEM768`, Apache config with `SSLOpenSSLConfCmd`, etc. |
 | **Key detail** | Patches require OQS-provider-patched OpenSSL. AES-256-GCM is left unchanged (quantum-acceptable). |
-| **Connects to** | RAG Pipeline (invoked by Dify workflow) |
+| **Connects to** | RAG Pipeline (invoked by LangChain workflow) |
 
 ### 3.10 Certification Engine (X.509 Signer)
 
@@ -216,9 +216,9 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 ### Intelligence Stack
 | Technology | Purpose |
 |-----------|---------|
-| Dify | RAG workflow orchestration (visual, auditable) |
+| LangChain | RAG workflow orchestration (visual, auditable) |
 | Qdrant | Vector database holding NIST document embeddings |
-| LLM (via Dify) | Generates HNDL reports, patches, migration roadmaps |
+| LLM (via LangChain) | Generates HNDL reports, patches, migration roadmaps |
 
 ### Frontend
 | Technology | Purpose |
@@ -450,8 +450,8 @@ WEIGHTS = {"kex": 0.45, "sig": 0.35, "sym": 0.10, "tls": 0.10}
       - IETF hybrid KEX drafts
     - Use an embedding model (e.g., `text-embedding-3-small` or open-source alternative)
 
-15. **Dify workflow setup**
-    - Deploy Dify via Docker Compose
+15. **LangChain workflow setup**
+    - Deploy LangChain via Docker Compose
     - Create workflow for HNDL timeline generation
     - Create workflow for server-specific patch generation
     - Create workflow for migration roadmap generation
@@ -640,14 +640,14 @@ Cert: 7-day X.509 with PQC-STATUS=VULNERABLE
 |------|----------|-------|
 | **OQS OpenSSL compilation** | 🔴 Blocker | Standard pip-installed pyOpenSSL cannot negotiate PQC. Docker must compile OpenSSL 3.x + OQS from source. If this fails, PQC is blocked. |
 | **ML-DSA X.509 signing** | 🟠 High | Python `cryptography` library doesn't natively support FIPS 204 ML-DSA. Must use OQS OpenSSL CLI via subprocess. ECDSA fallback preserves compliance data but loses the "quantum-safe certificate" narrative. |
-| **Dify + Qdrant configuration** | 🟠 High | Setting up Dify workflows and ingesting NIST docs into Qdrant is non-trivial. Embedding model choice, chunk size, and retrieval quality directly affect RAG output quality. |
+| **LangChain + Qdrant configuration** | 🟠 High | Setting up LangChain workflows and ingesting NIST docs into Qdrant is non-trivial. Embedding model choice, chunk size, and retrieval quality directly affect RAG output quality. |
 | **Scan timeouts** | 🟡 Medium | DNS enumeration + port scanning + TLS probing across many subdomains could be slow. Need timeouts and concurrency limits. |
 
 ### Ambiguities Requiring Assumptions
 
 | Area | Assumption Made |
 |------|----------------|
-| **LLM for RAG pipeline** | Document doesn't specify which LLM Dify should use. Assuming an OpenAI-compatible model (GPT-4 or local alternative). |
+| **LLM for RAG pipeline** | Document doesn't specify which LLM LangChain should use. Assuming an OpenAI-compatible model (GPT-4 or local alternative). |
 | **Embedding model** | Not specified. Assuming `text-embedding-3-small` or an open-source model like `nomic-embed-text`. |
 | **Authentication/Authorization** | No mention of user auth for the dashboard or API. Assuming basic auth or API keys for MVP. |
 | **Multi-tenant isolation** | MVP is single-bank. No multi-tenancy needed yet. |

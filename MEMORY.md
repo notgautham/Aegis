@@ -25,7 +25,7 @@ No application code has been written yet. The project is entering **Phase 1: Pro
 - Discovery Engine (DNS, ports, TLS probing, asset aggregation)
 - Cryptographic Analysis Engine (cipher parsing, cert analysis, risk scoring)
 - PQC Rules Engine (deterministic compliance classification) and CBOM generator
-- Threat Intelligence RAG pipeline (Dify + Qdrant, HNDL timelines, patch generation)
+- Threat Intelligence RAG pipeline (LangChain + Qdrant, HNDL timelines, patch generation)
 - Certification Engine (ML-DSA-65 X.509 signing, three-tier issuance)
 - Pipeline orchestrator and FastAPI REST API endpoints
 - Next.js 14 frontend (dashboard, heatmap, CBOM viewer, cert viewer, dual reports)
@@ -33,7 +33,7 @@ No application code has been written yet. The project is entering **Phase 1: Pro
 ## 4. Key Technical Decisions (Immutable)
 - **Tech Stack:** Python 3.11 (FastAPI, asyncio), Next.js 14, PostgreSQL 15.
 - **Crypto Engine:** Must use `liboqs` (via `oqs-python`) and OQS-patched OpenSSL built from source in Docker. Host OS OpenSSL will NOT work for PQC.
-- **RAG Stack:** Dify + Qdrant. **Strictly isolated** — generates HNDL timelines, patches, and roadmaps only. RAG must never alter risk scores, compliance tiers, or certificate content.
+- **RAG Stack:** LangChain + Qdrant. **Strictly isolated** — generates HNDL timelines, patches, and roadmaps only. RAG must never alter risk scores, compliance tiers, or certificate content.
 - **Security Logic:** The PQC Rules Engine is a non-AI, purely deterministic boolean evaluator. No exceptions.
 - **AES-256:** Vulnerability value = 0.05, NOT 1.00. AES-256 is quantum-acceptable.
 - **Dependency Flow:** Infrastructure → DB Models → Discovery → Analysis → CBOM → Rules → RAG/Certs → Pipeline Orchestrator → API → Frontend.
@@ -43,7 +43,7 @@ Execute **Phase 1** from `TODO.md`:
 1. Initialize Python backend (`backend/`, `pyproject.toml`, `requirements.txt`).
 2. Initialize Next.js frontend (`frontend/`, Tailwind CSS, shadcn/ui).
 3. Create `docker/Dockerfile.oqs` (OpenSSL 3.x + OQS provider from source).
-4. Create `docker-compose.yml` (backend, postgres, qdrant, dify).
+4. Create `docker-compose.yml` (backend, postgres, qdrant, langchain).
 5. Verify `oqs-python` runs in container via `tests/infra/test_oqs.py`.
 
 ## 6. Directory of Key Files

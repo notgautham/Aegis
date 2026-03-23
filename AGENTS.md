@@ -60,7 +60,7 @@ When relevant, prioritize finding and using these skills:
 ## 8. Safe Modification Guidelines
 - **Avoid modifying** database schemas, deterministic pipeline stages (like the PQC Rules Engine), or core data models unless explicitly required.
 - The PQC Compliance Engine must remain a purely deterministic boolean engine — do not introduce probabilistic or LLM-based logic into security evaluations.
-- The RAG pipeline (Dify + Qdrant) must never read or write risk scores, compliance tiers, or certificate content.
+- The RAG pipeline (LangChain + Qdrant) must never read or write risk scores, compliance tiers, or certificate content.
 - If changes to data models or pipeline logic are necessary, update all related modules consistently.
 
 ## 9. Agent Execution Strategy

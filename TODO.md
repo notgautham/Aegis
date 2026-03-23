@@ -6,7 +6,7 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [ ] Initialize Python backend project structure (create `backend/` directory, `pyproject.toml`, `requirements.txt` with all dependencies from `IMPLEMENTATION.md` Section 4).
 - [ ] Initialize Next.js 14 frontend project structure (create `frontend/` directory, configure Tailwind CSS and `shadcn/ui`).
 - [ ] Create `docker/Dockerfile.oqs` to compile OpenSSL 3.x with the OQS provider from source.
-- [ ] Create `docker-compose.yml` defining services: `backend`, `postgres`, `qdrant`, `dify`.
+- [ ] Create `docker-compose.yml` defining services: `backend`, `postgres`, `qdrant`, `langchain`.
 - [ ] Implement a basic health check script (`tests/infra/test_oqs.py`) to verify the OQS-patched OpenSSL container runs correctly via `oqs-python`.
 
 ## Phase 2: Database Schema & ORM Setup
@@ -51,7 +51,7 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 
 ## Phase 6: Threat Intelligence (RAG) & Remediation
 - [ ] Implement script `scripts/ingest_nist_docs.py` to chunk and embed NIST reference PDFs (FIPS 203, 204, 205, SP 800-208, IR 8547, IBM/Google qubit roadmaps, IETF hybrid KEX drafts) into Qdrant.
-- [ ] Set up basic API client in `backend/intelligence/dify_client.py` to communicate with Dify workflow endpoints.
+- [ ] Set up basic API client in `backend/intelligence/langchain_client.py` to communicate with LangChain workflow endpoints.
 - [ ] Create `backend/intelligence/hndl_calculator.py` implementing `BreakYear = CurrentYear + (RequiredLogicalQubits / ProjectedQubitGrowthRate)` with the `QUBIT_REQUIREMENTS` constants.
 - [ ] Create `backend/intelligence/patch_generator.py` with templates for nginx (`ssl_ecdh_curve X25519MLKEM768`) and Apache (`SSLOpenSSLConfCmd Curves X25519MLKEM768`) PQC directives, preserving AES-256-GCM as-is.
 - [ ] Integrate generated HNDL timelines, patches, and migration roadmaps into the `RemediationBundle` persistence layer with source citations.
