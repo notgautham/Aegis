@@ -3,11 +3,11 @@
 This document translates the system architecture defined in `SOLUTION.md` and `IMPLEMENTATION.md` into a strictly chronological engineering roadmap. It is designed for AI coding agents to execute in small, atomic, and deterministic implementation steps.
 
 ## Phase 1: Project Scaffolding & Infrastructure
-- [ ] Initialize Python backend project structure (create `backend/` directory, `pyproject.toml`, `requirements.txt` with all dependencies from `IMPLEMENTATION.md` Section 4).
-- [ ] Initialize Next.js 14 frontend project structure (create `frontend/` directory, configure Tailwind CSS and `shadcn/ui`).
-- [ ] Create `docker/Dockerfile.oqs` to compile OpenSSL 3.x with the OQS provider from source.
-- [ ] Create `docker-compose.yml` defining services: `backend`, `postgres`, `qdrant`, `langchain`.
-- [ ] Implement a basic health check script (`tests/infra/test_oqs.py`) to verify the OQS-patched OpenSSL container runs correctly via `oqs-python`.
+- [x] Initialize Python backend project structure (create `backend/` directory, `pyproject.toml`, `requirements.txt` with all dependencies from `IMPLEMENTATION.md` Section 4).
+- [x] Initialize Next.js 14 frontend project structure (create `frontend/` directory, configure Tailwind CSS and `shadcn/ui`).
+- [x] Create `docker/Dockerfile.oqs` to compile OpenSSL 3.x with the OQS provider from source.
+- [x] Create `docker-compose.yml` defining services: `backend`, `postgres`, `qdrant`.
+- [x] Implement a basic health check script (`tests/infra/test_oqs.py`) to verify the OQS-patched OpenSSL container runs correctly via `oqs-python`.
 
 ## Phase 2: Database Schema & ORM Setup
 - [ ] Setup SQLAlchemy async engine and base declarative models in `backend/database/`.

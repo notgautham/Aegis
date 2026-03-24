@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────
+# Aegis – OQS-Patched OpenSSL Docker Image
+# Multi-stage build: compile liboqs + oqs-provider, then
+# copy into a slim Python 3.11 runtime image.
+# ─────────────────────────────────────────────────────────
+
+# ── Stage 1: Build liboqs and oqs-provider ──────────────
+FROM python:3.11-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git cmake gcc g++ make ninja-build \
+    libssl-dev wget autoconf libtool \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp
+
+# Build liboqs from source
+RUN git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git && \
+    cd liboqs && mkdir build && cd build && \
+    cmake -GNinja -DBUILD_SHARED_LIBS=ON .. && \
+    ninja && ninja install
+
+# Build OQS provider for OpenSSL 3.x
+RUN git clone --depth 1 --branch main https://github.com/open-quantum-safe/oqs-provider.git && \
+    cd oqs-provider && mkdir build && cd build && \
+    cmake -GNinja -Dliboqs_DIR=/usr/local .. && \
+    ninja && ninja install
+
+RUN ldconfig
+
+
+# ── Stage 2: Runtime image ──────────────────────────────
+FROM python:3.11-slim
+
+# Install runtime dependencies (for sslyze, nmap, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 nmap && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy built OQS libraries from builder
+COPY --from=builder /usr/local/lib/ /usr/local/lib/
+COPY --from=builder /usr/local/include/ /usr/local/include/
+RUN ldconfig
+
+# Set working directory
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir liboqs-python
+
+# Copy application code
+COPY . .
+
+# Expose FastAPI port
+EXPOSE 8000
+
+# Run with uvicorn
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
