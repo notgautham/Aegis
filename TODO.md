@@ -10,15 +10,15 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [x] Implement a basic health check script (`tests/infra/test_oqs.py`) to verify the OQS-patched OpenSSL container runs correctly via `oqs-python`.
 
 ## Phase 2: Database Schema & ORM Setup
-- [ ] Setup SQLAlchemy async engine and base declarative models in `backend/database/`.
-- [ ] Implement `ScanJob` SQLAlchemy model and generate Alembic migration.
-- [ ] Implement `DiscoveredAsset` SQLAlchemy model and generate Alembic migration.
-- [ ] Implement `CryptoAssessment` SQLAlchemy model and generate Alembic migration.
-- [ ] Implement `CertificateChain` SQLAlchemy model and generate Alembic migration.
-- [ ] Implement `CbomDocument` SQLAlchemy model (with JSONB `cbom_json`) and generate Alembic migration.
-- [ ] Implement `ComplianceCertificate` SQLAlchemy model and generate Alembic migration.
-- [ ] Implement `RemediationBundle` SQLAlchemy model and generate Alembic migration.
-- [ ] Create repository/DAO classes for core CRUD operations on all models.
+- [x] Setup SQLAlchemy async engine and base declarative models in `backend/models/`.
+- [x] Implement `ScanJob` SQLAlchemy model and generate Alembic migration.
+- [x] Implement `DiscoveredAsset` SQLAlchemy model and generate Alembic migration.
+- [x] Implement `CryptoAssessment` SQLAlchemy model and generate Alembic migration.
+- [x] Implement `CertificateChain` SQLAlchemy model and generate Alembic migration.
+- [x] Implement `CbomDocument` SQLAlchemy model (with JSONB `cbom_json`) and generate Alembic migration.
+- [x] Implement `ComplianceCertificate` SQLAlchemy model and generate Alembic migration.
+- [x] Implement `RemediationBundle` SQLAlchemy model and generate Alembic migration.
+- [x] Create repository/DAO classes for core CRUD operations on all models.
 
 ## Phase 3: Core Discovery Engine
 - [ ] Create `backend/discovery/dns_enumerator.py` integrating `Amass` subprocess calls for subdomain enumeration and certificate transparency log queries.
