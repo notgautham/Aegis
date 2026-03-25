@@ -77,7 +77,7 @@ Phase 2 (Database Schema & ORM Setup) has been completed. The project is enterin
 - **RAG Stack:** LangChain + Qdrant. **Strictly isolated** — generates HNDL timelines, patches, and roadmaps only. RAG must never alter risk scores, compliance tiers, or certificate content.
 - **Security Logic:** The PQC Rules Engine is a non-AI, purely deterministic boolean evaluator. No exceptions.
 - **AES-256:** Vulnerability value = 0.05, NOT 1.00. AES-256 is quantum-acceptable.
-- **Dependency Flow:** Infrastructure → DB Models → Discovery → Analysis → CBOM → Rules → RAG/Certs → Pipeline Orchestrator → API → Frontend.
+- **Dependency Flow:** Infrastructure → DB Models → Discovery → Analysis → CBOM → PQC Rules Engine → Certification (all assets) / RAG (Tier 2 / Tier 3 only) → Pipeline Orchestrator → API → Frontend.
 - **IP address storage:** TEXT column (not PostgreSQL INET) for asyncpg compatibility.
 
 ## 5. Next Logical Task

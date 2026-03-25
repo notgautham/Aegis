@@ -48,14 +48,14 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 ```
 
 > [!IMPORTANT]
-> Layers 4 (RAG) and 5 (Certification) run **in parallel** after CBOM generation. The RAG pipeline has **no write access** to risk scores, compliance tier decisions, or certificate content — all security decisions are deterministic.
+> The pipeline follows a strict sequential flow: `CBOM → PQC Rules Engine → Certification Engine`. The Certification Engine depends on the Rules Engine output (compliance tier). The RAG pipeline is triggered **only for Tier 2 / Tier 3 assets** after the Rules Engine has classified the tier. The RAG pipeline has **no write access** to risk scores, compliance tier decisions, or certificate content — all security decisions are deterministic.
 
 ### 2.3 Component Interaction
 
 - **FastAPI** is the central orchestrator — receives scan requests, spawns async tasks, aggregates results.
 - **Discovery Engine** feeds raw endpoints to **Crypto Analyzer**.
 - **Crypto Analyzer** produces structured data for the **CBOM Generator**.
-- **CBOM Generator** writes to **PostgreSQL** and passes records to both the **PQC Rules Engine** and the **Certification Engine**.
+- **CBOM Generator** writes to **PostgreSQL** and passes records to the **PQC Rules Engine**. The Rules Engine then passes its compliance tier output to the **Certification Engine**.
 - **PQC Rules Engine** is a deterministic boolean engine that decides the compliance tier — no AI involved.
 - **RAG Pipeline** (LangChain + Qdrant) is triggered only for vulnerable/transitioning assets to produce HNDL timelines and patches.
 - **Cert Signer** issues X.509 certificates signed with ML-DSA-65 (via liboqs/OQS OpenSSL).
@@ -82,6 +82,15 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 | **Input** | Raw TLS cipher string (handles both TLS 1.2 and TLS 1.3 formats) |
 | **Output** | Four components: key exchange, authentication, encryption, integrity — each with vulnerability value (V: 0.00–1.00) |
 | **Logic** | Regex + delimiter-based splitting; lookup table for quantum threat classification |
+
+> **Note: TLS 1.3 cipher suites do not expose key exchange or authentication details in the cipher string.**
+> For TLS 1.3:
+> - Cipher parsing must be separated from handshake analysis
+> - KEX/authentication must be derived from handshake/session metadata
+>
+> Implementation split:
+> - `cipher_parser.py` → handles TLS 1.2 parsing
+> - `handshake_metadata_resolver.py` → handles TLS 1.3 extraction
 | **Connects to** | Risk Scoring Engine, PQC Classification |
 
 ### 3.3 Certificate Chain Analyzer
@@ -100,7 +109,7 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 | **Purpose** | Compute numeric quantum risk score (0–100) per asset |
 | **Input** | Four vulnerability values from Cipher Suite Parser |
 | **Output** | Score 0–100 with component-level breakdown |
-| **Formula** | `Score = (0.45 × V_kex) + (0.35 × V_sig) + (0.10 × V_sym) + (0.10 × V_tls)` |
+| **Formula** | `Score = 100 × ((0.45 × V_kex) + (0.35 × V_sig) + (0.10 × V_sym) + (0.10 × V_tls))` |
 | **Connects to** | PQC Compliance Engine, CBOM Generator |
 
 ### 3.5 PQC Compliance Engine (Rules Engine)
@@ -152,7 +161,7 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 |--------|--------|
 | **Purpose** | Generate deployable server-specific PQC configuration patches |
 | **Input** | Detected server type + current cipher config |
-| **Output** | nginx config with `ssl_ecdh_curve X25519MLKEM768`, Apache config with `SSLOpenSSLConfCmd`, etc. |
+| **Output** | nginx config with `ssl_ecdh_curve X25519MLKEM768:X25519`, Apache config with `SSLOpenSSLConfCmd`, etc. |
 | **Key detail** | Patches require OQS-provider-patched OpenSSL. AES-256-GCM is left unchanged (quantum-acceptable). |
 | **Connects to** | RAG Pipeline (invoked by LangChain workflow) |
 
@@ -172,7 +181,7 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 | Aspect | Detail |
 |--------|--------|
 | **Purpose** | REST API orchestration layer |
-| **Key endpoints** | `POST /scan`, scan status, CBOM retrieval, cert download, report export |
+| **Key endpoints** | `POST /api/v1/scan`, scan status, CBOM retrieval, cert download, report export |
 | **Async model** | asyncio + httpx for concurrent TLS probing (up to 50 concurrent handshakes) |
 | **Connects to** | All internal modules; Next.js frontend |
 
@@ -216,7 +225,7 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 ### Intelligence Stack
 | Technology | Purpose |
 |-----------|---------|
-| LangChain | RAG workflow orchestration (visual, auditable) |
+| LangChain | RAG workflow orchestration — runs **in-process** within the FastAPI backend (not a separate service) |
 | Qdrant | Vector database holding NIST document embeddings |
 | LLM (via LangChain) | Generates HNDL reports, patches, migration roadmaps |
 
@@ -253,7 +262,7 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 | id | UUID (PK) | Unique asset identifier |
 | scan_id | UUID (FK → scan_jobs) | Parent scan |
 | hostname | TEXT | Resolved hostname |
-| ip_address | INET | IP address |
+| ip_address | TEXT | IP address (stored as TEXT, not INET — asyncpg has limited native INET support) |
 | port | INTEGER | Port number |
 | protocol | TEXT | tcp / udp |
 | service_type | TEXT | `tls`, `vpn`, `api` |
@@ -298,7 +307,7 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 | id | UUID (PK) | |
 | scan_id | UUID (FK → scan_jobs) | |
 | asset_id | UUID (FK → discovered_assets) | |
-| serial_number | TEXT | Deterministic URN (`urn:uuid:aegis-scan-{date}-{hostname}`) |
+| serial_number | TEXT | Deterministic URN (`urn:aegis:scan:{date}:{hostname}`) |
 | cbom_json | JSONB | Full CycloneDX 1.6 CBOM document |
 | created_at | TIMESTAMP | |
 
@@ -346,6 +355,13 @@ VULNERABILITY_MAP = {
         "3DES": 1.00, "DES": 1.00, "RC4": 1.00,
         "CHACHA20": 0.05,
     },
+}
+
+TLS_VULNERABILITY_MAP = {
+    "1.0": 1.00,  # Broken — legacy protocol penalty
+    "1.1": 0.80,  # Deprecated protocol penalty
+    "1.2": 0.40,  # Moderate protocol-level penalty
+    "1.3": 0.00,  # No legacy protocol penalty; preferred baseline
 }
 
 # HNDL qubit requirements
@@ -406,8 +422,8 @@ WEIGHTS = {"kex": 0.45, "sig": 0.35, "sym": 0.10, "tls": 0.10}
 
 8. **Cipher suite parser**
    - Regex-based decomposition into kex / auth / enc / mac
-   - Handle TLS 1.2 format (`TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`)
-   - Handle TLS 1.3 format (`TLS_AES_256_GCM_SHA384`)
+   - Handle TLS 1.2 format (`TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`) in `cipher_parser.py`
+   - Handle TLS 1.3 format (`TLS_AES_256_GCM_SHA384`) via `handshake_metadata_resolver.py` — kex/auth are **not** in the cipher string and must be derived from handshake/session metadata
    - Map each component to vulnerability value via lookup table
 
 9. **Certificate chain analyzer**
@@ -416,7 +432,7 @@ WEIGHTS = {"kex": 0.45, "sig": 0.35, "sym": 0.10, "tls": 0.10}
    - Set `quantumSafe` boolean per certificate
 
 10. **Quantum risk scoring engine**
-    - Implement weighted formula: `(0.45 × V_kex) + (0.35 × V_sig) + (0.10 × V_sym) + (0.10 × V_tls)`
+    - Implement weighted formula: `Score = 100 × ((0.45 × V_kex) + (0.35 × V_sig) + (0.10 × V_sym) + (0.10 × V_tls))`
     - Return score 0–100 with component breakdown
 
 11. **PQC compliance engine (rules engine)**
@@ -431,7 +447,7 @@ WEIGHTS = {"kex": 0.45, "sig": 0.35, "sym": 0.10, "tls": 0.10}
 12. **CycloneDX 1.6 schema mapper**
     - Map all crypto assessment data to CycloneDX 1.6 JSON with `cryptoProperties`
     - Include `quantumRiskSummary` block
-    - Deterministic serial number scheme (`urn:uuid:aegis-scan-{date}-{hostname}`)
+    - Deterministic serial number scheme (`urn:aegis:scan:{date}:{hostname}`)
 
 13. **CBOM persistence and export**
     - Store as JSONB in PostgreSQL
@@ -451,7 +467,7 @@ WEIGHTS = {"kex": 0.45, "sig": 0.35, "sym": 0.10, "tls": 0.10}
     - Use an embedding model (e.g., `text-embedding-3-small` or open-source alternative)
 
 15. **LangChain workflow setup**
-    - Deploy LangChain via Docker Compose
+    - LangChain runs **in-process** within the FastAPI backend — it is an internal orchestration layer, not a separate service. No external API calls or microservice deployment is required for MVP.
     - Create workflow for HNDL timeline generation
     - Create workflow for server-specific patch generation
     - Create workflow for migration roadmap generation
@@ -462,7 +478,7 @@ WEIGHTS = {"kex": 0.45, "sig": 0.35, "sym": 0.10, "tls": 0.10}
 
 17. **Patch generator**
     - Template-based generation for nginx, Apache, OpenSSL CLI
-    - Inject correct OQS directives (`ssl_ecdh_curve X25519MLKEM768`, etc.)
+    - Inject correct OQS directives (`ssl_ecdh_curve X25519MLKEM768:X25519`, etc.)
     - Preserve AES-256-GCM as-is (quantum-acceptable)
 
 ---
@@ -484,12 +500,12 @@ WEIGHTS = {"kex": 0.45, "sig": 0.35, "sym": 0.10, "tls": 0.10}
 ### Phase 7: FastAPI Endpoints (Days 12–13)
 
 20. **REST API implementation**
-    - `POST /scan` — initiate scan with target and scope
-    - `GET /scan/{id}` — scan status and progress
-    - `GET /scan/{id}/results` — full compiled results
-    - `GET /assets/{id}/cbom` — CBOM JSON download
-    - `GET /assets/{id}/certificate` — X.509 PEM download
-    - `GET /assets/{id}/remediation` — patch + HNDL timeline
+    - `POST /api/v1/scan` — initiate scan with target and scope
+    - `GET /api/v1/scan/{id}` — scan status and progress
+    - `GET /api/v1/scan/{id}/results` — full compiled results
+    - `GET /api/v1/assets/{id}/cbom` — CBOM JSON download
+    - `GET /api/v1/assets/{id}/certificate` — X.509 PEM download
+    - `GET /api/v1/assets/{id}/remediation` — patch + HNDL timeline
     - OpenAPI/Swagger spec auto-generation
 
 ---
@@ -538,18 +554,22 @@ STAGE 3 — CBOM GENERATION
   ├── Add quantumRiskSummary block
   └── Store as JSONB in PostgreSQL
   │
-  ┌──────────────┴──────────────┐
-  ▼                             ▼
-STAGE 4 — RAG PIPELINE        STAGE 5 — CERTIFICATION
-(for Tier 2 & 3 only)         (for all assets)
-  ├── Query Qdrant (NIST docs)   ├── Determine cert validity
-  ├── Compute HNDL break year    ├── Set custom OID extensions
-  ├── Generate server patch      └── Sign with ML-DSA-65 (or ECDSA fallback)
+  ▼
+STAGE 4 — PQC RULES ENGINE
+  └── Deterministic compliance tier → FULLY_QUANTUM_SAFE / PQC_TRANSITIONING / QUANTUM_VULNERABLE
+  │
+  ├──────────────────────────────────────┐
+  ▼                                      ▼
+STAGE 5 — RAG PIPELINE              STAGE 6 — CERTIFICATION
+(Tier 2 & Tier 3 only)               (depends on Rules Engine output)
+  ├── Query Qdrant (NIST docs)         ├── Determine cert validity (tier-driven)
+  ├── Compute HNDL break year          ├── Set custom OID extensions
+  ├── Generate server patch            └── Sign with ML-DSA-65 (or ECDSA fallback)
   └── Generate migration roadmap
   │                             │
   └──────────────┬──────────────┘
                  ▼
-STAGE 6 — OUTPUT
+STAGE 7 — OUTPUT
   ├── CBOM JSON/PDF download
   ├── Signed X.509 certificate
   ├── HNDL timeline (if applicable)
@@ -591,7 +611,7 @@ docker-compose exec backend pytest tests/unit/ -v
 | **Discovery → Analysis** | Scan a known public endpoint (e.g., `testssl.sh`) | Assets discovered, cipher suites extracted, parsed correctly |
 | **Analysis → CBOM** | Feed parsed crypto data through CBOM generator | Valid CycloneDX JSON stored in PostgreSQL |
 | **CBOM → Rules Engine → Cert** | Pass a QUANTUM_VULNERABLE CBOM through | Correct tier assigned, 7-day cert issued, remediation bundle created |
-| **CBOM → RAG → Patch** | Trigger RAG for a vulnerable nginx asset | HNDL timeline computed, nginx patch generated with `X25519MLKEM768` |
+| **CBOM → Rules → RAG → Patch** | Trigger RAG for a vulnerable nginx asset after Rules Engine assigns Tier 3 | HNDL timeline computed, nginx patch generated with `ssl_ecdh_curve X25519MLKEM768:X25519` |
 | **Full pipeline** | End-to-end scan of `testssl.sh` | All stages execute, dashboard renders complete results |
 
 **Run command:**
@@ -608,10 +628,10 @@ docker-compose exec backend pytest tests/integration/ -v --timeout=120
 Discovery: endpoints found on ports 443
 Cipher: TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
   → kex=ECDHE (V=1.00), auth=RSA (V=1.00), enc=AES-256-GCM (V=0.05), mac=SHA384 (V~0)
-Score: ~84.5/100
-Tier: QUANTUM_VULNERABLE
+Score: ~84.5 (0–100 scale)
+Tier: QUANTUM_VULNERABLE (assigned by PQC Rules Engine → triggers RAG + 7-day cert)
 HNDL: RSA-2048 break year ~2036
-Patch: nginx config with ssl_ecdh_curve X25519MLKEM768
+Patch: nginx config with ssl_ecdh_curve X25519MLKEM768:X25519
 Cert: 7-day X.509 with PQC-STATUS=VULNERABLE
 ```
 

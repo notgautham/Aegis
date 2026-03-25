@@ -32,28 +32,30 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [ ] (Optional) Create `backend/discovery/vpn_probe.py` — IKEv2 SA_INIT and OpenVPN detection (partial analysis only).
 
 ## Phase 4: Cryptographic Analysis Engine
-- [ ] Create `backend/analysis/cipher_parser.py` with regex logic to split TLS 1.2 and 1.3 cipher strings into `kex` / `auth` / `enc` / `mac` components.
-- [ ] Implement the `VULNERABILITY_MAP` lookup table structure in `backend/analysis/constants.py`.
-- [ ] Write unit tests for `cipher_parser.py` covering TLS 1.2, TLS 1.3, hybrid PQC, and edge-case cipher strings.
+- [ ] Create `backend/analysis/cipher_parser.py` with regex logic to split **TLS 1.2** cipher strings (format: `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`) into `kex` / `auth` / `enc` / `mac` components.
+- [ ] Create `backend/analysis/handshake_metadata_resolver.py` to handle **TLS 1.3** extraction — kex and auth are not present in TLS 1.3 cipher strings and must be derived from sslyze handshake/session metadata.
+- [ ] Implement the `VULNERABILITY_MAP` and `TLS_VULNERABILITY_MAP` lookup table structures in `backend/analysis/constants.py`.
+- [ ] Write unit tests for `cipher_parser.py` covering TLS 1.2, hybrid PQC, and edge-case cipher strings.
+- [ ] Write unit tests for `handshake_metadata_resolver.py` covering TLS 1.3 handshake metadata extraction.
 - [ ] Create `backend/analysis/cert_analyzer.py` to extract leaf, intermediate, and root certificate metrics and set `quantumSafe` boolean.
-- [ ] Create `backend/analysis/risk_scorer.py` implementing the formula `(0.45 × V_kex) + (0.35 × V_sig) + (0.10 × V_sym) + (0.10 × V_tls)` with component-level breakdown.
-- [ ] Write unit tests validating risk score outputs against the documented example (ECDHE + RSA-2048 + AES-256-GCM + TLS 1.2 → 84.5).
+- [ ] Create `backend/analysis/risk_scorer.py` implementing the formula `Score = 100 × ((0.45 × V_kex) + (0.35 × V_sig) + (0.10 × V_sym) + (0.10 × V_tls))` with component-level breakdown.
+- [ ] Write unit tests validating risk score outputs against the documented example (ECDHE + RSA-2048 + AES-256-GCM + TLS 1.2 → 84.5 on a 0–100 scale).
 
 ## Phase 5: PQC Rules Engine & CBOM Generation
 - [ ] Create `backend/compliance/rules_engine.py` with deterministic PASS/HYBRID/FAIL logic for KEX, SIG, and SYM dimensions.
 - [ ] Implement the 3-tier aggregation logic (`FULLY_QUANTUM_SAFE`, `PQC_TRANSITIONING`, `QUANTUM_VULNERABLE`) in `rules_engine.py`.
 - [ ] Write unit tests ensuring the compliance rules engine truth table is correct and deterministic for all combinations.
 - [ ] Create `backend/cbom/cyclonedx_mapper.py` to map the crypto assessment payload to the CycloneDX 1.6 JSON schema with `cryptoProperties` and `quantumRiskSummary`.
-- [ ] Implement deterministic CBOM serial number scheme (`urn:uuid:aegis-scan-{date}-{hostname}`).
+- [ ] Implement deterministic CBOM serial number scheme (`urn:aegis:scan:{date}:{hostname}`).
 - [ ] Implement CBOM persistence (storing the mapped CycloneDX JSONB into the `CbomDocument` repository).
 - [ ] Implement CBOM JSON export endpoint logic.
 - [ ] Implement CBOM PDF export logic (using `weasyprint` or `reportlab`).
 
 ## Phase 6: Threat Intelligence (RAG) & Remediation
 - [ ] Implement script `scripts/ingest_nist_docs.py` to chunk and embed NIST reference PDFs (FIPS 203, 204, 205, SP 800-208, IR 8547, IBM/Google qubit roadmaps, IETF hybrid KEX drafts) into Qdrant.
-- [ ] Set up basic API client in `backend/intelligence/langchain_client.py` to communicate with LangChain workflow endpoints.
+- [ ] Set up LangChain **in-process** within the FastAPI backend (not a separate Docker service) for HNDL timeline, patch generation, and migration roadmap workflows in `backend/intelligence/rag_orchestrator.py`.
 - [ ] Create `backend/intelligence/hndl_calculator.py` implementing `BreakYear = CurrentYear + (RequiredLogicalQubits / ProjectedQubitGrowthRate)` with the `QUBIT_REQUIREMENTS` constants.
-- [ ] Create `backend/intelligence/patch_generator.py` with templates for nginx (`ssl_ecdh_curve X25519MLKEM768`) and Apache (`SSLOpenSSLConfCmd Curves X25519MLKEM768`) PQC directives, preserving AES-256-GCM as-is.
+- [ ] Create `backend/intelligence/patch_generator.py` with templates for nginx (`ssl_ecdh_curve X25519MLKEM768:X25519`) and Apache (`SSLOpenSSLConfCmd Curves X25519MLKEM768:X25519`) PQC directives, preserving AES-256-GCM as-is.
 - [ ] Integrate generated HNDL timelines, patches, and migration roadmaps into the `RemediationBundle` persistence layer with source citations.
 
 ## Phase 7: Certification Engine
@@ -65,7 +67,7 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [ ] Persist generated certificates into the `ComplianceCertificate` repository.
 
 ## Phase 8: Pipeline Orchestrator & API
-- [ ] Create `backend/pipeline/orchestrator.py` — the async orchestrator that chains Discovery → Analysis → CBOM → Rules → (RAG + Cert in parallel) and writes all results to PostgreSQL.
+- [ ] Create `backend/pipeline/orchestrator.py` — the async orchestrator that chains Discovery → Analysis → CBOM → PQC Rules Engine → Certification (all assets) and RAG (Tier 2 / Tier 3 only, triggered only after Rules classification), then writes all results to PostgreSQL.
 - [ ] Initialize FastAPI app with CORS middleware and global exception handlers in `backend/main.py`.
 - [ ] Implement `POST /api/v1/scan` endpoint to accept targets, trigger the async pipeline orchestrator, and return `scan_id`.
 - [ ] Implement `GET /api/v1/scan/{scan_id}` endpoint for scan status and progress polling.
@@ -87,3 +89,12 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [ ] Implement the HNDL Timeline & Remediation view (displaying HNDL break year, patch snippets, migration roadmap, and NIST source citations).
 - [ ] Create the Dual Report Layout (tabs for "CISO Summary" executive view and "Engineer Details" technical view).
 - [ ] Verify frontend-to-backend end-to-end integration by scanning a public test target (e.g., `testssl.sh`).
+
+## Continuous Monitoring & Scheduling
+- [ ] Implement scheduled scans using APScheduler / cron
+- [ ] Allow users to configure scan frequency per target
+- [ ] Store historical scan results for comparison
+- [ ] Implement diffing between scans (risk score + tier changes)
+- [ ] Trigger alerts when:
+      - risk score increases
+      - certification tier drops

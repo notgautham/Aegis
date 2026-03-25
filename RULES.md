@@ -29,7 +29,7 @@
 - **The PQC Compliance Engine is strictly deterministic.** It must remain a boolean rules engine with zero AI, LLM, or probabilistic influence. This is a non-negotiable security constraint.
 - **The RAG pipeline (LangChain + Qdrant) is isolated.** It generates HNDL timelines, patches, and migration roadmaps only. It must never read or write risk scores, compliance tiers, or certificate content.
 - **AES-256 is NOT quantum-broken.** Any code, logic, or output that flags AES-256 as a critical quantum vulnerability is incorrect. AES-256 receives a vulnerability value of `0.05`, not `1.00`.
-- **Layers 4 (RAG) and 5 (Certification) run in parallel** after CBOM generation, as defined in `IMPLEMENTATION.md` Section 2.2.
+- **The pipeline is sequential through the PQC Rules Engine.** Follow this flow: `CBOM → PQC Rules Engine → Certification Engine`. The RAG pipeline is triggered only for Tier 2 / Tier 3 assets after Rules Engine classification. Certification may proceed after the Rules Engine output is known.
 
 ---
 
