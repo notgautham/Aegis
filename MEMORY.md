@@ -150,7 +150,9 @@ Phase 6 (Threat Intelligence (RAG) & Remediation) has been completed. The projec
   - Docker-based Phase 6 integration verification passed: `4 passed in 2.55s`
   - Combined coverage for `backend.intelligence` reached `86%` with `55 passed in 7.04s`
   - The retrieval layer is compatible with the installed `qdrant-client` version in Docker via `query_points`
-  - The repo still does not ship a populated `docs/nist/` corpus; Phase 6 intentionally raises explicit setup errors until local source documents are added there
+  - `docs/nist/` is now populated with the approved local corpus and has been ingested into Qdrant successfully
+  - `scripts/validate_ingested_corpus.py` now reports corpus file counts and live Qdrant collection stats for repeatable verification
+  - Ingestion and corpus validation now ignore housekeeping files such as `README.md` and `.gitkeep`
 
 ### Pending (Phases 7–10)
 - Certification Engine (ML-DSA-65 X.509 signing)
@@ -183,6 +185,7 @@ docker-compose exec backend alembic upgrade head
 **Phase 6 setup note:** The intelligence layer ingests local source material only. Populate `docs/nist/` with the approved reference corpus before running:
 ```bash
 docker compose exec backend python scripts/ingest_nist_docs.py
+docker compose exec backend python scripts/validate_ingested_corpus.py
 ```
 
 **Validation note:** Before Phase 8 orchestration/API integration, run the Phase 3 live validators inside Docker so the discovery toolchain is fully verified in its intended runtime:

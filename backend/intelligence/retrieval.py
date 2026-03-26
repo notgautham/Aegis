@@ -118,6 +118,7 @@ class RetrievalService:
     """Coordinate corpus ingestion and grounded retrieval against Qdrant."""
 
     _SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
+    _IGNORED_FILENAMES = {"readme.md", ".gitkeep", ".ds_store"}
 
     def __init__(
         self,
@@ -226,7 +227,9 @@ class RetrievalService:
         files = sorted(
             path
             for path in source_dir.rglob("*")
-            if path.is_file() and path.suffix.lower() in self._SUPPORTED_EXTENSIONS
+            if path.is_file()
+            and path.suffix.lower() in self._SUPPORTED_EXTENSIONS
+            and path.name.lower() not in self._IGNORED_FILENAMES
         )
         if not files:
             raise CorpusSetupError(
