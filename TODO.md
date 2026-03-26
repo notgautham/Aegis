@@ -42,14 +42,14 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [x] Write unit tests validating risk score outputs against the documented example (ECDHE + RSA-2048 + AES-256-GCM + TLS 1.2 → 84.5 on a 0–100 scale).
 
 ## Phase 5: PQC Rules Engine & CBOM Generation
-- [ ] Create `backend/compliance/rules_engine.py` with deterministic PASS/HYBRID/FAIL logic for KEX, SIG, and SYM dimensions.
-- [ ] Implement the 3-tier aggregation logic (`FULLY_QUANTUM_SAFE`, `PQC_TRANSITIONING`, `QUANTUM_VULNERABLE`) in `rules_engine.py`.
-- [ ] Write unit tests ensuring the compliance rules engine truth table is correct and deterministic for all combinations.
-- [ ] Create `backend/cbom/cyclonedx_mapper.py` to map the crypto assessment payload to the CycloneDX 1.6 JSON schema with `cryptoProperties` and `quantumRiskSummary`.
-- [ ] Implement deterministic CBOM serial number scheme (`urn:aegis:scan:{date}:{hostname}`).
-- [ ] Implement CBOM persistence (storing the mapped CycloneDX JSONB into the `CbomDocument` repository).
-- [ ] Implement CBOM JSON export endpoint logic.
-- [ ] Implement CBOM PDF export logic (using `weasyprint` or `reportlab`).
+- [x] Create `backend/compliance/rules_engine.py` with deterministic PASS/HYBRID/FAIL logic for KEX, SIG, and SYM dimensions.
+- [x] Implement the 3-tier aggregation logic (`FULLY_QUANTUM_SAFE`, `PQC_TRANSITIONING`, `QUANTUM_VULNERABLE`) in `rules_engine.py`.
+- [x] Write unit tests ensuring the compliance rules engine truth table is correct and deterministic for all combinations.
+- [x] Create `backend/cbom/cyclonedx_mapper.py` to map the crypto assessment payload to the CycloneDX 1.6 JSON schema with `cryptoProperties` and `quantumRiskSummary`.
+- [x] Implement deterministic CBOM serial number scheme (`urn:aegis:scan:{date}:{hostname}`).
+- [x] Implement CBOM persistence (storing the mapped CycloneDX JSONB into the `CbomDocument` repository).
+- [x] Implement CBOM JSON export endpoint logic.
+- [x] Implement CBOM PDF export logic (using `weasyprint` or `reportlab`).
 
 ## Phase 6: Threat Intelligence (RAG) & Remediation
 - [ ] Implement script `scripts/ingest_nist_docs.py` to chunk and embed NIST reference PDFs (FIPS 203, 204, 205, SP 800-208, IR 8547, IBM/Google qubit roadmaps, IETF hybrid KEX drafts) into Qdrant.

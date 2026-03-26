@@ -4,16 +4,16 @@
 Aegis is an autonomous, continuous Cryptographic Intelligence Platform designed for the banking sector to combat the Harvest Now, Decrypt Later (HNDL) quantum threat vector. It discovers public-facing cryptographic assets, generates a CycloneDX 1.6 CBOM, scores quantum risk, evaluates NIST FIPS 203/204/205 compliance via a deterministic rules engine, generates Post-Quantum Cryptography (PQC) remediation patches via a RAG pipeline, and issues three-tier X.509 compliance certificates.
 
 ## 2. Current Development Phase
-**Status: Phase 4 Complete — Phase 5 Starting**
+**Status: Phase 5 Complete — Phase 6 Starting**
 
-Phase 4 (Cryptographic Analysis Engine) has been completed. The project is entering **Phase 5: PQC Rules Engine & CBOM Generation** as defined in `TODO.md`.
+Phase 5 (PQC Rules Engine & CBOM Generation) has been completed. The project is entering **Phase 6: Threat Intelligence (RAG) & Remediation** as defined in `TODO.md`.
 
 ## 3. Current State of the System
 
 ### Completed
 - `SOLUTION.md` — Product definition, threat models, business context. **Never modify.**
 - `IMPLEMENTATION.md` — Authoritative technical specification.
-- `TODO.md` — 10-phase roadmap. Phases 1–4 tasks marked `[x]`.
+- `TODO.md` — 10-phase roadmap. Phases 1–5 tasks marked `[x]`.
 - `AGENTS.md`, `RULES.md`, `MEMORY.md` — Project governance documents.
 - `.agents/skills/` — Reusable agent skills.
 
@@ -106,8 +106,26 @@ Phase 4 (Cryptographic Analysis Engine) has been completed. The project is enter
   - TLS 1.2 parsing and TLS 1.3 metadata resolution remain intentionally separated, matching the architecture and future pipeline expectations
   - Risk scoring remains aligned with the immutable formula and AES-256 treatment defined in `IMPLEMENTATION.md` and `RULES.md`
 
-### Pending (Phases 5–10)
-- PQC Rules Engine and CBOM generator
+#### Phase 5 Deliverables
+- **PQC Rules Engine (`backend/compliance/`):**
+  - `rules_engine.py` — Deterministic PASS/HYBRID/FAIL and OK/WARN/FAIL evaluation across KEX, SIG, and SYM dimensions with tier aggregation into `FULLY_QUANTUM_SAFE`, `PQC_TRANSITIONING`, and `QUANTUM_VULNERABLE`
+  - `rules_engine.py` — Stable `ComplianceInput`, `DimensionEvaluation`, `ComplianceEvaluation`, and `apply_compliance_tier()` interfaces for later orchestrator reuse
+- **CBOM Generation (`backend/cbom/`):**
+  - `cyclonedx_mapper.py` — CycloneDX 1.6 asset mapper with deterministic serial generation (`urn:aegis:scan:{YYYYMMDD}:{hostname-or-ip}:{port}`)
+  - `cyclonedx_mapper.py` — Local `jsonschema` validation before persistence
+  - `cyclonedx_mapper.py` — JSON export and ReportLab PDF export helpers
+  - `cyclonedx_mapper.py` — Repository-backed persistence helper that stores `CbomDocument` JSONB and updates `CryptoAssessment.compliance_tier` in the same session
+- **Testing:**
+  - `tests/unit/test_rules_engine.py` — Truth-table coverage for PASS/HYBRID/FAIL and OK/WARN/FAIL combinations, including conservative unknown-algorithm handling
+  - `tests/unit/test_cyclonedx_mapper.py` — Coverage for deterministic serials, CBOM shape, schema validation, certificate fallback behavior, JSON export, and PDF export
+  - `tests/integration/test_phase5_cbom_pipeline.py` — DB-backed Phase 5 flow tests validating rules evaluation, CBOM mapping, persistence, and compliance tier updates for vulnerable and hybrid cases
+- **Validation Status:**
+  - Docker-based Phase 5 unit verification passed: `16 passed in 1.79s`
+  - Docker-based Phase 5 integration verification passed: `2 passed in 2.18s`
+  - Combined coverage for `backend/compliance` and `backend/cbom` reached `99%` with `38 passed in 4.30s`
+  - The running backend container required a one-time `jsonschema` install for validation because it predated the `requirements.txt` update; future rebuilds will include it automatically
+
+### Pending (Phases 6–10)
 - Threat Intelligence RAG pipeline (LangChain + Qdrant)
 - Certification Engine (ML-DSA-65 X.509 signing)
 - Pipeline orchestrator and FastAPI REST API endpoints
@@ -123,13 +141,12 @@ Phase 4 (Cryptographic Analysis Engine) has been completed. The project is enter
 - **IP address storage:** TEXT column (not PostgreSQL INET) for asyncpg compatibility.
 
 ## 5. Next Logical Task
-Execute **Phase 5** from `TODO.md`:
-1. Create `backend/compliance/rules_engine.py` with deterministic PASS/HYBRID/FAIL logic for KEX, SIG, and SYM dimensions.
-2. Implement the 3-tier aggregation logic (`FULLY_QUANTUM_SAFE`, `PQC_TRANSITIONING`, `QUANTUM_VULNERABLE`) in `rules_engine.py`.
-3. Write unit tests ensuring the compliance rules engine truth table is correct and deterministic for all combinations.
-4. Create `backend/cbom/cyclonedx_mapper.py` to map the crypto assessment payload to the CycloneDX 1.6 JSON schema with `cryptoProperties` and `quantumRiskSummary`.
-5. Implement deterministic CBOM serial number scheme (`urn:aegis:scan:{date}:{hostname}`).
-6. Implement CBOM persistence, JSON export, and PDF export logic.
+Execute **Phase 6** from `TODO.md`:
+1. Implement `scripts/ingest_nist_docs.py` to chunk and embed the Phase 6 NIST and roadmap documents into Qdrant.
+2. Create `backend/intelligence/rag_orchestrator.py` for in-process LangChain workflows.
+3. Create `backend/intelligence/hndl_calculator.py` using the documented `BreakYear = CurrentYear + (RequiredLogicalQubits / ProjectedQubitGrowthRate)` formula.
+4. Create `backend/intelligence/patch_generator.py` for nginx and Apache PQC migration patches that preserve AES-256-GCM.
+5. Integrate generated HNDL timelines, patches, and migration roadmaps into the `RemediationBundle` persistence layer with citations.
 
 **Operational note:** Verify the existing Alembic migration is applied in Docker before wiring later phases:
 ```bash
@@ -163,7 +180,10 @@ docker compose exec backend python tests/infra/validate_phase3_full.py
 | `backend/repositories/` | Generic + model-specific async CRUD repositories. |
 | `backend/discovery/` | Phase 3 discovery engine modules and typed discovery results. |
 | `backend/analysis/` | Phase 4 cryptographic analysis engine modules and unit-tested parser/scoring logic. |
+| `backend/compliance/` | Phase 5 deterministic PQC rules engine and reusable tier-application helper. |
+| `backend/cbom/` | Phase 5 CycloneDX mapping, validation, persistence, and export helpers. |
 | `tests/integration/test_discovery_analysis_bridge.py` | Cross-phase validation of Discovery output flowing into Analysis logic. |
+| `tests/integration/test_phase5_cbom_pipeline.py` | DB-backed validation of Phase 5 rules evaluation and CBOM persistence flow. |
 | `alembic.ini` | Alembic migration configuration. |
 | `migrations/env.py` | Async Alembic environment with model auto-detection. |
 | `docker/Dockerfile.oqs` | OQS-patched OpenSSL Docker build. |
@@ -179,5 +199,8 @@ To start development:
 5. **Analysis unit tests:** `docker compose exec backend python -m pytest tests/unit/test_cipher_parser.py tests/unit/test_handshake_metadata_resolver.py tests/unit/test_risk_scorer.py -v`
 6. **OQS Test:** `docker compose exec backend pytest tests/infra/test_oqs.py -v`
 7. **Cross-phase validation:** `docker compose exec backend python -m pytest tests/unit/test_cert_analyzer.py tests/unit/test_cert_extractor.py tests/integration/test_discovery_analysis_bridge.py -v`
-8. **Coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_discovery_analysis_bridge.py --cov=backend.analysis --cov=backend.discovery --cov-report=term-missing -v`
-9. **Health Check:** `curl http://localhost:8000/health`
+8. **Phase 5 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_rules_engine.py tests/unit/test_cyclonedx_mapper.py -v`
+9. **Phase 5 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_phase5_cbom_pipeline.py -v`
+10. **Phase 5 coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_phase5_cbom_pipeline.py --cov=backend.compliance --cov=backend.cbom --cov-report=term-missing -v`
+11. **Coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_discovery_analysis_bridge.py --cov=backend.analysis --cov=backend.discovery --cov-report=term-missing -v`
+12. **Health Check:** `curl http://localhost:8000/health`

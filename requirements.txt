@@ -27,6 +27,7 @@ langchain-community>=0.0.10
 qdrant-client>=1.7.0
 
 # ── CBOM / Reports ─────────────────────────────────────
+jsonschema>=4.22.0
 reportlab>=4.1.0
 
 # ── OQS (Post-Quantum Crypto) ─────────────────────────
