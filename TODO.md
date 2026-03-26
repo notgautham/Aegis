@@ -32,14 +32,14 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [x] (Optional) Create `backend/discovery/vpn_probe.py` — IKEv2 SA_INIT and OpenVPN detection (partial analysis only).
 
 ## Phase 4: Cryptographic Analysis Engine
-- [ ] Create `backend/analysis/cipher_parser.py` with regex logic to split **TLS 1.2** cipher strings (format: `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`) into `kex` / `auth` / `enc` / `mac` components.
-- [ ] Create `backend/analysis/handshake_metadata_resolver.py` to handle **TLS 1.3** extraction — kex and auth are not present in TLS 1.3 cipher strings and must be derived from sslyze handshake/session metadata.
-- [ ] Implement the `VULNERABILITY_MAP` and `TLS_VULNERABILITY_MAP` lookup table structures in `backend/analysis/constants.py`.
-- [ ] Write unit tests for `cipher_parser.py` covering TLS 1.2, hybrid PQC, and edge-case cipher strings.
-- [ ] Write unit tests for `handshake_metadata_resolver.py` covering TLS 1.3 handshake metadata extraction.
-- [ ] Create `backend/analysis/cert_analyzer.py` to extract leaf, intermediate, and root certificate metrics and set `quantumSafe` boolean.
-- [ ] Create `backend/analysis/risk_scorer.py` implementing the formula `Score = 100 × ((0.45 × V_kex) + (0.35 × V_sig) + (0.10 × V_sym) + (0.10 × V_tls))` with component-level breakdown.
-- [ ] Write unit tests validating risk score outputs against the documented example (ECDHE + RSA-2048 + AES-256-GCM + TLS 1.2 → 84.5 on a 0–100 scale).
+- [x] Create `backend/analysis/cipher_parser.py` with regex logic to split **TLS 1.2** cipher strings (format: `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`) into `kex` / `auth` / `enc` / `mac` components.
+- [x] Create `backend/analysis/handshake_metadata_resolver.py` to handle **TLS 1.3** extraction — kex and auth are not present in TLS 1.3 cipher strings and must be derived from sslyze handshake/session metadata.
+- [x] Implement the `VULNERABILITY_MAP` and `TLS_VULNERABILITY_MAP` lookup table structures in `backend/analysis/constants.py`.
+- [x] Write unit tests for `cipher_parser.py` covering TLS 1.2, hybrid PQC, and edge-case cipher strings.
+- [x] Write unit tests for `handshake_metadata_resolver.py` covering TLS 1.3 handshake metadata extraction.
+- [x] Create `backend/analysis/cert_analyzer.py` to extract leaf, intermediate, and root certificate metrics and set `quantumSafe` boolean.
+- [x] Create `backend/analysis/risk_scorer.py` implementing the formula `Score = 100 × ((0.45 × V_kex) + (0.35 × V_sig) + (0.10 × V_sym) + (0.10 × V_tls))` with component-level breakdown.
+- [x] Write unit tests validating risk score outputs against the documented example (ECDHE + RSA-2048 + AES-256-GCM + TLS 1.2 → 84.5 on a 0–100 scale).
 
 ## Phase 5: PQC Rules Engine & CBOM Generation
 - [ ] Create `backend/compliance/rules_engine.py` with deterministic PASS/HYBRID/FAIL logic for KEX, SIG, and SYM dimensions.

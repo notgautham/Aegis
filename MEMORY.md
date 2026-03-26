@@ -4,16 +4,16 @@
 Aegis is an autonomous, continuous Cryptographic Intelligence Platform designed for the banking sector to combat the Harvest Now, Decrypt Later (HNDL) quantum threat vector. It discovers public-facing cryptographic assets, generates a CycloneDX 1.6 CBOM, scores quantum risk, evaluates NIST FIPS 203/204/205 compliance via a deterministic rules engine, generates Post-Quantum Cryptography (PQC) remediation patches via a RAG pipeline, and issues three-tier X.509 compliance certificates.
 
 ## 2. Current Development Phase
-**Status: Phase 3 Complete — Phase 4 Starting**
+**Status: Phase 4 Complete — Phase 5 Starting**
 
-Phase 3 (Core Discovery Engine) has been completed. The project is entering **Phase 4: Cryptographic Analysis Engine** as defined in `TODO.md`.
+Phase 4 (Cryptographic Analysis Engine) has been completed. The project is entering **Phase 5: PQC Rules Engine & CBOM Generation** as defined in `TODO.md`.
 
 ## 3. Current State of the System
 
 ### Completed
 - `SOLUTION.md` — Product definition, threat models, business context. **Never modify.**
 - `IMPLEMENTATION.md` — Authoritative technical specification.
-- `TODO.md` — 10-phase roadmap. Phases 1–2 tasks marked `[x]`.
+- `TODO.md` — 10-phase roadmap. Phases 1–4 tasks marked `[x]`.
 - `AGENTS.md`, `RULES.md`, `MEMORY.md` — Project governance documents.
 - `.agents/skills/` — Reusable agent skills.
 
@@ -84,8 +84,29 @@ Phase 3 (Core Discovery Engine) has been completed. The project is entering **Ph
   - `tls_probe.py` was hardened with a more resilient pyOpenSSL handshake loop and a stdlib SSL fallback path while preserving the `TLSProbeResult` contract for later phases
   - The only remaining live validation issue is Amass passive enumeration timing out against the public test target even with increased timeout; this is being treated as deferred external-tool/runtime tuning rather than a Phase 3 logic blocker
 
-### Pending (Phases 4–10)
-- Cryptographic Analysis Engine (cipher parsing, cert analysis, risk scoring)
+#### Phase 4 Deliverables
+- **Cryptographic Analysis Engine (`backend/analysis/`):**
+  - `constants.py` — Deterministic `VULNERABILITY_MAP`, `TLS_VULNERABILITY_MAP`, and `WEIGHTS` tables plus canonicalization helpers for normalized algorithm lookup
+  - `cipher_parser.py` — TLS 1.2 cipher decomposition into `kex` / `auth` / `enc` / `mac` components with deterministic vulnerability lookups
+  - `handshake_metadata_resolver.py` — TLS 1.3 handshake/session metadata extraction for key exchange and authentication algorithms
+  - `cert_analyzer.py` — Certificate metric normalization and `quantum_safe` classification for leaf/intermediate/root certs
+  - `risk_scorer.py` — Deterministic weighted risk score calculation and component-level breakdown using the documented formula
+- **Testing:**
+  - `tests/unit/test_cipher_parser.py` — Unit tests covering standard TLS 1.2 parsing, hybrid PQC cipher parsing, and malformed/TLS 1.3 rejection
+  - `tests/unit/test_handshake_metadata_resolver.py` — Unit tests covering nested TLS 1.3 handshake metadata extraction, certificate metadata fallback, and TLS version rejection
+  - `tests/unit/test_risk_scorer.py` — Unit test validating the documented `84.5` example for ECDHE + RSA + AES-256-GCM + TLS 1.2
+  - `tests/unit/test_cert_analyzer.py` — Unit tests covering extracted-certificate normalization, dictionary-based inputs, and conservative `quantum_safe` recomputation
+  - `tests/unit/test_cert_extractor.py` — Unit tests covering PEM chain parsing, certificate level inference, and extracted metadata normalization
+  - `tests/integration/test_discovery_analysis_bridge.py` — Cross-phase bridge tests validating Discovery → Analysis handoff for both TLS 1.2 and TLS 1.3 style inputs
+- **Validation Status:**
+  - Docker-based unit verification passed for all Phase 4 tests: `10 passed in 1.30s`
+  - Additional Docker validation now passes for certificate analysis, certificate extraction, and cross-phase bridge coverage: `6 passed in 1.97s`
+  - Combined discovery/analysis validation now passes for `tests/unit` plus the Discovery → Analysis bridge test: `22 passed in 4.27s`
+  - Coverage for the checked discovery/analysis suite increased to `67%` overall, with `backend/analysis/cert_analyzer.py` and `backend/discovery/cert_extractor.py` both at `100%`
+  - TLS 1.2 parsing and TLS 1.3 metadata resolution remain intentionally separated, matching the architecture and future pipeline expectations
+  - Risk scoring remains aligned with the immutable formula and AES-256 treatment defined in `IMPLEMENTATION.md` and `RULES.md`
+
+### Pending (Phases 5–10)
 - PQC Rules Engine and CBOM generator
 - Threat Intelligence RAG pipeline (LangChain + Qdrant)
 - Certification Engine (ML-DSA-65 X.509 signing)
@@ -102,13 +123,13 @@ Phase 3 (Core Discovery Engine) has been completed. The project is entering **Ph
 - **IP address storage:** TEXT column (not PostgreSQL INET) for asyncpg compatibility.
 
 ## 5. Next Logical Task
-Execute **Phase 4** from `TODO.md`:
-1. Create `backend/analysis/cipher_parser.py` for TLS 1.2 cipher decomposition.
-2. Create `backend/analysis/handshake_metadata_resolver.py` for TLS 1.3 key exchange and authentication metadata extraction.
-3. Implement `backend/analysis/constants.py` with `VULNERABILITY_MAP` and `TLS_VULNERABILITY_MAP`.
-4. Add unit tests for TLS 1.2 parsing, TLS 1.3 handshake metadata resolution, and risk scoring.
-5. Create `backend/analysis/cert_analyzer.py`.
-6. Create `backend/analysis/risk_scorer.py`.
+Execute **Phase 5** from `TODO.md`:
+1. Create `backend/compliance/rules_engine.py` with deterministic PASS/HYBRID/FAIL logic for KEX, SIG, and SYM dimensions.
+2. Implement the 3-tier aggregation logic (`FULLY_QUANTUM_SAFE`, `PQC_TRANSITIONING`, `QUANTUM_VULNERABLE`) in `rules_engine.py`.
+3. Write unit tests ensuring the compliance rules engine truth table is correct and deterministic for all combinations.
+4. Create `backend/cbom/cyclonedx_mapper.py` to map the crypto assessment payload to the CycloneDX 1.6 JSON schema with `cryptoProperties` and `quantumRiskSummary`.
+5. Implement deterministic CBOM serial number scheme (`urn:aegis:scan:{date}:{hostname}`).
+6. Implement CBOM persistence, JSON export, and PDF export logic.
 
 **Operational note:** Verify the existing Alembic migration is applied in Docker before wiring later phases:
 ```bash
@@ -141,6 +162,8 @@ docker compose exec backend python tests/infra/validate_phase3_full.py
 | `backend/models/` | All 7 SQLAlchemy ORM models + enums. |
 | `backend/repositories/` | Generic + model-specific async CRUD repositories. |
 | `backend/discovery/` | Phase 3 discovery engine modules and typed discovery results. |
+| `backend/analysis/` | Phase 4 cryptographic analysis engine modules and unit-tested parser/scoring logic. |
+| `tests/integration/test_discovery_analysis_bridge.py` | Cross-phase validation of Discovery output flowing into Analysis logic. |
 | `alembic.ini` | Alembic migration configuration. |
 | `migrations/env.py` | Async Alembic environment with model auto-detection. |
 | `docker/Dockerfile.oqs` | OQS-patched OpenSSL Docker build. |
@@ -152,6 +175,9 @@ To start development:
 1. **Frontend:** `cd frontend && npm install && npm run dev`
 2. **Docker:** `docker-compose build && docker-compose up -d`
 3. **Apply migration:** `docker-compose exec backend alembic upgrade head`
-4. **Discovery unit tests:** `python -m pytest tests/unit/test_aggregator.py -v`
-5. **OQS Test:** `docker-compose exec backend pytest tests/infra/test_oqs.py -v`
-6. **Health Check:** `curl http://localhost:8000/health`
+4. **Discovery unit tests:** `docker compose exec backend python -m pytest tests/unit/test_aggregator.py -v`
+5. **Analysis unit tests:** `docker compose exec backend python -m pytest tests/unit/test_cipher_parser.py tests/unit/test_handshake_metadata_resolver.py tests/unit/test_risk_scorer.py -v`
+6. **OQS Test:** `docker compose exec backend pytest tests/infra/test_oqs.py -v`
+7. **Cross-phase validation:** `docker compose exec backend python -m pytest tests/unit/test_cert_analyzer.py tests/unit/test_cert_extractor.py tests/integration/test_discovery_analysis_bridge.py -v`
+8. **Coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_discovery_analysis_bridge.py --cov=backend.analysis --cov=backend.discovery --cov-report=term-missing -v`
+9. **Health Check:** `curl http://localhost:8000/health`
