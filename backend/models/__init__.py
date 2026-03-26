@@ -5,7 +5,7 @@ Re-exports all SQLAlchemy ORM models and the declarative Base
 for convenient imports throughout the application.
 """
 
-from backend.core.database import Base
+from backend.core.base import Base
 from backend.models.enums import CertLevel, ComplianceTier, ScanStatus, ServiceType
 from backend.models.scan_job import ScanJob
 from backend.models.discovered_asset import DiscoveredAsset

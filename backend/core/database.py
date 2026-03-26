@@ -7,8 +7,8 @@ Async SQLAlchemy engine, session factory, and dependency injection for FastAPI.
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
 
+from backend.core.base import Base
 from backend.core.config import get_settings
 
 settings = get_settings()
@@ -31,12 +31,6 @@ async_session_factory = async_sessionmaker(
 
 
 # ── Declarative Base ───────────────────────────────────
-class Base(DeclarativeBase):
-    """Base class for all SQLAlchemy ORM models."""
-
-    pass
-
-
 # ── Dependency ──────────────────────────────────────────
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency that yields an async database session."""

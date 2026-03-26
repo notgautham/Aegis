@@ -12,7 +12,7 @@ from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.core.database import Base
+from backend.core.base import Base
 from backend.models.enums import CertLevel
 
 

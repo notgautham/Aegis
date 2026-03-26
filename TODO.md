@@ -21,15 +21,15 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [x] Create repository/DAO classes for core CRUD operations on all models.
 
 ## Phase 3: Core Discovery Engine
-- [ ] Create `backend/discovery/dns_enumerator.py` integrating `Amass` subprocess calls for subdomain enumeration and certificate transparency log queries.
-- [ ] Create `backend/discovery/dns_validator.py` integrating `DNSx` for DNS resolution and validation.
-- [ ] Create `backend/discovery/port_scanner.py` integrating `python-nmap` (TCP 443/8443/4443 and UDP 500/4500/1194).
-- [ ] Create `backend/discovery/tls_probe.py` using `sslyze` to perform TLS ClientHello with full cipher offering, extracting server cipher preference and full certificate chain.
-- [ ] Create `backend/discovery/cert_extractor.py` to retrieve leaf, intermediate, and root certificates with metadata from the TLS probe results.
-- [ ] Implement asset deduplication and scope validation logic in `backend/discovery/aggregator.py`.
-- [ ] Write unit tests for asset deduplication and scope validation.
-- [ ] (Optional) Create `backend/discovery/api_inspector.py` — JWT Authorization header `alg` field extraction for accessible API endpoints.
-- [ ] (Optional) Create `backend/discovery/vpn_probe.py` — IKEv2 SA_INIT and OpenVPN detection (partial analysis only).
+- [x] Create `backend/discovery/dns_enumerator.py` integrating `Amass` subprocess calls for subdomain enumeration and certificate transparency log queries.
+- [x] Create `backend/discovery/dns_validator.py` integrating `DNSx` for DNS resolution and validation.
+- [x] Create `backend/discovery/port_scanner.py` integrating `python-nmap` (TCP 443/8443/4443 and UDP 500/4500/1194).
+- [x] Create `backend/discovery/tls_probe.py` using `sslyze` to perform TLS ClientHello with full cipher offering, extracting server cipher preference and full certificate chain.
+- [x] Create `backend/discovery/cert_extractor.py` to retrieve leaf, intermediate, and root certificates with metadata from the TLS probe results.
+- [x] Implement asset deduplication and scope validation logic in `backend/discovery/aggregator.py`.
+- [x] Write unit tests for asset deduplication and scope validation.
+- [x] (Optional) Create `backend/discovery/api_inspector.py` — JWT Authorization header `alg` field extraction for accessible API endpoints.
+- [x] (Optional) Create `backend/discovery/vpn_probe.py` — IKEv2 SA_INIT and OpenVPN detection (partial analysis only).
 
 ## Phase 4: Cryptographic Analysis Engine
 - [ ] Create `backend/analysis/cipher_parser.py` with regex logic to split **TLS 1.2** cipher strings (format: `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`) into `kex` / `auth` / `enc` / `mac` components.
