@@ -28,10 +28,20 @@ class Settings(BaseSettings):
 
     # ── Qdrant ──────────────────────────────────────────
     QDRANT_URL: str = "http://qdrant:6333"
+    QDRANT_COLLECTION_NAME: str = "aegis_nist_docs"
+    DOCS_SOURCE_DIR: str = "docs/nist"
 
     # ── LLM / RAG ──────────────────────────────────────
-    LLM_API_KEY: str = ""
-    LLM_MODEL: str = "gpt-4"
+    EMBEDDING_PROVIDER_MODE: str = "local"
+    LOCAL_EMBEDDING_MODEL: str = "deterministic-hash-v1"
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_MODEL: str = "openai/gpt-4o-mini"
+    OPENROUTER_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    LLM_PROVIDER_MODE: str = "deterministic"
+    RAG_TOP_K: int = 5
+    LLM_TIMEOUT_SECONDS: float = 15.0
+    EMBEDDING_TIMEOUT_SECONDS: float = 15.0
 
 
 @lru_cache()

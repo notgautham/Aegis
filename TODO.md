@@ -52,11 +52,11 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [x] Implement CBOM PDF export logic (using `weasyprint` or `reportlab`).
 
 ## Phase 6: Threat Intelligence (RAG) & Remediation
-- [ ] Implement script `scripts/ingest_nist_docs.py` to chunk and embed NIST reference PDFs (FIPS 203, 204, 205, SP 800-208, IR 8547, IBM/Google qubit roadmaps, IETF hybrid KEX drafts) into Qdrant.
-- [ ] Set up LangChain **in-process** within the FastAPI backend (not a separate Docker service) for HNDL timeline, patch generation, and migration roadmap workflows in `backend/intelligence/rag_orchestrator.py`.
-- [ ] Create `backend/intelligence/hndl_calculator.py` implementing `BreakYear = CurrentYear + (RequiredLogicalQubits / ProjectedQubitGrowthRate)` with the `QUBIT_REQUIREMENTS` constants.
-- [ ] Create `backend/intelligence/patch_generator.py` with templates for nginx (`ssl_ecdh_curve X25519MLKEM768:X25519`) and Apache (`SSLOpenSSLConfCmd Curves X25519MLKEM768:X25519`) PQC directives, preserving AES-256-GCM as-is.
-- [ ] Integrate generated HNDL timelines, patches, and migration roadmaps into the `RemediationBundle` persistence layer with source citations.
+- [x] Implement script `scripts/ingest_nist_docs.py` to chunk and embed NIST reference PDFs (FIPS 203, 204, 205, SP 800-208, IR 8547, IBM/Google qubit roadmaps, IETF hybrid KEX drafts) into Qdrant.
+- [x] Set up LangChain **in-process** within the FastAPI backend (not a separate Docker service) for HNDL timeline, patch generation, and migration roadmap workflows in `backend/intelligence/rag_orchestrator.py`.
+- [x] Create `backend/intelligence/hndl_calculator.py` implementing `BreakYear = CurrentYear + (RequiredLogicalQubits / ProjectedQubitGrowthRate)` with the `QUBIT_REQUIREMENTS` constants.
+- [x] Create `backend/intelligence/patch_generator.py` with templates for nginx (`ssl_ecdh_curve X25519MLKEM768:X25519`) and Apache (`SSLOpenSSLConfCmd Curves X25519MLKEM768:X25519`) PQC directives, preserving AES-256-GCM as-is.
+- [x] Integrate generated HNDL timelines, patches, and migration roadmaps into the `RemediationBundle` persistence layer with source citations.
 
 ## Phase 7: Certification Engine
 - [ ] Create `backend/cert/signer.py` wrapping the `liboqs` / OQS OpenSSL subprocess for generating ML-DSA-65 signed X.509 certificates.

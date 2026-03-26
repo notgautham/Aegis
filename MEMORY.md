@@ -4,16 +4,16 @@
 Aegis is an autonomous, continuous Cryptographic Intelligence Platform designed for the banking sector to combat the Harvest Now, Decrypt Later (HNDL) quantum threat vector. It discovers public-facing cryptographic assets, generates a CycloneDX 1.6 CBOM, scores quantum risk, evaluates NIST FIPS 203/204/205 compliance via a deterministic rules engine, generates Post-Quantum Cryptography (PQC) remediation patches via a RAG pipeline, and issues three-tier X.509 compliance certificates.
 
 ## 2. Current Development Phase
-**Status: Phase 5 Complete — Phase 6 Starting**
+**Status: Phase 6 Complete — Phase 7 Starting**
 
-Phase 5 (PQC Rules Engine & CBOM Generation) has been completed. The project is entering **Phase 6: Threat Intelligence (RAG) & Remediation** as defined in `TODO.md`.
+Phase 6 (Threat Intelligence (RAG) & Remediation) has been completed. The project is entering **Phase 7: Certification Engine** as defined in `TODO.md`.
 
 ## 3. Current State of the System
 
 ### Completed
 - `SOLUTION.md` — Product definition, threat models, business context. **Never modify.**
 - `IMPLEMENTATION.md` — Authoritative technical specification.
-- `TODO.md` — 10-phase roadmap. Phases 1–5 tasks marked `[x]`.
+- `TODO.md` — 10-phase roadmap. Phases 1–6 tasks marked `[x]`.
 - `AGENTS.md`, `RULES.md`, `MEMORY.md` — Project governance documents.
 - `.agents/skills/` — Reusable agent skills.
 
@@ -125,8 +125,34 @@ Phase 5 (PQC Rules Engine & CBOM Generation) has been completed. The project is 
   - Combined coverage for `backend/compliance` and `backend/cbom` reached `99%` with `38 passed in 4.30s`
   - The running backend container required a one-time `jsonschema` install for validation because it predated the `requirements.txt` update; future rebuilds will include it automatically
 
-### Pending (Phases 6–10)
-- Threat Intelligence RAG pipeline (LangChain + Qdrant)
+#### Phase 6 Deliverables
+- **Threat Intelligence / Remediation (`backend/intelligence/`):**
+  - `types.py` — Shared typed contracts for retrieval chunks, HNDL results, roadmap results, ingestion summaries, and remediation payloads
+  - `retrieval.py` — Local-corpus ingestion, preprocessing, chunking, deterministic local embeddings, OpenRouter-compatible cloud embedding client, Qdrant upsert/search, structured citations, and LangChain document conversion helpers
+  - `hndl_calculator.py` — Deterministic HNDL timeline calculator with bounded output, growth-rate clamp, urgency classification, and algorithm mapping for RSA/ECDH-style exposure
+  - `patch_generator.py` — Deterministic mapping-based patch generation for nginx, Apache, and generic OpenSSL fallback while preserving AES-256-GCM
+  - `roadmap_generator.py` — Retrieval-grounded roadmap generation with strict context enforcement and deterministic fallback when cloud LLM calls are disabled, fail, or time out
+  - `rag_orchestrator.py` — Coordination-only Phase 6 orchestration that retrieves context, computes HNDL, generates patches/roadmaps, and persists `RemediationBundle` records for Tier 2 / Tier 3 assets
+- **Scripts / Config:**
+  - `scripts/ingest_nist_docs.py` — Local-only corpus ingestion entrypoint for `docs/nist/`
+  - `backend/core/config.py` — Added Qdrant collection, docs source, provider mode, OpenRouter, retrieval `top_k`, and timeout settings
+  - `.env.example` — Added Phase 6 intelligence configuration examples
+- **Testing:**
+  - `tests/unit/test_hndl_calculator.py` — Documented break-year cases, growth-rate clamp, capped outputs, and urgency classification
+  - `tests/unit/test_patch_generator.py` — nginx/Apache/generic patch generation and AES-256-GCM preservation
+  - `tests/unit/test_retrieval.py` — Local embedding fallback, configurable `top_k`, chunk metadata, and explicit corpus setup failures
+  - `tests/unit/test_roadmap_generator.py` — Strict retrieval requirements, deterministic roadmap fallback, and provider timeout fallback
+  - `tests/unit/test_rag_orchestrator.py` — Tier 1 short-circuit plus Tier 2 / Tier 3 orchestration payload verification
+  - `tests/integration/test_ingest_nist_docs.py` — Sample corpus ingestion into Qdrant and script-level ingestion verification
+  - `tests/integration/test_phase6_remediation_pipeline.py` — DB-backed remediation persistence for vulnerable and transitioning assets plus deterministic roadmap stub validation
+- **Validation Status:**
+  - Docker-based Phase 6 unit verification passed: `17 passed in 2.56s`
+  - Docker-based Phase 6 integration verification passed: `4 passed in 2.55s`
+  - Combined coverage for `backend.intelligence` reached `86%` with `55 passed in 7.04s`
+  - The retrieval layer is compatible with the installed `qdrant-client` version in Docker via `query_points`
+  - The repo still does not ship a populated `docs/nist/` corpus; Phase 6 intentionally raises explicit setup errors until local source documents are added there
+
+### Pending (Phases 7–10)
 - Certification Engine (ML-DSA-65 X.509 signing)
 - Pipeline orchestrator and FastAPI REST API endpoints
 - Next.js 14 frontend dashboard
@@ -141,17 +167,22 @@ Phase 5 (PQC Rules Engine & CBOM Generation) has been completed. The project is 
 - **IP address storage:** TEXT column (not PostgreSQL INET) for asyncpg compatibility.
 
 ## 5. Next Logical Task
-Execute **Phase 6** from `TODO.md`:
-1. Implement `scripts/ingest_nist_docs.py` to chunk and embed the Phase 6 NIST and roadmap documents into Qdrant.
-2. Create `backend/intelligence/rag_orchestrator.py` for in-process LangChain workflows.
-3. Create `backend/intelligence/hndl_calculator.py` using the documented `BreakYear = CurrentYear + (RequiredLogicalQubits / ProjectedQubitGrowthRate)` formula.
-4. Create `backend/intelligence/patch_generator.py` for nginx and Apache PQC migration patches that preserve AES-256-GCM.
-5. Integrate generated HNDL timelines, patches, and migration roadmaps into the `RemediationBundle` persistence layer with citations.
+Execute **Phase 7** from `TODO.md`:
+1. Create `backend/cert/signer.py` wrapping the liboqs / OQS OpenSSL subprocess for ML-DSA-65 X.509 signing.
+2. Implement the ECDSA fallback signing path using Python `cryptography`.
+3. Add custom OID extension injection based on compliance tier and remediation linkage.
+4. Implement three-tier certificate issuance windows (90 / 30 / 7 days).
+5. Persist generated certificates into the `ComplianceCertificate` repository and add verification tests.
 
 **Operational note:** Verify the existing Alembic migration is applied in Docker before wiring later phases:
 ```bash
 docker-compose up -d
 docker-compose exec backend alembic upgrade head
+```
+
+**Phase 6 setup note:** The intelligence layer ingests local source material only. Populate `docs/nist/` with the approved reference corpus before running:
+```bash
+docker compose exec backend python scripts/ingest_nist_docs.py
 ```
 
 **Validation note:** Before Phase 8 orchestration/API integration, run the Phase 3 live validators inside Docker so the discovery toolchain is fully verified in its intended runtime:
@@ -182,8 +213,11 @@ docker compose exec backend python tests/infra/validate_phase3_full.py
 | `backend/analysis/` | Phase 4 cryptographic analysis engine modules and unit-tested parser/scoring logic. |
 | `backend/compliance/` | Phase 5 deterministic PQC rules engine and reusable tier-application helper. |
 | `backend/cbom/` | Phase 5 CycloneDX mapping, validation, persistence, and export helpers. |
+| `backend/intelligence/` | Phase 6 retrieval, HNDL calculation, deterministic patch generation, roadmap generation, and remediation orchestration. |
+| `scripts/ingest_nist_docs.py` | Phase 6 local-only Qdrant ingestion entrypoint for the intelligence corpus. |
 | `tests/integration/test_discovery_analysis_bridge.py` | Cross-phase validation of Discovery output flowing into Analysis logic. |
 | `tests/integration/test_phase5_cbom_pipeline.py` | DB-backed validation of Phase 5 rules evaluation and CBOM persistence flow. |
+| `tests/integration/test_phase6_remediation_pipeline.py` | DB-backed validation of Phase 6 retrieval, roadmap, and remediation persistence flow. |
 | `alembic.ini` | Alembic migration configuration. |
 | `migrations/env.py` | Async Alembic environment with model auto-detection. |
 | `docker/Dockerfile.oqs` | OQS-patched OpenSSL Docker build. |
@@ -202,5 +236,8 @@ To start development:
 8. **Phase 5 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_rules_engine.py tests/unit/test_cyclonedx_mapper.py -v`
 9. **Phase 5 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_phase5_cbom_pipeline.py -v`
 10. **Phase 5 coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_phase5_cbom_pipeline.py --cov=backend.compliance --cov=backend.cbom --cov-report=term-missing -v`
-11. **Coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_discovery_analysis_bridge.py --cov=backend.analysis --cov=backend.discovery --cov-report=term-missing -v`
-12. **Health Check:** `curl http://localhost:8000/health`
+11. **Phase 6 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_hndl_calculator.py tests/unit/test_patch_generator.py tests/unit/test_retrieval.py tests/unit/test_roadmap_generator.py tests/unit/test_rag_orchestrator.py -v`
+12. **Phase 6 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_ingest_nist_docs.py tests/integration/test_phase6_remediation_pipeline.py -v`
+13. **Phase 6 coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_phase6_remediation_pipeline.py --cov=backend.intelligence --cov-report=term-missing -v`
+14. **Coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_discovery_analysis_bridge.py --cov=backend.analysis --cov=backend.discovery --cov-report=term-missing -v`
+15. **Health Check:** `curl http://localhost:8000/health`
