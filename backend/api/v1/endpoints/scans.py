@@ -45,6 +45,14 @@ async def create_scan(
     )
     await session.commit()
 
+    runtime_store = getattr(request.app.state, "scan_runtime_store", None)
+    if runtime_store is not None:
+        runtime_store.register_scan(
+            scan_id=scan_job.id,
+            target=scan_job.target,
+            created_at=scan_job.created_at,
+        )
+
     orchestrator = request.app.state.pipeline_orchestrator
     scan_task = asyncio.create_task(
         orchestrator.run_scan(scan_id=scan_job.id, target=scan_job.target)

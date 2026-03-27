@@ -4,16 +4,16 @@
 Aegis is an autonomous, continuous Cryptographic Intelligence Platform designed for the banking sector to combat the Harvest Now, Decrypt Later (HNDL) quantum threat vector. It discovers public-facing cryptographic assets, generates a CycloneDX 1.6 CBOM, scores quantum risk, evaluates NIST FIPS 203/204/205 compliance via a deterministic rules engine, generates Post-Quantum Cryptography (PQC) remediation patches via a RAG pipeline, and issues three-tier X.509 compliance certificates.
 
 ## 2. Current Development Phase
-**Status: Phase 8 Complete - Phase 9 Starting**
+**Status: Phase 9 Complete and Stabilized - Phase 10 Starting**
 
-Phase 8 (Pipeline Orchestrator & API) has been implemented and verified in Docker. The project is now ready to begin **Phase 9: Frontend Foundation**.
+Phase 9 (Frontend Foundation) has been implemented and then stabilized with richer scan observability. Frontend lint now passes locally, and the build completed successfully when run by the user during the Phase 9 session. Post-Phase-9 stabilization also fixed same-day CBOM rescan collisions by making CBOM serials deterministic per persisted asset, added bounded port scanning to prevent discovery hangs, and upgraded the live scan dashboard with stage telemetry, degraded-mode visibility, recent event feeds, and clearer operational summaries.
 
 ## 3. Current State of the System
 
 ### Completed
 - `SOLUTION.md` — Product definition, threat models, business context. **Never modify.**
 - `IMPLEMENTATION.md` — Authoritative technical specification.
-- `TODO.md` — 10-phase roadmap. Phases 1-8 tasks are now marked `[x]`.
+- `TODO.md` — 10-phase roadmap. Phases 1-9 tasks are now marked `[x]`.
 - `AGENTS.md`, `RULES.md`, `MEMORY.md` — Project governance documents.
 - `.agents/skills/` — Reusable agent skills.
 
@@ -26,10 +26,11 @@ Phase 8 (Pipeline Orchestrator & API) has been implemented and verified in Docke
   - `pyproject.toml`, `requirements.txt`, `.env.example`
 - **Frontend scaffolding:**
   - `frontend/` — Next.js 14 with TypeScript, Tailwind CSS, shadcn/ui (new-york style, zinc base)
-  - `frontend/src/app/layout.tsx` — Root layout with Inter font and SEO metadata
-  - `frontend/src/app/page.tsx` — Aegis landing page placeholder
+  - `frontend/src/app/layout.tsx` — Root layout with IBM Plex fonts and the Phase 9 command-center shell metadata
+  - `frontend/src/app/page.tsx` — Phase 9 dashboard route entry for scan control and status polling
+  - `frontend/src/components/` — Command-center shell, shadcn-style UI primitives, and scan workflow components
   - `frontend/src/lib/utils.ts` — shadcn/ui `cn()` utility
-  - `frontend/src/lib/api.ts` — Typed API client for FastAPI backend
+  - `frontend/src/lib/api.ts` — Typed Phase 8/10-ready API client for FastAPI backend contracts
 - **Docker infrastructure:**
   - `docker/Dockerfile.oqs` — Multi-stage build (liboqs + oqs-provider from source)
   - `docker-compose.yml` — 3 services: backend (OQS), postgres:15-alpine, qdrant
@@ -82,7 +83,7 @@ Phase 8 (Pipeline Orchestrator & API) has been implemented and verified in Docke
   - Docker-based live validation now passes for DNS validation, port scanning, TLS probing, certificate extraction, and end-to-end aggregation using `tests/infra/validate_phase3_full.py`
   - `dns_enumerator.py` was adjusted for installed Amass CLI compatibility by removing the unsupported `-noalts` flag
   - `tls_probe.py` was hardened with a more resilient pyOpenSSL handshake loop and a stdlib SSL fallback path while preserving the `TLSProbeResult` contract for later phases
-  - The current live-validation caveat is operational only: the Docker validator may skip Amass enumeration when the backend image does not have the `amass` binary installed; all other live discovery checks are passing
+  - A post-Phase-9 stabilization pass now installs `amass` in the backend Docker image from the official OWASP Amass release archive, downgrades missing-binary enumeration fallback to a warning instead of a traceback, and bounds `nmap` scans with `--host-timeout`, `--max-retries`, and `-n` to avoid discovery-stage hangs on public targets
 
 #### Phase 4 Deliverables
 - **Cryptographic Analysis Engine (`backend/analysis/`):**
@@ -111,7 +112,7 @@ Phase 8 (Pipeline Orchestrator & API) has been implemented and verified in Docke
   - `rules_engine.py` — Deterministic PASS/HYBRID/FAIL and OK/WARN/FAIL evaluation across KEX, SIG, and SYM dimensions with tier aggregation into `FULLY_QUANTUM_SAFE`, `PQC_TRANSITIONING`, and `QUANTUM_VULNERABLE`
   - `rules_engine.py` — Stable `ComplianceInput`, `DimensionEvaluation`, `ComplianceEvaluation`, and `apply_compliance_tier()` interfaces for later orchestrator reuse
 - **CBOM Generation (`backend/cbom/`):**
-  - `cyclonedx_mapper.py` — CycloneDX 1.6 asset mapper with deterministic serial generation (`urn:aegis:scan:{YYYYMMDD}:{hostname-or-ip}:{port}`)
+  - `cyclonedx_mapper.py` — CycloneDX 1.6 asset mapper with deterministic scan-scoped serial generation (`urn:aegis:scan:{YYYYMMDD}:{hostname-or-ip}:{port}:{asset_uuid}`) so repeat scans can persist historical CBOMs without collisions
   - `cyclonedx_mapper.py` — Local `jsonschema` validation before persistence
   - `cyclonedx_mapper.py` — JSON export and ReportLab PDF export helpers
   - `cyclonedx_mapper.py` — Repository-backed persistence helper that stores `CbomDocument` JSONB and updates `CryptoAssessment.compliance_tier` in the same session
@@ -124,6 +125,7 @@ Phase 8 (Pipeline Orchestrator & API) has been implemented and verified in Docke
   - Docker-based Phase 5 integration verification passed: `2 passed in 2.18s`
   - Combined coverage for `backend/compliance` and `backend/cbom` reached `99%` with `38 passed in 4.30s`
   - The running backend container required a one-time `jsonschema` install for validation because it predated the `requirements.txt` update; future rebuilds will include it automatically
+  - Post-Phase-9 stabilization fixed repeat-scan CBOM serial collisions by using deterministic scan-scoped serials with the persisted asset UUID suffix, so same-target same-day rescans now preserve history without violating database uniqueness
 
 #### Phase 6 Deliverables
 - **Threat Intelligence / Remediation (`backend/intelligence/`):**
@@ -193,11 +195,32 @@ Phase 8 (Pipeline Orchestrator & API) has been implemented and verified in Docke
   - `tests/integration/test_phase8_api.py` - DB-backed API coverage for scan creation, scan status polling, compiled results, deterministic latest-artifact selection, and asset retrieval endpoints.
 - **Validation Status:**
   - Docker-based Phase 8 orchestrator/API verification passed: `10 passed in 6.21s`
-  - Broad backend regression across Phases 1-8 passed in Docker: `95 passed, 1 warning in 9.19s`
-  - Live Phase 3 Docker validation currently passes with `12 PASS / 0 FAIL / 1 SKIP`; the only skipped item is Amass enumeration when the container image does not include the `amass` binary
+  - Broad backend regression after the CBOM rescan, Amass-handling, and bounded port-scan fixes now passes in Docker: `100 passed, 1 warning in 8.90s`
+  - The orchestrator now handles missing-Amass fallback as an expected degraded mode while preserving root-target scanning
+#### Phase 9 Deliverables
+- **Frontend Foundation (`frontend/src/`):**
+  - `app/layout.tsx` - Reworked the root shell around IBM Plex fonts and a darker command-center visual language instead of the placeholder Phase 1 landing presentation.
+  - `app/page.tsx` - Now renders the real dashboard workspace at `/` rather than a static splash screen.
+  - `app/globals.css` - Introduced the command-center color system, shell surfaces, utility classes, and typography foundation for the dashboard.
+  - `components/dashboard-workspace.tsx` - Client-side scan orchestration UI with hydration-safe `localStorage`, submit deduplication, polling cleanup, stale-response guards, timestamp formatting, and retry/backoff handling.
+  - `components/app-sidebar.tsx`, `components/app-header.tsx`, `components/new-scan-card.tsx`, `components/scan-status-card.tsx` - Structured Phase 9 shell, scan creation UX, and active scan status presentation.
+  - `components/ui/` - Added lightweight shadcn-style button, card, input, badge, separator, and skeleton primitives owned directly in the repo.
+  - `lib/api.ts` - Expanded into a typed client for health, scan creation, scan polling, compiled results, CBOM retrieval, certificate retrieval, and remediation retrieval.
+  - `.eslintrc.json` - Added a non-interactive Next.js ESLint config so `npm run lint` works cleanly in the repo.
+- **Validation Status:**
+  - Frontend lint now passes locally: `npm.cmd run lint` -> clean
+  - Frontend build completed successfully when run by the user in the frontend workspace during Phase 9
+  - The final code adjustment after the first build attempt was limited to hook-dependency cleanup in `dashboard-workspace.tsx`; no backend contracts changed
+  - A later Phase 9 stabilization pass added richer backend scan-status telemetry (`stage`, `stage_detail`, elapsed time, degraded-mode notices, recent runtime events, and summary metrics) and refreshed the dashboard visuals so scans explain what they are doing while they run
+  - Verification after the observability upgrade passed with `npm.cmd run lint`, `12 passed` for focused orchestrator/API telemetry tests, and `101 passed, 1 warning` for the broad Docker backend regression
+  - A follow-up Phase 9 stabilization fix corrected the OQS/OpenSSL CA serial-file formatting in `backend/cert/signer.py` by padding odd-length hexadecimal serials before invoking `openssl ca`; this removes a recoverable ML-DSA issuance error that previously caused some assets to fall back to ECDSA during otherwise successful scans
+  - Focused certificate verification after the serial-format fix passed: `13 passed` across `tests/unit/test_certificate_signer.py` and `tests/infra/test_certificate_signing_runtime.py`
 
-### Pending (Phases 9-10)
-- Next.js 14 frontend dashboard
+### Pending (Phase 10 and Beyond)
+- Frontend dashboards and detailed result views
+- Final frontend-to-backend end-to-end integration pass
+- Continuous monitoring and scheduling features
+- Post-Phase-9 stabilization fixes surfaced by live scans, including any remaining real-world persistence or orchestration edge cases
 
 ## 4. Key Technical Decisions (Immutable)
 - **Tech Stack:** Python 3.11 (FastAPI, asyncio), Next.js 14, PostgreSQL 15.
@@ -209,12 +232,12 @@ Phase 8 (Pipeline Orchestrator & API) has been implemented and verified in Docke
 - **IP address storage:** TEXT column (not PostgreSQL INET) for asyncpg compatibility.
 
 ## 5. Next Logical Task
-Execute **Phase 9** from `TODO.md`:
-1. Build the Next.js dashboard shell, navigation, and core page layout on top of the now-stable Phase 8 API surface.
-2. Wire the frontend API client to `POST /api/v1/scan`, scan polling, compiled results, and asset-level CBOM/certificate/remediation retrieval.
-3. Reuse the verified backend contracts from Phases 3-8 rather than introducing new business logic in the frontend layer.
+Execute **Phase 10** from `TODO.md`:
+1. Build the Risk Heatmap, CBOM Viewer, Certificate Viewer, and HNDL Timeline/Remediation views on top of the typed Phase 9 API client.
+2. Add the dual-report layout so the same scan data can be consumed as both a CISO summary and an engineer-focused technical view.
+3. Verify frontend-to-backend end-to-end integration against a safe public test target and close the remaining UX/data mismatches one by one.
 
-**Operational note:** Verify the existing Alembic migration is applied in Docker before continuing UI/API integration:
+**Operational note:** Verify the existing Alembic migration is applied in Docker before continuing frontend/report integration:
 ```bash
 docker-compose up -d
 docker-compose exec backend alembic upgrade head
@@ -226,13 +249,17 @@ docker compose exec backend python scripts/ingest_nist_docs.py
 docker compose exec backend python scripts/validate_ingested_corpus.py
 ```
 
-**Phase 8 verification note:** The orchestrator and API layer are now verified in Docker with:
+**Phase 9 verification note:** The frontend foundation is currently validated with:
 ```bash
-docker compose exec backend python -m pytest tests/unit/test_pipeline_orchestrator.py tests/integration/test_phase8_api.py -v
-docker compose exec backend python -m pytest tests/unit tests/integration tests/infra/test_oqs.py tests/infra/test_certificate_signing_runtime.py -v
+cd frontend && npm run lint
+cd frontend && npm run build
 ```
 
-**Known deferred item:** Amass passive enumeration may still be skipped in Docker until the backend image includes the `amass` binary. The rest of the live discovery pipeline is passing.
+**Operational follow-up:** Rebuild the backend Docker image once after the latest stabilization changes so the running container includes the `amass` binary:
+```bash
+docker compose build backend
+docker compose up -d backend
+```
 
 ## 6. Directory of Key Files
 
@@ -258,6 +285,9 @@ docker compose exec backend python -m pytest tests/unit tests/integration tests/
 | `backend/cert/` | Phase 7 certificate issuance, fallback signing, and X.509 custom extension helpers. |
 | `backend/pipeline/` | Phase 8 scan orchestration, read-side assembly, and deterministic latest-artifact selection. |
 | `backend/api/v1/endpoints/` | Phase 8 scan and asset API routes layered on top of the orchestrator/read service. |
+| `frontend/src/app/` | Phase 9 dashboard route and global command-center shell. |
+| `frontend/src/components/` | Phase 9 sidebar, header, scan form, polling UI, and UI primitives. |
+| `frontend/src/lib/api.ts` | Typed frontend client for scan, result, artifact, and health API access. |
 | `scripts/ingest_nist_docs.py` | Phase 6 local-only Qdrant ingestion entrypoint for the intelligence corpus. |
 | `tests/integration/test_discovery_analysis_bridge.py` | Cross-phase validation of Discovery output flowing into Analysis logic. |
 | `tests/integration/test_phase5_cbom_pipeline.py` | DB-backed validation of Phase 5 rules evaluation and CBOM persistence flow. |
@@ -273,21 +303,24 @@ docker compose exec backend python -m pytest tests/unit tests/integration tests/
 
 ## 7. Setup Instructions
 To start development:
-1. **Frontend:** `cd frontend && npm install && npm run dev`
-2. **Docker:** `docker-compose build && docker-compose up -d`
-3. **Apply migration:** `docker-compose exec backend alembic upgrade head`
-4. **Discovery unit tests:** `docker compose exec backend python -m pytest tests/unit/test_aggregator.py -v`
-5. **Analysis unit tests:** `docker compose exec backend python -m pytest tests/unit/test_cipher_parser.py tests/unit/test_handshake_metadata_resolver.py tests/unit/test_risk_scorer.py -v`
-6. **OQS Test:** `docker compose exec backend pytest tests/infra/test_oqs.py -v`
-7. **Cross-phase validation:** `docker compose exec backend python -m pytest tests/unit/test_cert_analyzer.py tests/unit/test_cert_extractor.py tests/integration/test_discovery_analysis_bridge.py -v`
-8. **Phase 5 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_rules_engine.py tests/unit/test_cyclonedx_mapper.py -v`
-9. **Phase 5 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_phase5_cbom_pipeline.py -v`
-10. **Phase 6 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_hndl_calculator.py tests/unit/test_patch_generator.py tests/unit/test_retrieval.py tests/unit/test_roadmap_generator.py tests/unit/test_rag_orchestrator.py -v`
-11. **Phase 6 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_ingest_nist_docs.py tests/integration/test_phase6_remediation_pipeline.py -v`
-12. **Phase 7 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_certificate_signer.py tests/unit/test_certificate_oid_encoding.py -v`
-13. **Phase 7 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_phase7_certificate_pipeline.py -v`
-14. **Phase 7 runtime tests:** `docker compose exec backend python -m pytest tests/infra/test_certificate_signing_runtime.py -v`
-15. **Phase 8 orchestrator/API tests:** `docker compose exec backend python -m pytest tests/unit/test_pipeline_orchestrator.py tests/integration/test_phase8_api.py -v`
-16. **Broad backend regression:** `docker compose exec backend python -m pytest tests/unit tests/integration tests/infra/test_oqs.py tests/infra/test_certificate_signing_runtime.py -v`
-17. **Live discovery validator:** `docker compose exec backend python tests/infra/validate_phase3_full.py`
-18. **Health Check:** `curl http://localhost:8000/health`
+1. **Frontend dev server:** `cd frontend && npm install && npm run dev`
+2. **Frontend lint:** `cd frontend && npm run lint`
+3. **Frontend build:** `cd frontend && npm run build`
+4. **Docker:** `docker-compose build && docker-compose up -d`
+5. **Apply migration:** `docker-compose exec backend alembic upgrade head`
+6. **Discovery unit tests:** `docker compose exec backend python -m pytest tests/unit/test_aggregator.py -v`
+7. **Analysis unit tests:** `docker compose exec backend python -m pytest tests/unit/test_cipher_parser.py tests/unit/test_handshake_metadata_resolver.py tests/unit/test_risk_scorer.py -v`
+8. **OQS Test:** `docker compose exec backend pytest tests/infra/test_oqs.py -v`
+9. **Cross-phase validation:** `docker compose exec backend python -m pytest tests/unit/test_cert_analyzer.py tests/unit/test_cert_extractor.py tests/integration/test_discovery_analysis_bridge.py -v`
+10. **Phase 5 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_rules_engine.py tests/unit/test_cyclonedx_mapper.py -v`
+11. **Phase 5 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_phase5_cbom_pipeline.py -v`
+12. **Phase 6 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_hndl_calculator.py tests/unit/test_patch_generator.py tests/unit/test_retrieval.py tests/unit/test_roadmap_generator.py tests/unit/test_rag_orchestrator.py -v`
+13. **Phase 6 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_ingest_nist_docs.py tests/integration/test_phase6_remediation_pipeline.py -v`
+14. **Phase 7 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_certificate_signer.py tests/unit/test_certificate_oid_encoding.py -v`
+15. **Phase 7 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_phase7_certificate_pipeline.py -v`
+16. **Phase 7 runtime tests:** `docker compose exec backend python -m pytest tests/infra/test_certificate_signing_runtime.py -v`
+17. **Phase 8 orchestrator/API tests:** `docker compose exec backend python -m pytest tests/unit/test_pipeline_orchestrator.py tests/integration/test_phase8_api.py -v`
+18. **Broad backend regression:** `docker compose exec backend python -m pytest tests/unit tests/integration tests/infra/test_oqs.py tests/infra/test_certificate_signing_runtime.py -v`
+19. **Live discovery validator:** `docker compose exec backend python tests/infra/validate_phase3_full.py`
+20. **Health Check:** `curl http://localhost:8000/health`
+

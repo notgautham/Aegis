@@ -32,9 +32,17 @@ RUN ldconfig
 # ── Stage 2: Runtime image ──────────────────────────────
 FROM python:3.11-slim
 
+ARG AMASS_VERSION=5.0.1
+
 # Install runtime dependencies (for sslyze, nmap, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libssl3 nmap && \
+    ca-certificates libssl3 nmap wget && \
+    wget -O /tmp/amass.tar.gz "https://github.com/owasp-amass/amass/releases/download/v${AMASS_VERSION}/amass_linux_amd64.tar.gz" && \
+    mkdir -p /tmp/amass && \
+    tar -xzf /tmp/amass.tar.gz -C /tmp/amass && \
+    install "$(find /tmp/amass -type f -name amass | head -n 1)" /usr/local/bin/amass && \
+    chmod +x /usr/local/bin/amass && \
+    rm -rf /tmp/amass /tmp/amass.tar.gz && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy built OQS libraries from builder

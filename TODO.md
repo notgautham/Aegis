@@ -46,7 +46,7 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [x] Implement the 3-tier aggregation logic (`FULLY_QUANTUM_SAFE`, `PQC_TRANSITIONING`, `QUANTUM_VULNERABLE`) in `rules_engine.py`.
 - [x] Write unit tests ensuring the compliance rules engine truth table is correct and deterministic for all combinations.
 - [x] Create `backend/cbom/cyclonedx_mapper.py` to map the crypto assessment payload to the CycloneDX 1.6 JSON schema with `cryptoProperties` and `quantumRiskSummary`.
-- [x] Implement deterministic CBOM serial number scheme (`urn:aegis:scan:{date}:{hostname}`).
+- [x] Implement deterministic scan-scoped CBOM serial number scheme (`urn:aegis:scan:{date}:{hostname-or-ip}:{port}:{asset_uuid}`).
 - [x] Implement CBOM persistence (storing the mapped CycloneDX JSONB into the `CbomDocument` repository).
 - [x] Implement CBOM JSON export endpoint logic.
 - [x] Implement CBOM PDF export logic (using `weasyprint` or `reportlab`).
@@ -77,10 +77,10 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [x] Implement `GET /api/v1/assets/{asset_id}/remediation` endpoint for patch, HNDL timeline, and migration roadmap retrieval.
 
 ## Phase 9: Frontend Foundation
-- [ ] Setup Next.js page layout and navigation shell (Sidebar, Header) using `shadcn-ui`.
-- [ ] Create API client utilities in `frontend/lib/api.ts` to connect to the FastAPI backend.
-- [ ] Implement the "New Scan" form component (Target IP/Domain/CIDR input, trigger button).
-- [ ] Implement scan polling UI with a progress indicator for the async backend pipeline.
+- [x] Setup Next.js page layout and navigation shell (Sidebar, Header) using `shadcn-ui`.
+- [x] Create API client utilities in `frontend/lib/api.ts` to connect to the FastAPI backend.
+- [x] Implement the "New Scan" form component (Target IP/Domain/CIDR input, trigger button).
+- [x] Implement scan polling UI with progress counters, stage telemetry, degraded-mode notices, and a resilient command-center presentation for the async backend pipeline.
 
 ## Phase 10: Frontend Dashboards & Integration
 - [ ] Build the "Risk Heatmap" component using `Recharts` to display aggregate quantum risk scores across all scanned assets.

@@ -26,9 +26,14 @@ class PortScanner:
         self,
         tcp_ports: Iterable[int] = DEFAULT_TCP_PORTS,
         udp_ports: Iterable[int] = DEFAULT_UDP_PORTS,
+        *,
+        host_timeout_seconds: int = 45,
+        max_retries: int = 1,
     ) -> None:
         self.tcp_ports = tuple(sorted(set(tcp_ports)))
         self.udp_ports = tuple(sorted(set(udp_ports)))
+        self.host_timeout_seconds = max(1, int(host_timeout_seconds))
+        self.max_retries = max(0, int(max_retries))
 
     async def scan_host(self, ip_address: str) -> list[PortFinding]:
         """Scan a single IP for relevant TCP and UDP ports."""
@@ -45,16 +50,42 @@ class PortScanner:
         findings: dict[tuple[str, int, str], PortFinding] = {}
 
         if self.tcp_ports:
-            tcp_arguments = f"-Pn -T4 -sS -p {','.join(str(port) for port in self.tcp_ports)}"
-            scanner.scan(hosts=ip_address, arguments=tcp_arguments)
+            tcp_arguments = self._build_scan_arguments(
+                scan_type="-sS",
+                ports=self.tcp_ports,
+            )
+            self._run_scan(scanner, ip_address, tcp_arguments)
             self._collect_findings(scanner, ip_address, "tcp", findings)
 
         if self.udp_ports:
-            udp_arguments = f"-Pn -T4 -sU -p {','.join(str(port) for port in self.udp_ports)}"
-            scanner.scan(hosts=ip_address, arguments=udp_arguments)
+            udp_arguments = self._build_scan_arguments(
+                scan_type="-sU",
+                ports=self.udp_ports,
+            )
+            self._run_scan(scanner, ip_address, udp_arguments)
             self._collect_findings(scanner, ip_address, "udp", findings)
 
         return sorted(findings.values(), key=lambda finding: (finding.protocol, finding.port))
+
+    def _build_scan_arguments(
+        self,
+        *,
+        scan_type: str,
+        ports: tuple[int, ...],
+    ) -> str:
+        host_timeout = f"{self.host_timeout_seconds}s"
+        ports_arg = ",".join(str(port) for port in ports)
+        return (
+            f"-Pn -n -T4 --max-retries {self.max_retries} "
+            f"--host-timeout {host_timeout} {scan_type} -p {ports_arg}"
+        )
+
+    @staticmethod
+    def _run_scan(scanner, ip_address: str, arguments: str) -> None:
+        try:
+            scanner.scan(hosts=ip_address, arguments=arguments)
+        except Exception as exc:
+            raise PortScannerError(f"Port scan failed for {ip_address}: {exc}") from exc
 
     def _collect_findings(
         self,

@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.models.enums import ComplianceTier, ScanStatus, ServiceType
 
@@ -29,6 +29,27 @@ class ProgressResponse(BaseModel):
     certificates_created: int
 
 
+class ScanRuntimeEventResponse(BaseModel):
+    """Recent runtime telemetry event for a scan."""
+
+    timestamp: datetime
+    kind: str
+    message: str
+    stage: str | None = None
+
+
+class ScanSummaryResponse(BaseModel):
+    """Derived high-level summary for one scan."""
+
+    total_assets: int
+    tls_assets: int
+    non_tls_assets: int
+    fully_quantum_safe_assets: int
+    transitioning_assets: int
+    vulnerable_assets: int
+    highest_risk_score: float | None
+
+
 class ScanAcceptedResponse(BaseModel):
     """Accepted scan creation response."""
 
@@ -43,6 +64,13 @@ class ScanStatusResponse(ScanAcceptedResponse):
 
     completed_at: datetime | None
     progress: ProgressResponse
+    summary: ScanSummaryResponse
+    stage: str | None = None
+    stage_detail: str | None = None
+    stage_started_at: datetime | None = None
+    elapsed_seconds: float | None = None
+    events: list[ScanRuntimeEventResponse] = Field(default_factory=list)
+    degraded_modes: list[str] = Field(default_factory=list)
 
 
 class AssessmentResponse(BaseModel):
@@ -121,6 +149,13 @@ class ScanResultsResponse(BaseModel):
     created_at: datetime | None
     completed_at: datetime | None
     progress: ProgressResponse
+    summary: ScanSummaryResponse
+    stage: str | None = None
+    stage_detail: str | None = None
+    stage_started_at: datetime | None = None
+    elapsed_seconds: float | None = None
+    events: list[ScanRuntimeEventResponse] = Field(default_factory=list)
+    degraded_modes: list[str] = Field(default_factory=list)
     assets: list[AssetResultResponse]
 
 

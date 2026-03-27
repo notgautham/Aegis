@@ -246,6 +246,13 @@ class CertificateSigner:
         serial_number = int.from_bytes(secrets.token_bytes(16), byteorder="big")
         return serial_number or 1
 
+    @staticmethod
+    def _format_openssl_ca_serial(serial_number: int) -> str:
+        rendered = f"{serial_number:X}"
+        if len(rendered) % 2 == 1:
+            rendered = f"0{rendered}"
+        return rendered
+
     def _build_extension_payload(
         self,
         *,
@@ -402,7 +409,10 @@ class CertificateSigner:
             ca_db = temp_path / "ca"
             ca_db.mkdir(parents=True, exist_ok=True)
             (ca_db / "index.txt").write_text("", encoding="utf-8")
-            (ca_db / "serial").write_text(f"{serial_number:X}\n", encoding="utf-8")
+            (ca_db / "serial").write_text(
+                f"{self._format_openssl_ca_serial(serial_number)}\n",
+                encoding="utf-8",
+            )
 
             leaf_config.write_text(
                 self._render_leaf_openssl_config(

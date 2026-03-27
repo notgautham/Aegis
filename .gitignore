@@ -37,3 +37,6 @@ htmlcov/
 
 # ── Node (frontend is in frontend/.gitignore) ─────────
 node_modules/
+
+
+.aegis-runtime/

@@ -25,7 +25,19 @@ def test_serial_generation_is_deterministic() -> None:
 
     serial = mapper.build_serial_number(asset, timestamp=timestamp)
 
-    assert serial == "urn:aegis:scan:20260326:api.example.com:443"
+    assert serial == f"urn:aegis:scan:20260326:api.example.com:443:{asset.id}"
+
+
+def test_serial_generation_is_unique_per_asset_for_same_target_and_day() -> None:
+    mapper = CycloneDxMapper()
+    timestamp = datetime(2026, 3, 26, 12, 0, tzinfo=UTC)
+    first_asset = _build_asset(hostname="api.example.com", port=443)
+    second_asset = _build_asset(hostname="api.example.com", port=443)
+
+    first_serial = mapper.build_serial_number(first_asset, timestamp=timestamp)
+    second_serial = mapper.build_serial_number(second_asset, timestamp=timestamp)
+
+    assert first_serial != second_serial
 
 
 def test_mapped_cbom_contains_required_fields_and_values() -> None:
@@ -42,7 +54,7 @@ def test_mapped_cbom_contains_required_fields_and_values() -> None:
 
     assert document["bomFormat"] == "CycloneDX"
     assert document["specVersion"] == "1.6"
-    assert document["serialNumber"] == "urn:aegis:scan:20260326:api.example.com:443"
+    assert document["serialNumber"] == f"urn:aegis:scan:20260326:api.example.com:443:{bundle.asset.id}"
     assert document["metadata"]["component"]["type"] == "service"
     assert document["components"][0]["type"] == "cryptographic-asset"
     assert document["components"][0]["cryptoProperties"]["tlsProperties"]["cipherSuites"] == [
@@ -83,7 +95,7 @@ def test_export_json_returns_validated_document_and_filename() -> None:
     payload, filename_stem = mapper.export_json(document)
 
     assert payload["serialNumber"] == document["serialNumber"]
-    assert filename_stem == "urn-aegis-scan-20260326-api.example.com-443"
+    assert filename_stem == f"urn-aegis-scan-20260326-api.example.com-443-{bundle.asset.id}"
 
 
 def test_export_pdf_returns_bytes_with_expected_markers() -> None:
@@ -101,7 +113,7 @@ def test_export_pdf_returns_bytes_with_expected_markers() -> None:
     assert pdf_bytes.startswith(b"%PDF")
     assert b"Aegis CycloneDX CBOM Report" in pdf_bytes
     assert b"Compliance Tier: PQC_TRANSITIONING" in pdf_bytes
-    assert filename_stem == "urn-aegis-scan-20260326-api.example.com-443"
+    assert filename_stem == f"urn-aegis-scan-20260326-api.example.com-443-{bundle.asset.id}"
 
 
 def test_mapper_falls_back_to_first_certificate_when_leaf_is_missing() -> None:

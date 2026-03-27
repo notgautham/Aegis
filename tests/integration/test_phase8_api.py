@@ -20,7 +20,7 @@ from backend.models.discovered_asset import DiscoveredAsset
 from backend.models.enums import ComplianceTier, ScanStatus, ServiceType
 from backend.models.remediation_bundle import RemediationBundle
 from backend.models.scan_job import ScanJob
-from backend.pipeline import ScanReadService
+from backend.pipeline import ScanReadService, ScanRuntimeStore
 from backend.discovery.types import ValidatedHostname
 from tests.unit._phase8_helpers import (
     StubDNSValidator,
@@ -61,10 +61,13 @@ async def _make_client(session_factory):
 async def test_scan_api_runs_stubbed_pipeline_and_exposes_artifacts(tmp_path, session_factory) -> None:
     hostname = f"phase8-{uuid.uuid4().hex[:8]}.example.com"
     ip_address = "198.51.100.41"
+    runtime_store = ScanRuntimeStore()
     app.state.scan_tasks = {}
+    app.state.scan_runtime_store = runtime_store
     app.state.pipeline_orchestrator = build_phase8_orchestrator(
         session_factory=session_factory,
         tmp_path=tmp_path,
+        runtime_store=runtime_store,
         validated_hostnames=[],
         port_findings_by_ip={ip_address: [make_tls_port(ip_address), make_vpn_port(ip_address)]},
         tls_results_by_target={(hostname, ip_address, 443): build_tls_result(hostname=hostname, ip_address=ip_address)},
@@ -73,7 +76,10 @@ async def test_scan_api_runs_stubbed_pipeline_and_exposes_artifacts(tmp_path, se
     app.state.pipeline_orchestrator.dns_validator = StubDNSValidator(
         records=[ValidatedHostname(hostname=hostname, ip_addresses=(ip_address,))]
     )
-    app.state.scan_read_service = ScanReadService(session_factory=session_factory)
+    app.state.scan_read_service = ScanReadService(
+        session_factory=session_factory,
+        runtime_store=runtime_store,
+    )
 
     client = await _make_client(session_factory)
     try:
@@ -91,6 +97,11 @@ async def test_scan_api_runs_stubbed_pipeline_and_exposes_artifacts(tmp_path, se
         assert status_response.status_code == 200
         status_payload = status_response.json()
         assert status_payload["status"] == "completed"
+        assert status_payload["stage"] == "completed"
+        assert status_payload["summary"]["tls_assets"] == 1
+        assert status_payload["summary"]["vulnerable_assets"] == 1
+        assert status_payload["events"]
+        assert status_payload["degraded_modes"]
         assert status_payload["progress"] == {
             "assets_discovered": 2,
             "assessments_created": 1,
@@ -203,7 +214,10 @@ async def test_latest_artifact_selection_is_deterministic_with_equal_timestamps(
         )
         await session.commit()
 
-    app.state.scan_read_service = ScanReadService(session_factory=session_factory)
+    app.state.scan_read_service = ScanReadService(
+        session_factory=session_factory,
+        runtime_store=ScanRuntimeStore(),
+    )
     client = await _make_client(session_factory)
     try:
         cbom_response = await client.get(f"/api/v1/assets/{asset_id}/cbom")
@@ -224,16 +238,22 @@ async def test_latest_artifact_selection_is_deterministic_with_equal_timestamps(
 @pytest.mark.asyncio
 async def test_invalid_target_and_failure_cleanup_are_reported(tmp_path, session_factory) -> None:
     hostname = f"phase8-{uuid.uuid4().hex[:8]}.example.com"
+    runtime_store = ScanRuntimeStore()
     app.state.scan_tasks = {}
+    app.state.scan_runtime_store = runtime_store
     app.state.pipeline_orchestrator = build_phase8_orchestrator(
         session_factory=session_factory,
         tmp_path=tmp_path,
+        runtime_store=runtime_store,
         validated_hostnames=[],
         port_findings_by_ip={},
         tls_results_by_target={},
     )
     app.state.pipeline_orchestrator.dns_validator = StubDNSValidator([], should_fail=True)
-    app.state.scan_read_service = ScanReadService(session_factory=session_factory)
+    app.state.scan_read_service = ScanReadService(
+        session_factory=session_factory,
+        runtime_store=runtime_store,
+    )
 
     client = await _make_client(session_factory)
     try:
@@ -254,6 +274,7 @@ async def test_invalid_target_and_failure_cleanup_are_reported(tmp_path, session
 
         assert status_response.status_code == 200
         assert status_response.json()["status"] == "failed"
+        assert status_response.json()["stage"] == "failed"
         assert missing_response.status_code == 404
     finally:
         await client.aclose()

@@ -14,7 +14,7 @@ from backend.core.config import Settings
 from backend.discovery.types import EnumeratedHostname, PortFinding, TLSProbeResult, ValidatedHostname
 from backend.intelligence import RagOrchestrator, RetrievalService, create_embedding_provider
 from backend.models.enums import ServiceType
-from backend.pipeline import PipelineOrchestrator
+from backend.pipeline import PipelineOrchestrator, ScanRuntimeStore
 from tests.unit._certificate_helpers import build_rsa_certificate_chain
 from tests.unit._phase6_helpers import write_sample_corpus
 from tests.unit._phase7_helpers import unavailable_oqs_capability
@@ -101,6 +101,7 @@ def build_phase8_orchestrator(
     tls_results_by_target: dict[tuple[str | None, str, int], TLSProbeResult],
     enumerated_hostnames: Iterable[str] = (),
     failing_tls_targets: Iterable[tuple[str | None, str, int]] = (),
+    runtime_store: ScanRuntimeStore | None = None,
 ) -> PipelineOrchestrator:
     collection_name = f"phase8_{uuid.uuid4().hex}"
     retrieval_service = RetrievalService(
@@ -114,6 +115,7 @@ def build_phase8_orchestrator(
     signer._detect_oqs_capability = lambda: unavailable_oqs_capability()  # type: ignore[attr-defined]
     return PipelineOrchestrator(
         session_factory=session_factory,
+        runtime_store=runtime_store,
         enumerator=StubEnumerator(enumerated_hostnames),
         dns_validator=StubDNSValidator(validated_hostnames),
         port_scanner=StubPortScanner(port_findings_by_ip),

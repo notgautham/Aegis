@@ -52,7 +52,7 @@ async def test_documented_vulnerable_case_persists_cbom_and_updates_tier(db_sess
         timestamp=datetime(2026, 3, 26, tzinfo=UTC),
     )
 
-    assert persisted.serial_number == "urn:aegis:scan:20260326:testssl.sh:443"
+    assert persisted.serial_number == f"urn:aegis:scan:20260326:testssl.sh:443:{bundle.asset.id}"
     assert persisted.cbom_json["quantumRiskSummary"]["tier"] == "QUANTUM_VULNERABLE"
     assert persisted.cbom_json["quantumRiskSummary"]["overallScore"] == 84.5
     assert bundle.assessment.compliance_tier is ComplianceTier.QUANTUM_VULNERABLE
@@ -81,6 +81,43 @@ async def test_hybrid_case_persists_cbom_and_updates_tier(db_session) -> None:
         "migrate-key-exchange"
     ]
     assert bundle.assessment.compliance_tier is ComplianceTier.PQC_TRANSITIONING
+
+
+@pytest.mark.asyncio
+async def test_repeat_same_day_scans_persist_distinct_cbom_serials(db_session) -> None:
+    mapper = CycloneDxMapper()
+    first_bundle = await _create_bundle(
+        db_session,
+        hostname="repeat.example.com",
+        kex_algorithm="ECDHE",
+        auth_algorithm="RSA",
+        enc_algorithm="AES_256_GCM",
+        risk_score=84.5,
+    )
+    second_bundle = await _create_bundle(
+        db_session,
+        hostname="repeat.example.com",
+        kex_algorithm="ECDHE",
+        auth_algorithm="RSA",
+        enc_algorithm="AES_256_GCM",
+        risk_score=84.5,
+    )
+    timestamp = datetime(2026, 3, 26, tzinfo=UTC)
+
+    first_persisted = await mapper.persist_cbom(
+        bundle=first_bundle,
+        cbom_repository=CbomDocumentRepository(db_session),
+        timestamp=timestamp,
+    )
+    second_persisted = await mapper.persist_cbom(
+        bundle=second_bundle,
+        cbom_repository=CbomDocumentRepository(db_session),
+        timestamp=timestamp,
+    )
+
+    assert first_persisted.serial_number != second_persisted.serial_number
+    assert first_persisted.serial_number.endswith(str(first_bundle.asset.id))
+    assert second_persisted.serial_number.endswith(str(second_bundle.asset.id))
 
 
 async def _create_bundle(

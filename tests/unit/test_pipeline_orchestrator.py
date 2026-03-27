@@ -4,16 +4,24 @@ Unit tests for the Phase 8 pipeline orchestrator.
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.core.config import get_settings
+from backend.discovery import AuthorizedScope
+from backend.discovery.dns_enumerator import DNSEnumerationError
 from backend.discovery.types import ValidatedHostname
 from backend.models.enums import ScanStatus
 from backend.models.scan_job import ScanJob
-from backend.pipeline import ScanAlreadyRunningError, ScanAlreadyTerminalError, ScanReadService
+from backend.pipeline import (
+    ScanAlreadyRunningError,
+    ScanAlreadyTerminalError,
+    ScanReadService,
+    ScanRuntimeStore,
+)
 from backend.repositories.scan_job_repo import ScanJobRepository
 from tests.unit._phase8_helpers import (
     StubDNSValidator,
@@ -47,9 +55,11 @@ async def _create_scan(session_factory, *, target: str, status: ScanStatus = Sca
 async def test_happy_path_persists_tls_and_non_tls_assets(tmp_path, session_factory) -> None:
     hostname = f"phase8-{uuid.uuid4().hex[:8]}.example.com"
     ip_address = "198.51.100.10"
+    runtime_store = ScanRuntimeStore()
     orchestrator = build_phase8_orchestrator(
         session_factory=session_factory,
         tmp_path=tmp_path,
+        runtime_store=runtime_store,
         validated_hostnames=[ValidatedHostname(hostname=hostname, ip_addresses=(ip_address,))],
         port_findings_by_ip={ip_address: [make_tls_port(ip_address), make_vpn_port(ip_address)]},
         tls_results_by_target={(hostname, ip_address, 443): build_tls_result(hostname=hostname, ip_address=ip_address)},
@@ -59,12 +69,14 @@ async def test_happy_path_persists_tls_and_non_tls_assets(tmp_path, session_fact
 
     await orchestrator.run_scan(scan_id=scan_id, target=hostname)
 
-    read_service = ScanReadService(session_factory=session_factory)
+    read_service = ScanReadService(session_factory=session_factory, runtime_store=runtime_store)
     status_payload = await read_service.get_scan_status(scan_id=scan_id)
     results_payload = await read_service.get_scan_results(scan_id=scan_id)
 
     assert status_payload["status"] is ScanStatus.COMPLETED
     assert status_payload["completed_at"] is not None
+    assert status_payload["stage"] == "completed"
+    assert status_payload["elapsed_seconds"] is not None
     assert status_payload["progress"] == {
         "assets_discovered": 2,
         "assessments_created": 1,
@@ -72,6 +84,17 @@ async def test_happy_path_persists_tls_and_non_tls_assets(tmp_path, session_fact
         "remediations_created": 1,
         "certificates_created": 1,
     }
+    assert status_payload["summary"] == {
+        "total_assets": 2,
+        "tls_assets": 1,
+        "non_tls_assets": 1,
+        "fully_quantum_safe_assets": 0,
+        "transitioning_assets": 0,
+        "vulnerable_assets": 1,
+        "highest_risk_score": 84.5,
+    }
+    assert any(event["stage"] == "issuing_certificates" for event in status_payload["events"])
+    assert any("ECDSA" in degraded for degraded in status_payload["degraded_modes"])
     assert len(results_payload["assets"]) == 2
     assert any(asset["service_type"].value == "vpn" for asset in results_payload["assets"])
     tls_asset = next(asset for asset in results_payload["assets"] if asset["assessment"] is not None)
@@ -211,3 +234,78 @@ async def test_outer_unexpected_exception_marks_scan_failed(tmp_path, session_fa
         assert scan is not None
         assert scan.status is ScanStatus.FAILED
         assert scan.completed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_missing_amass_logs_warning_and_continues_with_root_target(
+    tmp_path,
+    session_factory,
+    caplog,
+) -> None:
+    hostname = f"phase8-{uuid.uuid4().hex[:8]}.example.com"
+    ip_address = "198.51.100.55"
+    validated_hostnames = [ValidatedHostname(hostname=hostname, ip_addresses=(ip_address,))]
+    runtime_store = ScanRuntimeStore()
+    orchestrator = build_phase8_orchestrator(
+        session_factory=session_factory,
+        tmp_path=tmp_path,
+        runtime_store=runtime_store,
+        validated_hostnames=validated_hostnames,
+        port_findings_by_ip={},
+        tls_results_by_target={},
+    )
+
+    class MissingAmassEnumerator:
+        async def enumerate(self, target: str):
+            raise DNSEnumerationError("Amass binary not found: amass")
+
+    orchestrator.enumerator = MissingAmassEnumerator()
+
+    with caplog.at_level(logging.WARNING):
+        resolved = await orchestrator._resolve_hostnames(
+            hostname,
+            AuthorizedScope.from_target(hostname),
+        )
+
+    assert resolved == validated_hostnames
+    assert any(
+        "Domain enumeration unavailable" in record.message and "Amass binary not found" in record.message
+        for record in caplog.records
+    )
+    snapshot = runtime_store.get_snapshot(uuid.uuid4())
+    assert snapshot is None
+
+
+@pytest.mark.asyncio
+async def test_runtime_store_records_degraded_amass_mode(tmp_path, session_factory) -> None:
+    hostname = f"phase8-{uuid.uuid4().hex[:8]}.example.com"
+    ip_address = "198.51.100.56"
+    scan_id = await _create_scan(session_factory, target=hostname)
+    runtime_store = ScanRuntimeStore()
+    runtime_store.register_scan(scan_id=scan_id, target=hostname)
+    orchestrator = build_phase8_orchestrator(
+        session_factory=session_factory,
+        tmp_path=tmp_path,
+        runtime_store=runtime_store,
+        validated_hostnames=[ValidatedHostname(hostname=hostname, ip_addresses=(ip_address,))],
+        port_findings_by_ip={},
+        tls_results_by_target={},
+    )
+
+    class MissingAmassEnumerator:
+        async def enumerate(self, target: str):
+            raise DNSEnumerationError("Amass binary not found: amass")
+
+    orchestrator.enumerator = MissingAmassEnumerator()
+
+    resolved = await orchestrator._resolve_hostnames(
+        hostname,
+        AuthorizedScope.from_target(hostname),
+        scan_id=scan_id,
+    )
+
+    assert resolved[0].hostname == hostname
+    snapshot = runtime_store.get_snapshot(scan_id)
+    assert snapshot is not None
+    assert snapshot.degraded_modes
+    assert any("root target only" in message.lower() for message in snapshot.degraded_modes)

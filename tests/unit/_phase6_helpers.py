@@ -98,7 +98,7 @@ def build_remediation_fixture(
         id=uuid.uuid4(),
         scan_id=scan_job.id,
         asset_id=asset.id,
-        serial_number=f"urn:aegis:scan:20260326:{hostname}:443",
+        serial_number=f"urn:aegis:scan:20260326:{hostname}:443:{asset.id}",
         cbom_json={
             "components": [
                 {

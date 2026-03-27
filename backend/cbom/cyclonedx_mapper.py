@@ -109,16 +109,26 @@ class AssetCbomBundle:
 class CycloneDxMapper:
     """Map analyzed asset bundles into validated CycloneDX 1.6 CBOM documents."""
 
+    @staticmethod
+    def _serial_asset_identifier(asset: DiscoveredAsset) -> str:
+        """Return the human-readable identifier portion of the CBOM serial."""
+        return asset.hostname or asset.ip_address or "unknown-asset"
+
     def build_serial_number(
         self,
         asset: DiscoveredAsset,
         *,
         timestamp: datetime | None = None,
     ) -> str:
-        """Build the deterministic Aegis URN for one asset."""
+        """Build a deterministic scan-scoped Aegis URN for one persisted asset."""
         effective_timestamp = timestamp or datetime.now(UTC)
-        asset_identifier = asset.hostname or asset.ip_address or "unknown-asset"
-        return f"urn:aegis:scan:{effective_timestamp:%Y%m%d}:{asset_identifier}:{asset.port}"
+        asset_identifier = self._serial_asset_identifier(asset)
+        if asset.id is None:
+            return f"urn:aegis:scan:{effective_timestamp:%Y%m%d}:{asset_identifier}:{asset.port}"
+        return (
+            f"urn:aegis:scan:{effective_timestamp:%Y%m%d}:"
+            f"{asset_identifier}:{asset.port}:{asset.id}"
+        )
 
     def map_asset_bundle(
         self,

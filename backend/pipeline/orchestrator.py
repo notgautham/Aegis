@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Callable, Sequence
 
@@ -41,6 +41,7 @@ from backend.discovery import (
     ValidatedHostname,
     aggregate_assets,
 )
+from backend.discovery.dns_enumerator import DNSEnumerationError
 from backend.intelligence import (
     RagOrchestrator,
     RemediationInput,
@@ -61,6 +62,7 @@ from backend.repositories import (
 )
 
 logger = logging.getLogger(__name__)
+MAX_SCAN_RUNTIME_EVENTS = 60
 
 
 class ScanNotFoundError(RuntimeError):
@@ -96,6 +98,119 @@ class _AssessmentInputs:
     risk_score: float | None
 
 
+@dataclass(slots=True)
+class ScanRuntimeEvent:
+    timestamp: datetime
+    kind: str
+    message: str
+    stage: str | None = None
+
+
+@dataclass(slots=True)
+class ScanRuntimeState:
+    scan_id: uuid.UUID
+    target: str
+    created_at: datetime | None = None
+    stage: str | None = None
+    stage_detail: str | None = None
+    stage_started_at: datetime | None = None
+    degraded_modes: list[str] = field(default_factory=list)
+    events: list[ScanRuntimeEvent] = field(default_factory=list)
+
+
+class ScanRuntimeStore:
+    """In-process telemetry for active and recently completed scans."""
+
+    def __init__(self) -> None:
+        self._states: dict[uuid.UUID, ScanRuntimeState] = {}
+
+    def register_scan(
+        self,
+        *,
+        scan_id: uuid.UUID,
+        target: str,
+        created_at: datetime | None = None,
+    ) -> None:
+        state = self._states.get(scan_id)
+        is_new_state = state is None
+        if state is None:
+            state = ScanRuntimeState(scan_id=scan_id, target=target, created_at=created_at)
+            self._states[scan_id] = state
+        else:
+            state.target = target
+            state.created_at = created_at or state.created_at
+        state.stage = "queued"
+        state.stage_detail = target
+        state.stage_started_at = datetime.now(UTC)
+
+        if is_new_state or not state.events:
+            self.add_event(
+                scan_id,
+                "Scan accepted and queued for execution.",
+                kind="queued",
+                stage="queued",
+            )
+
+    def set_stage(
+        self,
+        scan_id: uuid.UUID,
+        *,
+        stage: str,
+        detail: str | None = None,
+        message: str | None = None,
+    ) -> None:
+        state = self._states.get(scan_id)
+        if state is None:
+            return
+        state.stage = stage
+        state.stage_detail = detail
+        state.stage_started_at = datetime.now(UTC)
+        if message:
+            self.add_event(scan_id, message, kind="stage", stage=stage)
+
+    def add_event(
+        self,
+        scan_id: uuid.UUID,
+        message: str,
+        *,
+        kind: str = "info",
+        stage: str | None = None,
+    ) -> None:
+        state = self._states.get(scan_id)
+        if state is None:
+            return
+        state.events.append(
+            ScanRuntimeEvent(
+                timestamp=datetime.now(UTC),
+                kind=kind,
+                message=message,
+                stage=stage or state.stage,
+            )
+        )
+        if len(state.events) > MAX_SCAN_RUNTIME_EVENTS:
+            del state.events[:-MAX_SCAN_RUNTIME_EVENTS]
+
+    def add_degraded_mode(self, scan_id: uuid.UUID, message: str) -> None:
+        state = self._states.get(scan_id)
+        if state is None:
+            return
+        if message not in state.degraded_modes:
+            state.degraded_modes.append(message)
+        self.add_event(scan_id, message, kind="degraded")
+
+    def mark_terminal(
+        self,
+        scan_id: uuid.UUID,
+        *,
+        status: ScanStatus,
+        message: str,
+    ) -> None:
+        self.set_stage(scan_id, stage=status.value, message=message)
+
+    def get_snapshot(self, scan_id: uuid.UUID) -> ScanRuntimeState | None:
+        return self._states.get(scan_id)
+
+
 class PipelineOrchestrator:
     """Coordinate the end-to-end Aegis pipeline for one persisted scan job."""
 
@@ -103,6 +218,7 @@ class PipelineOrchestrator:
         self,
         *,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
+        runtime_store: ScanRuntimeStore | None = None,
         enumerator: AmassEnumerator | None = None,
         dns_validator: DNSxValidator | None = None,
         port_scanner: PortScanner | None = None,
@@ -116,6 +232,7 @@ class PipelineOrchestrator:
     ) -> None:
         settings = get_settings()
         self.session_factory = session_factory or async_session_factory
+        self.runtime_store = runtime_store
         self.enumerator = enumerator or AmassEnumerator()
         self.dns_validator = dns_validator or DNSxValidator()
         self.port_scanner = port_scanner or PortScanner()
@@ -140,12 +257,26 @@ class PipelineOrchestrator:
         terminal_timestamp: datetime | None = None
 
         try:
+            if self.runtime_store is not None:
+                self.runtime_store.register_scan(scan_id=scan_id, target=target)
+                self.runtime_store.set_stage(
+                    scan_id,
+                    stage="preparing_scan",
+                    detail=target,
+                    message="Scan execution started.",
+                )
             await self._transition_scan_to_running(scan_id)
-            discovery = await self._run_discovery(target)
+            discovery = await self._run_discovery(target, scan_id=scan_id)
             persisted_assets = await self._persist_discovered_assets(
                 scan_id=scan_id,
                 aggregated_assets=discovery.aggregated_assets,
             )
+            if self.runtime_store is not None:
+                self.runtime_store.add_event(
+                    scan_id,
+                    f"Persisted {len(persisted_assets)} discovered assets.",
+                    kind="success",
+                )
 
             for asset in persisted_assets:
                 if asset.service_type is not ServiceType.TLS:
@@ -156,8 +287,21 @@ class PipelineOrchestrator:
                     continue
 
                 try:
-                    await self._process_tls_asset(asset_id=asset.id, tls_result=tls_result)
+                    await self._process_tls_asset(
+                        asset_id=asset.id,
+                        tls_result=tls_result,
+                        scan_id=scan_id,
+                    )
                 except Exception:
+                    if self.runtime_store is not None:
+                        self.runtime_store.add_event(
+                            scan_id,
+                            (
+                                f"Asset pipeline failed for {asset.hostname or asset.ip_address}:"
+                                f"{asset.port}; continuing with remaining assets."
+                            ),
+                            kind="error",
+                        )
                     logger.exception(
                         "Per-asset pipeline failure for scan %s asset %s (%s:%s).",
                         scan_id,
@@ -174,13 +318,69 @@ class PipelineOrchestrator:
             logger.exception("Unrecoverable scan orchestration failure for %s.", scan_id)
             terminal_status = ScanStatus.FAILED
             terminal_timestamp = datetime.now(UTC)
+            if self.runtime_store is not None:
+                self.runtime_store.add_event(
+                    scan_id,
+                    "Scan orchestration failed before completion.",
+                    kind="error",
+                )
         finally:
             if terminal_status is not None and terminal_timestamp is not None:
+                if self.runtime_store is not None:
+                    terminal_message = (
+                        "Scan completed and all terminal artifacts are available."
+                        if terminal_status is ScanStatus.COMPLETED
+                        else "Scan failed and entered a terminal state."
+                    )
+                    self.runtime_store.mark_terminal(
+                        scan_id,
+                        status=terminal_status,
+                        message=terminal_message,
+                    )
                 await self._mark_scan_terminal(
                     scan_id=scan_id,
                     status=terminal_status,
                     completed_at=terminal_timestamp,
                 )
+
+    def _set_runtime_stage(
+        self,
+        scan_id: uuid.UUID | None,
+        *,
+        stage: str,
+        detail: str | None = None,
+        message: str | None = None,
+    ) -> None:
+        if scan_id is None or self.runtime_store is None:
+            return
+        self.runtime_store.set_stage(
+            scan_id,
+            stage=stage,
+            detail=detail,
+            message=message,
+        )
+
+    def _add_runtime_event(
+        self,
+        scan_id: uuid.UUID | None,
+        message: str,
+        *,
+        kind: str = "info",
+        stage: str | None = None,
+    ) -> None:
+        if scan_id is None or self.runtime_store is None:
+            return
+        self.runtime_store.add_event(
+            scan_id,
+            message,
+            kind=kind,
+            stage=stage,
+        )
+
+    def _add_degraded_mode(self, scan_id: uuid.UUID | None, message: str) -> None:
+        if scan_id is None or self.runtime_store is None:
+            return
+        self.runtime_store.add_degraded_mode(scan_id, message)
 
     async def _transition_scan_to_running(self, scan_id: uuid.UUID) -> None:
         async with self.session_factory() as session:
@@ -221,21 +421,34 @@ class PipelineOrchestrator:
             )
             await session.commit()
 
-    async def _run_discovery(self, target: str) -> _DiscoveryExecution:
+    async def _run_discovery(self, target: str, *, scan_id: uuid.UUID | None = None) -> _DiscoveryExecution:
         scope = AuthorizedScope.from_target(target)
-        validated_hostnames = await self._resolve_hostnames(target, scope)
+        validated_hostnames = await self._resolve_hostnames(target, scope, scan_id=scan_id)
         ip_addresses = self._collect_scan_ips(scope, validated_hostnames)
-        port_findings = await self._scan_ports(ip_addresses)
+        self._add_runtime_event(
+            scan_id,
+            f"Prepared {len(ip_addresses)} address(es) for port scanning.",
+            kind="info",
+            stage="scanning_ports",
+        )
+        port_findings = await self._scan_ports(ip_addresses, scan_id=scan_id)
         tls_results = await self._probe_tls_targets(
             scope=scope,
             validated_hostnames=validated_hostnames,
             port_findings=port_findings,
+            scan_id=scan_id,
         )
         aggregated_assets = aggregate_assets(
             target,
             validated_hostnames,
             port_findings,
             tls_results,
+        )
+        self._add_runtime_event(
+            scan_id,
+            f"Discovery produced {len(aggregated_assets)} aggregated asset candidate(s).",
+            kind="success",
+            stage="persisting_assets",
         )
         return _DiscoveryExecution(
             aggregated_assets=tuple(aggregated_assets),
@@ -248,20 +461,68 @@ class PipelineOrchestrator:
         self,
         target: str,
         scope: AuthorizedScope,
+        *,
+        scan_id: uuid.UUID | None = None,
     ) -> list[ValidatedHostname]:
         if scope.scope_type != "domain" or scope.domain is None:
+            self._add_runtime_event(
+                scan_id,
+                "Target scope does not require domain enumeration; continuing with direct address handling.",
+                kind="info",
+                stage="validating_dns",
+            )
             return []
 
         hostnames = {scope.domain}
+        self._set_runtime_stage(
+            scan_id,
+            stage="enumerating_domains",
+            detail=target,
+            message=f"Enumerating hostnames for {target}.",
+        )
         try:
-            hostnames.update(record.hostname for record in await self.enumerator.enumerate(target))
+            enumerated = await self.enumerator.enumerate(target)
+            hostnames.update(record.hostname for record in enumerated)
+            self._add_runtime_event(
+                scan_id,
+                f"Enumeration completed with {len(hostnames)} hostname candidate(s).",
+                kind="success",
+                stage="enumerating_domains",
+            )
+        except DNSEnumerationError as exc:
+            logger.warning(
+                "Domain enumeration unavailable for %s; continuing with root target only. Reason: %s",
+                target,
+                exc,
+            )
+            self._add_degraded_mode(
+                scan_id,
+                f"Domain enumeration unavailable for {target}; continued with the root target only.",
+            )
         except Exception:
             logger.exception(
                 "Domain enumeration failed for %s; continuing with root target only.",
                 target,
             )
+            self._add_degraded_mode(
+                scan_id,
+                f"Domain enumeration failed for {target}; continued with the root target only.",
+            )
 
-        return await self.dns_validator.validate(hostnames)
+        self._set_runtime_stage(
+            scan_id,
+            stage="validating_dns",
+            detail=f"{len(hostnames)} hostname(s)",
+            message="Validating DNS resolution for discovered hostnames.",
+        )
+        validated = await self.dns_validator.validate(hostnames)
+        self._add_runtime_event(
+            scan_id,
+            f"DNS validation retained {len(validated)} hostname(s) in scope.",
+            kind="success",
+            stage="validating_dns",
+        )
+        return validated
 
     @staticmethod
     def _collect_scan_ips(
@@ -282,10 +543,28 @@ class PipelineOrchestrator:
             return [str(ip_address) for ip_address in scope.network.hosts()]
         return []
 
-    async def _scan_ports(self, ip_addresses: Sequence[str]) -> list[PortFinding]:
+    async def _scan_ports(
+        self,
+        ip_addresses: Sequence[str],
+        *,
+        scan_id: uuid.UUID | None = None,
+    ) -> list[PortFinding]:
         findings: list[PortFinding] = []
         if not ip_addresses:
+            self._add_runtime_event(
+                scan_id,
+                "No IP addresses were available for port scanning.",
+                kind="info",
+                stage="scanning_ports",
+            )
             return findings
+
+        self._set_runtime_stage(
+            scan_id,
+            stage="scanning_ports",
+            detail=f"{len(ip_addresses)} address(es)",
+            message="Running bounded TCP/UDP discovery across in-scope addresses.",
+        )
 
         scan_results = await asyncio.gather(
             *(self.port_scanner.scan_host(ip_address) for ip_address in ip_addresses),
@@ -294,8 +573,20 @@ class PipelineOrchestrator:
         for ip_address, result in zip(ip_addresses, scan_results, strict=True):
             if isinstance(result, Exception):
                 logger.exception("Port scan failed for %s.", ip_address, exc_info=result)
+                self._add_runtime_event(
+                    scan_id,
+                    f"Port scan failed for {ip_address}; continuing with remaining addresses.",
+                    kind="error",
+                    stage="scanning_ports",
+                )
                 continue
             findings.extend(result)
+        self._add_runtime_event(
+            scan_id,
+            f"Port scanning completed with {len(findings)} open service finding(s).",
+            kind="success",
+            stage="scanning_ports",
+        )
         return findings
 
     async def _probe_tls_targets(
@@ -304,6 +595,7 @@ class PipelineOrchestrator:
         scope: AuthorizedScope,
         validated_hostnames: Sequence[ValidatedHostname],
         port_findings: Sequence[PortFinding],
+        scan_id: uuid.UUID | None = None,
     ) -> list[TLSProbeResult]:
         ip_to_hostnames = self._build_ip_hostname_index(scope, validated_hostnames)
         tls_targets: list[TLSScanTarget] = []
@@ -333,6 +625,12 @@ class PipelineOrchestrator:
                     )
                 )
 
+        self._set_runtime_stage(
+            scan_id,
+            stage="probing_tls",
+            detail=f"{len(tls_targets)} TLS endpoint(s)",
+            message="Negotiating TLS handshakes and retrieving certificate chains.",
+        )
         results = await asyncio.gather(
             *(self.tls_probe.probe(target) for target in tls_targets),
             return_exceptions=True,
@@ -346,8 +644,20 @@ class PipelineOrchestrator:
                     tls_target.port,
                     exc_info=result,
                 )
+                self._add_runtime_event(
+                    scan_id,
+                    f"TLS probing failed for {tls_target.server_name}; continuing with remaining endpoints.",
+                    kind="error",
+                    stage="probing_tls",
+                )
                 continue
             tls_results.append(result)
+        self._add_runtime_event(
+            scan_id,
+            f"TLS probing completed with {len(tls_results)} successful handshake result(s).",
+            kind="success",
+            stage="probing_tls",
+        )
         return tls_results
 
     @staticmethod
@@ -372,6 +682,12 @@ class PipelineOrchestrator:
         scan_id: uuid.UUID,
         aggregated_assets: Sequence[AggregatedAsset],
     ) -> list[DiscoveredAsset]:
+        self._set_runtime_stage(
+            scan_id,
+            stage="persisting_assets",
+            detail=f"{len(aggregated_assets)} asset(s)",
+            message="Persisting discovered assets and service identities.",
+        )
         async with self.session_factory() as session:
             repository = DiscoveredAssetRepository(session)
             persisted_assets: list[DiscoveredAsset] = []
@@ -395,6 +711,7 @@ class PipelineOrchestrator:
         *,
         asset_id: uuid.UUID,
         tls_result: TLSProbeResult,
+        scan_id: uuid.UUID | None = None,
     ) -> None:
         async with self.session_factory() as session:
             asset_repository = DiscoveredAssetRepository(session)
@@ -407,6 +724,13 @@ class PipelineOrchestrator:
             asset = await asset_repository.get_by_id(asset_id)
             if asset is None:
                 raise ScanNotFoundError(f"Asset {asset_id} does not exist.")
+            asset_label = f"{asset.hostname or asset.ip_address}:{asset.port}"
+            self._set_runtime_stage(
+                scan_id,
+                stage="assessing_tls_assets",
+                detail=asset_label,
+                message=f"Analyzing TLS posture for {asset_label}.",
+            )
 
             extracted_certificates = self.certificate_extractor.extract(tls_result)
             analyzed_certificates = self.certificate_analyzer.analyze(extracted_certificates)
@@ -440,6 +764,12 @@ class PipelineOrchestrator:
                     risk_score=assessment_inputs.risk_score,
                 )
             )
+            self._add_runtime_event(
+                scan_id,
+                f"{asset_label} classified as {evaluation.tier.value}.",
+                kind="success",
+                stage="assessing_tls_assets",
+            )
             assessment = await assessment_repository.create(
                 asset_id=asset.id,
                 tls_version=assessment_inputs.tls_version,
@@ -467,6 +797,12 @@ class PipelineOrchestrator:
 
             remediation_bundle = None
             if evaluation.tier is not ComplianceTier.FULLY_QUANTUM_SAFE:
+                self._set_runtime_stage(
+                    scan_id,
+                    stage="generating_remediation",
+                    detail=asset_label,
+                    message=f"Generating remediation guidance for {asset_label}.",
+                )
                 try:
                     remediation_bundle = await self.rag_orchestrator.generate_and_persist(
                         remediation_input=RemediationInput(
@@ -478,6 +814,13 @@ class PipelineOrchestrator:
                         remediation_repository=remediation_repository,
                         certificates=persisted_certificates,
                     )
+                    if remediation_bundle is not None:
+                        self._add_runtime_event(
+                            scan_id,
+                            f"Generated remediation artifacts for {asset_label}.",
+                            kind="success",
+                            stage="generating_remediation",
+                        )
                 except Exception:
                     logger.exception(
                         "Remediation generation failed for asset %s (%s:%s).",
@@ -485,16 +828,46 @@ class PipelineOrchestrator:
                         asset.hostname or asset.ip_address,
                         asset.port,
                     )
+                    self._add_runtime_event(
+                        scan_id,
+                        f"Remediation generation failed for {asset_label}; certificate issuance will continue if possible.",
+                        kind="error",
+                        stage="generating_remediation",
+                    )
+            else:
+                self._add_runtime_event(
+                    scan_id,
+                    f"{asset_label} is fully quantum safe; remediation was skipped.",
+                    kind="info",
+                    stage="assessing_tls_assets",
+                )
 
             await session.commit()
 
-            await self.certificate_signer.issue_and_persist(
+            self._set_runtime_stage(
+                scan_id,
+                stage="issuing_certificates",
+                detail=asset_label,
+                message=f"Issuing compliance certificate for {asset_label}.",
+            )
+            certificate_record = await self.certificate_signer.issue_and_persist(
                 certificate_request=CertificateRequest(
                     asset=asset,
                     assessment=assessment,
                     remediation_bundle=remediation_bundle,
                 ),
                 compliance_certificate_repository=certificate_store,
+            )
+            if certificate_record.signing_algorithm != "ML-DSA-65":
+                self._add_degraded_mode(
+                    scan_id,
+                    f"{asset_label} used {certificate_record.signing_algorithm} certificate signing fallback.",
+                )
+            self._add_runtime_event(
+                scan_id,
+                f"Issued {certificate_record.signing_algorithm} compliance certificate for {asset_label}.",
+                kind="success",
+                stage="issuing_certificates",
             )
 
             await session.commit()
@@ -626,19 +999,24 @@ class ScanReadService:
         self,
         *,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
+        runtime_store: ScanRuntimeStore | None = None,
     ) -> None:
         self.session_factory = session_factory or async_session_factory
+        self.runtime_store = runtime_store
 
     async def get_scan_status(self, *, scan_id: uuid.UUID) -> dict[str, Any]:
         bundle = await self._load_scan_bundle(scan_id=scan_id)
-        return {
+        payload = {
             "scan_id": bundle["scan"].id,
             "target": bundle["scan"].target,
             "status": bundle["scan"].status,
             "created_at": bundle["scan"].created_at,
             "completed_at": bundle["scan"].completed_at,
             "progress": bundle["progress"],
+            "summary": bundle["summary"],
         }
+        payload.update(self._build_runtime_payload(bundle))
+        return payload
 
     async def get_scan_results(self, *, scan_id: uuid.UUID) -> dict[str, Any]:
         bundle = await self._load_scan_bundle(scan_id=scan_id)
@@ -663,15 +1041,18 @@ class ScanReadService:
                 }
             )
 
-        return {
+        payload = {
             "scan_id": bundle["scan"].id,
             "target": bundle["scan"].target,
             "status": bundle["scan"].status,
             "created_at": bundle["scan"].created_at,
             "completed_at": bundle["scan"].completed_at,
             "progress": bundle["progress"],
+            "summary": bundle["summary"],
             "assets": assets_payload,
         }
+        payload.update(self._build_runtime_payload(bundle))
+        return payload
 
     async def get_latest_cbom(self, *, asset_id: uuid.UUID) -> dict[str, Any]:
         async with self.session_factory() as session:
@@ -740,6 +1121,19 @@ class ScanReadService:
                 if certificate is not None:
                     certificates[asset.id] = certificate
 
+            tier_counts = {
+                ComplianceTier.FULLY_QUANTUM_SAFE: 0,
+                ComplianceTier.PQC_TRANSITIONING: 0,
+                ComplianceTier.QUANTUM_VULNERABLE: 0,
+            }
+            risk_scores = []
+            for assessment in assessments.values():
+                if assessment.compliance_tier in tier_counts:
+                    tier_counts[assessment.compliance_tier] += 1
+                if assessment.risk_score is not None:
+                    risk_scores.append(assessment.risk_score)
+            tls_assets = sum(1 for asset in assets if asset.service_type is ServiceType.TLS)
+
             return {
                 "scan": scan,
                 "assets": assets,
@@ -754,7 +1148,48 @@ class ScanReadService:
                     "remediations_created": len(remediations),
                     "certificates_created": len(certificates),
                 },
+                "summary": {
+                    "total_assets": len(assets),
+                    "tls_assets": tls_assets,
+                    "non_tls_assets": len(assets) - tls_assets,
+                    "fully_quantum_safe_assets": tier_counts[ComplianceTier.FULLY_QUANTUM_SAFE],
+                    "transitioning_assets": tier_counts[ComplianceTier.PQC_TRANSITIONING],
+                    "vulnerable_assets": tier_counts[ComplianceTier.QUANTUM_VULNERABLE],
+                    "highest_risk_score": max(risk_scores) if risk_scores else None,
+                },
             }
+
+    def _build_runtime_payload(self, bundle: dict[str, Any]) -> dict[str, Any]:
+        runtime_snapshot = None
+        if self.runtime_store is not None:
+            runtime_snapshot = self.runtime_store.get_snapshot(bundle["scan"].id)
+
+        completed_at = bundle["scan"].completed_at
+        end_time = completed_at or datetime.now(UTC)
+        created_at = bundle["scan"].created_at
+        elapsed_seconds = None
+        if created_at is not None:
+            elapsed_seconds = max((end_time - created_at).total_seconds(), 0.0)
+
+        stage = runtime_snapshot.stage if runtime_snapshot is not None else None
+        if stage is None:
+            stage = (
+                "queued"
+                if bundle["scan"].status is ScanStatus.PENDING
+                else bundle["scan"].status.value
+            )
+
+        return {
+            "stage": stage,
+            "stage_detail": runtime_snapshot.stage_detail if runtime_snapshot is not None else None,
+            "stage_started_at": runtime_snapshot.stage_started_at if runtime_snapshot is not None else None,
+            "elapsed_seconds": elapsed_seconds,
+            "events": [
+                serialize_runtime_event(event)
+                for event in (runtime_snapshot.events if runtime_snapshot is not None else [])
+            ],
+            "degraded_modes": list(runtime_snapshot.degraded_modes) if runtime_snapshot is not None else [],
+        }
 
 
 def select_latest_cbom(records: Sequence[Any]) -> Any | None:
@@ -862,6 +1297,15 @@ def serialize_certificate(
     if include_pem:
         payload["certificate_pem"] = certificate.certificate_pem
     return payload
+
+
+def serialize_runtime_event(event: ScanRuntimeEvent) -> dict[str, Any]:
+    return {
+        "timestamp": event.timestamp,
+        "kind": event.kind,
+        "message": event.message,
+        "stage": event.stage,
+    }
 
 
 def _artifact_key_from_tls_result(

@@ -15,9 +15,22 @@ from fastapi.responses import JSONResponse
 
 from backend.api.v1.router import api_router
 from backend.core.config import get_settings
-from backend.pipeline import PipelineOrchestrator, ScanNotFoundError, ScanReadService
+from backend.pipeline import (
+    PipelineOrchestrator,
+    ScanNotFoundError,
+    ScanReadService,
+    ScanRuntimeStore,
+)
 
 settings = get_settings()
+
+
+def _initialize_app_state(app: FastAPI) -> None:
+    runtime_store = ScanRuntimeStore()
+    app.state.scan_tasks = {}
+    app.state.scan_runtime_store = runtime_store
+    app.state.pipeline_orchestrator = PipelineOrchestrator(runtime_store=runtime_store)
+    app.state.scan_read_service = ScanReadService(runtime_store=runtime_store)
 
 
 @asynccontextmanager
@@ -26,9 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # ── Startup ─────────────────────────────────────────
     # Database engine is created lazily on first query;
     # explicit table creation will be handled by Alembic migrations.
-    app.state.scan_tasks = {}
-    app.state.pipeline_orchestrator = PipelineOrchestrator()
-    app.state.scan_read_service = ScanReadService()
+    _initialize_app_state(app)
     yield
     # ── Shutdown ────────────────────────────────────────
     from backend.core.database import engine
@@ -48,9 +59,7 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
-app.state.scan_tasks = {}
-app.state.pipeline_orchestrator = PipelineOrchestrator()
-app.state.scan_read_service = ScanReadService()
+_initialize_app_state(app)
 
 
 def _error_payload(error_type: str, message: str) -> dict[str, dict[str, str]]:

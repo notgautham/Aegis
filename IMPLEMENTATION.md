@@ -307,7 +307,7 @@ Analyst → Next.js UI → POST /scan → FastAPI Backend → Discovery Engine (
 | id | UUID (PK) | |
 | scan_id | UUID (FK → scan_jobs) | |
 | asset_id | UUID (FK → discovered_assets) | |
-| serial_number | TEXT | Deterministic URN (`urn:aegis:scan:{date}:{hostname}`) |
+| serial_number | TEXT | Deterministic scan-scoped URN (`urn:aegis:scan:{date}:{hostname-or-ip}:{port}:{asset_uuid}`) |
 | cbom_json | JSONB | Full CycloneDX 1.6 CBOM document |
 | created_at | TIMESTAMP | |
 
@@ -447,7 +447,7 @@ WEIGHTS = {"kex": 0.45, "sig": 0.35, "sym": 0.10, "tls": 0.10}
 12. **CycloneDX 1.6 schema mapper**
     - Map all crypto assessment data to CycloneDX 1.6 JSON with `cryptoProperties`
     - Include `quantumRiskSummary` block
-    - Deterministic serial number scheme (`urn:aegis:scan:{date}:{hostname}`)
+    - Deterministic scan-scoped serial number scheme (`urn:aegis:scan:{date}:{hostname-or-ip}:{port}:{asset_uuid}`)
 
 13. **CBOM persistence and export**
     - Store as JSONB in PostgreSQL

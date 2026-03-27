@@ -283,3 +283,10 @@ def test_custom_extension_semantics_are_identical_when_fallback_is_used(
     assert issued.signing_algorithm == "ECDSA"
     assert issued.extensions_json["pqc_status"] == "HYBRID"
     assert issued.extensions_json["hybrid_algorithms"] == ["kex:X25519_MLKEM768"]
+
+
+def test_oqs_ca_serial_file_is_padded_to_even_length(tmp_path) -> None:
+    signer = CertificateSigner(runtime_dir=tmp_path)
+
+    assert signer._format_openssl_ca_serial(0xABC) == "0ABC"
+    assert signer._format_openssl_ca_serial(0xABCD) == "ABCD"

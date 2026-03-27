@@ -8,6 +8,7 @@ from backend.pipeline.orchestrator import (
     ScanAlreadyTerminalError,
     ScanNotFoundError,
     ScanReadService,
+    ScanRuntimeStore,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "ScanAlreadyTerminalError",
     "ScanNotFoundError",
     "ScanReadService",
+    "ScanRuntimeStore",
 ]
