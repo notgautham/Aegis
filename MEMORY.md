@@ -4,9 +4,9 @@
 Aegis is an autonomous, continuous Cryptographic Intelligence Platform designed for the banking sector to combat the Harvest Now, Decrypt Later (HNDL) quantum threat vector. It discovers public-facing cryptographic assets, generates a CycloneDX 1.6 CBOM, scores quantum risk, evaluates NIST FIPS 203/204/205 compliance via a deterministic rules engine, generates Post-Quantum Cryptography (PQC) remediation patches via a RAG pipeline, and issues three-tier X.509 compliance certificates.
 
 ## 2. Current Development Phase
-**Status: Phase 7 Implemented — Docker Verification Pending**
+**Status: Phase 7 Complete — Phase 8 Starting**
 
-Phase 7 (Certification Engine) has now been implemented in code, including certificate issuance, repository persistence, and test coverage files. The remaining close-out step is to run the intended Docker-based verification commands once Docker is available in the current environment.
+Phase 7 (Certification Engine) has been implemented and verified in Docker. The project is now ready to begin **Phase 8: Pipeline Orchestrator & API**.
 
 ## 3. Current State of the System
 
@@ -169,10 +169,14 @@ Phase 7 (Certification Engine) has now been implemented in code, including certi
   - `tests/unit/test_certificate_oid_encoding.py` — Numeric OID presence, UTF-8 payload decoding, and payload-size bound checks
   - `tests/integration/test_phase7_certificate_pipeline.py` — DB-backed certificate persistence coverage for Tier 1 and Tier 3 assets
   - `tests/infra/test_certificate_signing_runtime.py` — Runtime OpenSSL parseability check plus concurrent issuance safety
+  - `tests/integration/test_phase3_to_phase7_pipeline.py` — End-to-end vulnerable TLS 1.2 flow from discovery-style input through CBOM, remediation, and final certificate issuance
 - **Validation Status:**
-  - Fallback ECDSA issuance path was exercised directly in Python and produced parseable certificates with the expected subject, UTC validity window, and custom OID payloads
-  - Concurrent fallback issuance was exercised directly in Python and reused issuer material without serial collisions
-  - Full pytest/Docker validation is still pending because this session could not reach the Docker daemon and the host Python environment does not have `pytest`
+  - Docker-based Phase 7 unit verification passed: `14 passed in 1.30s`
+  - Docker-based Phase 7 integration verification passed: `2 passed in 1.58s`
+  - Docker-based Phase 7 runtime verification passed: `2 passed in 1.13s`
+  - Added cross-phase regression coverage with `tests/integration/test_phase3_to_phase7_pipeline.py`, which passed in Docker
+  - Broad backend regression across Phases 1–7 passed in Docker: `85 passed, 1 warning in 6.14s`
+  - The remaining live discovery caveat is operational only: Amass enumeration is currently skipped in Docker because the `amass` binary is not installed in the backend image
 
 ### Pending (Phases 8–10)
 - Pipeline orchestrator and FastAPI REST API endpoints
@@ -188,10 +192,10 @@ Phase 7 (Certification Engine) has now been implemented in code, including certi
 - **IP address storage:** TEXT column (not PostgreSQL INET) for asyncpg compatibility.
 
 ## 5. Next Logical Task
-Close out **Phase 7 verification** in Docker, then begin **Phase 8**:
-1. Run the Phase 7 Docker test commands for unit, integration, and runtime signing verification.
-2. If those pass, treat Phase 7 as fully closed.
-3. Begin `backend/pipeline/orchestrator.py` and the first Phase 8 API endpoints.
+Execute **Phase 8** from `TODO.md`:
+1. Create `backend/pipeline/orchestrator.py` to chain Discovery → Analysis → CBOM → PQC Rules Engine → Certification, with RAG triggered only for Tier 2 / Tier 3 assets.
+2. Implement the first FastAPI orchestration endpoints (`POST /api/v1/scan`, `GET /api/v1/scan/{scan_id}`, `GET /api/v1/scan/{scan_id}/results`).
+3. Reuse the now-verified Phase 3–7 modules rather than introducing new business logic in the API layer.
 
 **Operational note:** Verify the existing Alembic migration is applied in Docker before wiring later phases:
 ```bash
@@ -205,7 +209,7 @@ docker compose exec backend python scripts/ingest_nist_docs.py
 docker compose exec backend python scripts/validate_ingested_corpus.py
 ```
 
-**Phase 7 verification note:** The certification engine is implemented, but its intended verification still needs to run inside Docker:
+**Phase 7 verification note:** The certification engine is now verified in Docker with the commands below:
 ```bash
 docker compose exec backend python -m pytest tests/unit/test_certificate_signer.py tests/unit/test_certificate_oid_encoding.py -v
 docker compose exec backend python -m pytest tests/integration/test_phase7_certificate_pipeline.py -v
