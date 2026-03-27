@@ -1,42 +1,93 @@
+"use client";
+
 import {
   ActivitySquare,
   BarChart3,
   FileCog,
-  ShieldCheck,
+  FolderKanban,
   Sparkles,
 } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  buildScanHref,
+  loadPersistedScanState,
+  normalizeScanId,
+  type PersistedScanState,
+} from "@/lib/scan-storage";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  {
-    label: "Scan Control",
-    description: "Active now",
-    icon: ActivitySquare,
-    active: true,
-  },
-  {
-    label: "Risk Heatmap",
-    description: "Phase 10",
-    icon: BarChart3,
-    active: false,
-  },
-  {
-    label: "Certificates",
-    description: "Phase 10",
-    icon: ShieldCheck,
-    active: false,
-  },
-  {
-    label: "Reports",
-    description: "Phase 10",
-    icon: FileCog,
-    active: false,
-  },
-];
+type SidebarSection =
+  | "scan-control"
+  | "risk-heatmap"
+  | "asset-workbench"
+  | "reports";
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  activeSection?: SidebarSection;
+  contextScanId?: string | null;
+}
+
+export function AppSidebar({
+  activeSection = "scan-control",
+  contextScanId = null,
+}: AppSidebarProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [rememberedScan, setRememberedScan] = useState<PersistedScanState | null>(null);
+
+  useEffect(() => {
+    setRememberedScan(loadPersistedScanState());
+  }, []);
+
+  const queryScanId = normalizeScanId(searchParams.get("scan"));
+  const rememberedScanId = rememberedScan?.scanId ?? null;
+  const resolvedScanId = contextScanId ?? queryScanId ?? rememberedScanId;
+  const assetWorkbenchHref =
+    pathname.startsWith("/assets/") || pathname === "/assets"
+      ? resolvedScanId
+        ? `${pathname}?scan=${resolvedScanId}`
+        : pathname
+      : buildScanHref("/assets", resolvedScanId);
+  const navItems = [
+    {
+      label: "Scan Control",
+      description: "Mission control",
+      icon: ActivitySquare,
+      href: "/",
+      active: activeSection === "scan-control",
+      disabled: false,
+    },
+    {
+      label: "Risk Heatmap",
+      description: resolvedScanId ? "Phase 10 live" : "Await scan",
+      icon: BarChart3,
+      href: buildScanHref("/risk-heatmap", resolvedScanId),
+      active: activeSection === "risk-heatmap",
+      disabled: !resolvedScanId,
+    },
+    {
+      label: "Asset Workbench",
+      description: resolvedScanId ? "Deep inspection" : "Await scan",
+      icon: FolderKanban,
+      href: assetWorkbenchHref,
+      active: activeSection === "asset-workbench",
+      disabled: !resolvedScanId,
+    },
+    {
+      label: "Reports",
+      description: resolvedScanId ? "Engineer first" : "Await scan",
+      icon: FileCog,
+      href: buildScanHref("/reports", resolvedScanId),
+      active: activeSection === "reports",
+      disabled: !resolvedScanId,
+    },
+  ] as const;
+
   return (
     <aside className="telemetry-panel relative flex w-full max-w-full flex-col overflow-hidden rounded-[30px] border border-border/70 bg-sidebar-panel px-5 py-6 text-sidebar-foreground shadow-command lg:w-80">
       <div className="telemetry-grid pointer-events-none absolute inset-0 opacity-35" />
@@ -62,7 +113,7 @@ export function AppSidebar() {
           variant="outline"
           className="border-sidebar-accent/25 bg-sidebar-accent/10 text-sidebar-accent"
         >
-          Phase 9
+          Phase 10
         </Badge>
       </div>
 
@@ -81,8 +132,8 @@ export function AppSidebar() {
           </div>
         </div>
         <p className="mt-3 text-sm leading-6 text-sidebar-muted">
-          One remembered scan, honest backend counters, stage timing, and
-          degraded-mode notices before the richer investigation surfaces land.
+          One remembered scan now opens into dedicated risk, asset, and report
+          surfaces while the dashboard keeps backend truth front and center.
         </p>
       </div>
 
@@ -91,32 +142,58 @@ export function AppSidebar() {
           const Icon = item.icon;
 
           return (
-            <div
+            <Button
               key={item.label}
+              asChild={!item.disabled}
+              variant="ghost"
+              disabled={item.disabled}
               className={cn(
-                "flex items-center gap-4 rounded-2xl border px-4 py-4 transition-colors",
+                "h-auto w-full justify-start rounded-2xl border px-4 py-4 transition-colors",
                 item.active
                   ? "border-sidebar-accent/30 bg-sidebar-accent/10 text-sidebar-foreground"
-                  : "border-white/5 bg-white/[0.02] text-sidebar-muted"
+                  : "border-white/5 bg-white/[0.02] text-sidebar-muted hover:bg-white/[0.05]"
               )}
             >
-              <div
-                className={cn(
-                  "flex h-11 w-11 items-center justify-center rounded-2xl border",
-                  item.active
-                    ? "border-sidebar-accent/35 bg-sidebar-accent/15 text-sidebar-accent"
-                    : "border-white/8 bg-black/10 text-sidebar-muted"
-                )}
-              >
-                <Icon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{item.label}</p>
-                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-sidebar-muted">
-                  {item.description}
-                </p>
-              </div>
-            </div>
+              {item.disabled ? (
+                <div className="flex w-full items-center gap-4">
+                  <div
+                    className={cn(
+                      "flex h-11 w-11 items-center justify-center rounded-2xl border",
+                      item.active
+                        ? "border-sidebar-accent/35 bg-sidebar-accent/15 text-sidebar-accent"
+                        : "border-white/8 bg-black/10 text-sidebar-muted"
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 text-left">
+                    <p className="text-sm font-medium">{item.label}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-sidebar-muted">
+                      {item.description}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <Link href={item.href} className="flex w-full items-center gap-4">
+                  <div
+                    className={cn(
+                      "flex h-11 w-11 items-center justify-center rounded-2xl border",
+                      item.active
+                        ? "border-sidebar-accent/35 bg-sidebar-accent/15 text-sidebar-accent"
+                        : "border-white/8 bg-black/10 text-sidebar-muted"
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 text-left">
+                    <p className="text-sm font-medium">{item.label}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-sidebar-muted">
+                      {item.description}
+                    </p>
+                  </div>
+                </Link>
+              )}
+            </Button>
           );
         })}
       </div>
@@ -126,9 +203,9 @@ export function AppSidebar() {
           Mission note
         </p>
         <p className="mt-3 text-sm leading-6 text-sidebar-muted">
-          Phase 9 is about trust, not noise. This layer proves discovery and
-          issuance are behaving correctly before Phase 10 expands into deeper
-          asset and report views.
+          The output layer is now split into analytical, forensic, and
+          reporting routes so real scan data can be investigated without losing
+          the ground-truth posture established in Phase 9.
         </p>
       </div>
     </aside>

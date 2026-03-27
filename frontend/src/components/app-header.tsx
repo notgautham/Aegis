@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertTriangle,
+  Binary,
   Orbit,
   Radar,
   Signal,
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { formatDuration, formatStage } from "@/lib/formatters";
 import type { ScanSummaryResponse } from "@/lib/api";
 
 type HealthState = "checking" | "healthy" | "offline";
@@ -21,6 +23,10 @@ interface AppHeaderProps {
   elapsedSeconds: number | null;
   summary: ScanSummaryResponse | null;
   degradedModeCount: number;
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+  telemetryNote?: string;
 }
 
 function healthPresentation(state: HealthState) {
@@ -54,35 +60,6 @@ function formatStatus(status: string | null): string {
   return status.replaceAll("_", " ");
 }
 
-function formatStage(stage: string | null): string {
-  if (!stage) {
-    return "No active telemetry";
-  }
-
-  return stage.replaceAll("_", " ");
-}
-
-function formatDuration(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "Awaiting timeline";
-  }
-
-  const totalSeconds = Math.max(0, Math.floor(value));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-
-  return `${seconds}s`;
-}
-
 export function AppHeader({
   healthState,
   activeTarget,
@@ -91,6 +68,10 @@ export function AppHeader({
   elapsedSeconds,
   summary,
   degradedModeCount,
+  eyebrow = "Mission Control",
+  title = "Scan orchestration dashboard",
+  description = "Live command surface for discovery, compliance posture, remediation generation, and certificate issuance across one trustworthy scan.",
+  telemetryNote = "Ground-truth metrics remain backend-sourced so the interface explains the scan without inventing state.",
 }: AppHeaderProps) {
   const health = healthPresentation(healthState);
   const HealthIcon = health.icon;
@@ -104,14 +85,13 @@ export function AppHeader({
       <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-muted-foreground">
-            Mission Control
+            {eyebrow}
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-[2.25rem]">
-            Scan orchestration dashboard
+            {title}
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Live command surface for discovery, compliance posture, remediation
-            generation, and certificate issuance across one trustworthy scan.
+            {description}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -187,10 +167,10 @@ export function AppHeader({
               ? `Risk ${summary.highest_risk_score.toFixed(1)}`
               : "Awaiting assessed assets"}
           </p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Phase 9 now exposes stage timing, fallback notices, and runtime
-            events instead of a blind polling loop.
-          </p>
+          <div className="mt-2 flex items-start gap-2 text-sm leading-6 text-muted-foreground">
+            <Binary className="mt-0.5 h-4 w-4 shrink-0 text-sidebar-accent" />
+            <p>{telemetryNote}</p>
+          </div>
         </div>
       </div>
     </header>

@@ -3,28 +3,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
-import { AppSidebar } from "@/components/app-sidebar";
+import { MissionLayout } from "@/components/mission-layout";
 import { NewScanCard } from "@/components/new-scan-card";
 import { ScanStatusCard } from "@/components/scan-status-card";
 import {
   ApiError,
-  checkHealth,
   createScan,
   getScanStatus,
   type ScanStatusResponse,
 } from "@/lib/api";
+import { persistScanState, loadPersistedScanState } from "@/lib/scan-storage";
+import { useBackendHealth } from "@/lib/use-backend-health";
 
-const ACTIVE_SCAN_STORAGE_KEY = "aegis.active-scan";
 const BASE_POLL_INTERVAL_MS = 3000;
 const MAX_POLL_INTERVAL_MS = 15000;
 
 type PollingState = "idle" | "polling" | "retrying";
-type HealthState = "checking" | "healthy" | "offline";
-
-interface PersistedScanState {
-  scanId: string;
-  target: string;
-}
 
 function isProbableTarget(value: string): boolean {
   const trimmed = value.trim();
@@ -53,13 +47,12 @@ export function DashboardWorkspace() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [pollingState, setPollingState] = useState<PollingState>("idle");
   const [pollingError, setPollingError] = useState<string | null>(null);
-  const [healthState, setHealthState] = useState<HealthState>("checking");
 
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const healthTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeScanIdRef = useRef<string | null>(null);
   const latestRequestTokenRef = useRef(0);
   const backoffRef = useRef(BASE_POLL_INTERVAL_MS);
+  const healthState = useBackendHealth();
 
   const activeTarget = activeScan?.target ?? null;
   const activeStatus = activeScan?.status ?? null;
@@ -75,38 +68,6 @@ export function DashboardWorkspace() {
       pollTimeoutRef.current = null;
     }
   };
-
-  const clearHealthTimer = () => {
-    if (healthTimeoutRef.current) {
-      clearTimeout(healthTimeoutRef.current);
-      healthTimeoutRef.current = null;
-    }
-  };
-
-  const persistScanState = (scan: PersistedScanState | null) => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    if (!scan) {
-      window.localStorage.removeItem(ACTIVE_SCAN_STORAGE_KEY);
-      return;
-    }
-
-    window.localStorage.setItem(ACTIVE_SCAN_STORAGE_KEY, JSON.stringify(scan));
-  };
-
-  const runHealthCheck = useCallback(async () => {
-    try {
-      await checkHealth();
-      setHealthState("healthy");
-    } catch {
-      setHealthState("offline");
-    } finally {
-      clearHealthTimer();
-      healthTimeoutRef.current = setTimeout(runHealthCheck, 15000);
-    }
-  }, []);
 
   const refreshScan = useCallback(async (
     scanId: string,
@@ -173,47 +134,29 @@ export function DashboardWorkspace() {
       return;
     }
 
-    const rawValue = window.localStorage.getItem(ACTIVE_SCAN_STORAGE_KEY);
-    if (!rawValue) {
+    const parsed = loadPersistedScanState();
+    if (!parsed) {
       return;
     }
 
-    try {
-      const parsed = JSON.parse(rawValue) as PersistedScanState;
-      if (!parsed?.scanId || !parsed?.target) {
-        persistScanState(null);
-        return;
-      }
-
-      activeScanIdRef.current = parsed.scanId;
-      setActiveScan({
-        scan_id: parsed.scanId,
-        target: parsed.target,
-        status: "pending",
-        created_at: null,
-        completed_at: null,
-        progress: null,
-        summary: null,
-        stage: "queued",
-        stage_detail: parsed.target,
-        stage_started_at: null,
-        elapsed_seconds: null,
-        events: [],
-        degraded_modes: [],
-      });
-      void refreshScan(parsed.scanId);
-    } catch {
-      persistScanState(null);
-    }
+    activeScanIdRef.current = parsed.scanId;
+    setActiveScan({
+      scan_id: parsed.scanId,
+      target: parsed.target,
+      status: "pending",
+      created_at: null,
+      completed_at: null,
+      progress: null,
+      summary: null,
+      stage: "queued",
+      stage_detail: parsed.target,
+      stage_started_at: null,
+      elapsed_seconds: null,
+      events: [],
+      degraded_modes: [],
+    });
+    void refreshScan(parsed.scanId);
   }, [refreshScan]);
-
-  useEffect(() => {
-    void runHealthCheck();
-
-    return () => {
-      clearHealthTimer();
-    };
-  }, [runHealthCheck]);
 
   useEffect(() => {
     activeScanIdRef.current = activeScan?.scan_id ?? null;
@@ -238,7 +181,6 @@ export function DashboardWorkspace() {
   useEffect(() => {
     return () => {
       clearPollTimer();
-      clearHealthTimer();
     };
   }, []);
 
@@ -319,39 +261,43 @@ export function DashboardWorkspace() {
   };
 
   return (
-    <main className="min-h-screen bg-dashboard-bg text-foreground">
-      <div className="mx-auto flex min-h-screen max-w-[1680px] flex-col gap-5 px-4 py-4 lg:flex-row lg:px-5 lg:py-5">
-        <AppSidebar />
-        <section className="flex min-w-0 flex-1 flex-col gap-5">
-          <AppHeader
-            healthState={healthState}
-            activeTarget={activeTarget}
-            activeStatus={shellStatus}
-            activeStage={activeScan?.stage ?? null}
-            elapsedSeconds={activeScan?.elapsed_seconds ?? null}
-            summary={activeScan?.summary ?? null}
-            degradedModeCount={activeScan?.degraded_modes.length ?? 0}
-          />
-          <div className="grid gap-5 xl:grid-cols-[1.05fr_1.25fr]">
-            <NewScanCard
-              value={inputValue}
-              onValueChange={setInputValue}
-              onSubmit={handleSubmit}
-              isSubmitting={isSubmitting}
-              error={formError}
-            />
-            <ScanStatusCard
-              scan={activeScan}
-              isHydrated={isHydrated}
-              isPolling={isPolling}
-              pollingState={pollingState}
-              pollingError={pollingError}
-              onManualRefresh={handleManualRefresh}
-              onClear={handleClearScan}
-            />
-          </div>
-        </section>
+    <MissionLayout
+      activeSection="scan-control"
+      contextScanId={activeScan?.scan_id ?? null}
+      header={
+        <AppHeader
+          healthState={healthState}
+          activeTarget={activeTarget}
+          activeStatus={shellStatus}
+          activeStage={activeScan?.stage ?? null}
+          elapsedSeconds={activeScan?.elapsed_seconds ?? null}
+          summary={activeScan?.summary ?? null}
+          degradedModeCount={activeScan?.degraded_modes.length ?? 0}
+          eyebrow="Mission Control"
+          title="Scan orchestration dashboard"
+          description="Live command surface for discovery, compliance posture, remediation generation, and certificate issuance across one trustworthy scan."
+          telemetryNote="The command center keeps one active scan honest while the richer Phase 10 surfaces branch out into dedicated routes."
+        />
+      }
+    >
+      <div className="grid gap-5 xl:grid-cols-[1.05fr_1.25fr]">
+        <NewScanCard
+          value={inputValue}
+          onValueChange={setInputValue}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+          error={formError}
+        />
+        <ScanStatusCard
+          scan={activeScan}
+          isHydrated={isHydrated}
+          isPolling={isPolling}
+          pollingState={pollingState}
+          pollingError={pollingError}
+          onManualRefresh={handleManualRefresh}
+          onClear={handleClearScan}
+        />
       </div>
-    </main>
+    </MissionLayout>
   );
 }

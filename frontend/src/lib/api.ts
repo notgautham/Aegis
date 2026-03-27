@@ -182,28 +182,37 @@ export async function createScan(target: string): Promise<ScanAcceptedResponse> 
   });
 }
 
-export async function getScanStatus(scanId: string): Promise<ScanStatusResponse> {
-  return apiFetch(`/api/v1/scan/${scanId}`);
+export async function getScanStatus(
+  scanId: string,
+  options?: RequestInit
+): Promise<ScanStatusResponse> {
+  return apiFetch(`/api/v1/scan/${scanId}`, options);
 }
 
 export async function getScanResults(
-  scanId: string
+  scanId: string,
+  options?: RequestInit
 ): Promise<ScanResultsResponse> {
-  return apiFetch(`/api/v1/scan/${scanId}/results`);
+  return apiFetch(`/api/v1/scan/${scanId}/results`, options);
 }
 
-export async function getAssetCbom(assetId: string): Promise<CbomResponse> {
-  return apiFetch(`/api/v1/assets/${assetId}/cbom`);
+export async function getAssetCbom(
+  assetId: string,
+  options?: RequestInit
+): Promise<CbomResponse> {
+  return apiFetch(`/api/v1/assets/${assetId}/cbom`, options);
 }
 
 export async function getAssetCertificate(
-  assetId: string
+  assetId: string,
+  options?: RequestInit
 ): Promise<CertificateResponse> {
-  return apiFetch(`/api/v1/assets/${assetId}/certificate`);
+  return apiFetch(`/api/v1/assets/${assetId}/certificate`, options);
 }
 
 export async function getAssetRemediation(
-  assetId: string
+  assetId: string,
+  options?: RequestInit
 ): Promise<RemediationResponse> {
-  return apiFetch(`/api/v1/assets/${assetId}/remediation`);
+  return apiFetch(`/api/v1/assets/${assetId}/remediation`, options);
 }

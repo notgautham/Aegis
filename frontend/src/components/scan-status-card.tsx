@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Clock3,
   Orbit,
@@ -11,6 +12,7 @@ import {
   ShieldAlert,
   Trash2,
 } from "lucide-react";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { buildScanHref } from "@/lib/scan-storage";
 
 import type {
   ProgressResponse,
@@ -466,6 +469,24 @@ export function ScanStatusCard({
                       ? `Completed with ${summary.tls_assets} TLS asset${summary.tls_assets === 1 ? "" : "s"}, ${summary.vulnerable_assets} vulnerable service${summary.vulnerable_assets === 1 ? "" : "s"}, and ${progress?.certificates_created ?? 0} issued certificate${(progress?.certificates_created ?? 0) === 1 ? "" : "s"}.`
                       : "Phase 10 will unlock the richer results views, but the scan lifecycle is already complete and stable."}
                   </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button asChild size="sm" className="h-9 rounded-full px-4">
+                      <Link href={buildScanHref("/risk-heatmap", scan.scan_id)}>
+                        Open risk heatmap
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" size="sm" className="h-9 rounded-full px-4">
+                      <Link href={buildScanHref("/reports", scan.scan_id)}>
+                        Open reports
+                      </Link>
+                    </Button>
+                    <Button asChild variant="ghost" size="sm" className="h-9 rounded-full px-4">
+                      <Link href={buildScanHref("/assets", scan.scan_id)}>
+                        Open asset workbench
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : null}
