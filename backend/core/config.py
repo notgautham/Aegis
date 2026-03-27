@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     LLM_TIMEOUT_SECONDS: float = 15.0
     EMBEDDING_TIMEOUT_SECONDS: float = 15.0
 
+    # Certificate issuer
+    CERT_ISSUER_COMMON_NAME: str = "Aegis Compliance CA"
+    CERT_ISSUER_ORGANIZATION: str = "Aegis"
+    CERT_ISSUER_ORG_UNIT: str = "Quantum Compliance"
+    CERT_RUNTIME_DIR: str = ".aegis-runtime/certs"
+
 
 @lru_cache()
 def get_settings() -> Settings:

@@ -4,9 +4,9 @@
 Aegis is an autonomous, continuous Cryptographic Intelligence Platform designed for the banking sector to combat the Harvest Now, Decrypt Later (HNDL) quantum threat vector. It discovers public-facing cryptographic assets, generates a CycloneDX 1.6 CBOM, scores quantum risk, evaluates NIST FIPS 203/204/205 compliance via a deterministic rules engine, generates Post-Quantum Cryptography (PQC) remediation patches via a RAG pipeline, and issues three-tier X.509 compliance certificates.
 
 ## 2. Current Development Phase
-**Status: Phase 6 Complete — Phase 7 Starting**
+**Status: Phase 7 Implemented — Docker Verification Pending**
 
-Phase 6 (Threat Intelligence (RAG) & Remediation) has been completed. The project is entering **Phase 7: Certification Engine** as defined in `TODO.md`.
+Phase 7 (Certification Engine) has now been implemented in code, including certificate issuance, repository persistence, and test coverage files. The remaining close-out step is to run the intended Docker-based verification commands once Docker is available in the current environment.
 
 ## 3. Current State of the System
 
@@ -154,8 +154,27 @@ Phase 6 (Threat Intelligence (RAG) & Remediation) has been completed. The projec
   - `scripts/validate_ingested_corpus.py` now reports corpus file counts and live Qdrant collection stats for repeatable verification
   - Ingestion and corpus validation now ignore housekeeping files such as `README.md` and `.gitkeep`
 
-### Pending (Phases 7–10)
-- Certification Engine (ML-DSA-65 X.509 signing)
+#### Phase 7 Deliverables
+- **Certification Engine (`backend/cert/`):**
+  - `signer.py` — `CertificateSigner` with deterministic compliance-tier recomputation, certificate request/response dataclasses, secure 128-bit serial generation, UTC validity handling, and repository-backed persistence
+  - `signer.py` — Primary ML-DSA-65 / OQS OpenSSL issuance path with unique temp config generation, cleanup, issuer reuse, and explicit fallback error classification
+  - `signer.py` — ECDSA P-384 fallback path using `cryptography` with the same subject, SAN, validity semantics, standard X.509 extensions, and custom Aegis OIDs
+  - `signer.py` — Custom OID extension support for `PQC-STATUS`, `FIPS-COMPLIANT`, `BROKEN-ALGORITHMS`, and `REMEDIATION-BUNDLE-ID`
+  - `backend/cert/__init__.py` — Stable Phase 7 exports for later pipeline/API integration
+- **Config / Runtime:**
+  - `backend/core/config.py` — Added issuer identity settings and `CERT_RUNTIME_DIR` for reusable issuer material
+- **Testing:**
+  - `tests/unit/_phase7_helpers.py` — Shared realistic fixtures for certificate issuance tests
+  - `tests/unit/test_certificate_signer.py` — Tier validity, SAN typing, issuer reuse, mismatch detection, remediation requirements, and truncation behavior
+  - `tests/unit/test_certificate_oid_encoding.py` — Numeric OID presence, UTF-8 payload decoding, and payload-size bound checks
+  - `tests/integration/test_phase7_certificate_pipeline.py` — DB-backed certificate persistence coverage for Tier 1 and Tier 3 assets
+  - `tests/infra/test_certificate_signing_runtime.py` — Runtime OpenSSL parseability check plus concurrent issuance safety
+- **Validation Status:**
+  - Fallback ECDSA issuance path was exercised directly in Python and produced parseable certificates with the expected subject, UTC validity window, and custom OID payloads
+  - Concurrent fallback issuance was exercised directly in Python and reused issuer material without serial collisions
+  - Full pytest/Docker validation is still pending because this session could not reach the Docker daemon and the host Python environment does not have `pytest`
+
+### Pending (Phases 8–10)
 - Pipeline orchestrator and FastAPI REST API endpoints
 - Next.js 14 frontend dashboard
 
@@ -169,12 +188,10 @@ Phase 6 (Threat Intelligence (RAG) & Remediation) has been completed. The projec
 - **IP address storage:** TEXT column (not PostgreSQL INET) for asyncpg compatibility.
 
 ## 5. Next Logical Task
-Execute **Phase 7** from `TODO.md`:
-1. Create `backend/cert/signer.py` wrapping the liboqs / OQS OpenSSL subprocess for ML-DSA-65 X.509 signing.
-2. Implement the ECDSA fallback signing path using Python `cryptography`.
-3. Add custom OID extension injection based on compliance tier and remediation linkage.
-4. Implement three-tier certificate issuance windows (90 / 30 / 7 days).
-5. Persist generated certificates into the `ComplianceCertificate` repository and add verification tests.
+Close out **Phase 7 verification** in Docker, then begin **Phase 8**:
+1. Run the Phase 7 Docker test commands for unit, integration, and runtime signing verification.
+2. If those pass, treat Phase 7 as fully closed.
+3. Begin `backend/pipeline/orchestrator.py` and the first Phase 8 API endpoints.
 
 **Operational note:** Verify the existing Alembic migration is applied in Docker before wiring later phases:
 ```bash
@@ -186,6 +203,13 @@ docker-compose exec backend alembic upgrade head
 ```bash
 docker compose exec backend python scripts/ingest_nist_docs.py
 docker compose exec backend python scripts/validate_ingested_corpus.py
+```
+
+**Phase 7 verification note:** The certification engine is implemented, but its intended verification still needs to run inside Docker:
+```bash
+docker compose exec backend python -m pytest tests/unit/test_certificate_signer.py tests/unit/test_certificate_oid_encoding.py -v
+docker compose exec backend python -m pytest tests/integration/test_phase7_certificate_pipeline.py -v
+docker compose exec backend python -m pytest tests/infra/test_certificate_signing_runtime.py -v
 ```
 
 **Validation note:** Before Phase 8 orchestration/API integration, run the Phase 3 live validators inside Docker so the discovery toolchain is fully verified in its intended runtime:
@@ -217,10 +241,12 @@ docker compose exec backend python tests/infra/validate_phase3_full.py
 | `backend/compliance/` | Phase 5 deterministic PQC rules engine and reusable tier-application helper. |
 | `backend/cbom/` | Phase 5 CycloneDX mapping, validation, persistence, and export helpers. |
 | `backend/intelligence/` | Phase 6 retrieval, HNDL calculation, deterministic patch generation, roadmap generation, and remediation orchestration. |
+| `backend/cert/` | Phase 7 certificate issuance, fallback signing, and X.509 custom extension helpers. |
 | `scripts/ingest_nist_docs.py` | Phase 6 local-only Qdrant ingestion entrypoint for the intelligence corpus. |
 | `tests/integration/test_discovery_analysis_bridge.py` | Cross-phase validation of Discovery output flowing into Analysis logic. |
 | `tests/integration/test_phase5_cbom_pipeline.py` | DB-backed validation of Phase 5 rules evaluation and CBOM persistence flow. |
 | `tests/integration/test_phase6_remediation_pipeline.py` | DB-backed validation of Phase 6 retrieval, roadmap, and remediation persistence flow. |
+| `tests/integration/test_phase7_certificate_pipeline.py` | DB-backed validation of Phase 7 certificate issuance and repository persistence flow. |
 | `alembic.ini` | Alembic migration configuration. |
 | `migrations/env.py` | Async Alembic environment with model auto-detection. |
 | `docker/Dockerfile.oqs` | OQS-patched OpenSSL Docker build. |
@@ -242,5 +268,8 @@ To start development:
 11. **Phase 6 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_hndl_calculator.py tests/unit/test_patch_generator.py tests/unit/test_retrieval.py tests/unit/test_roadmap_generator.py tests/unit/test_rag_orchestrator.py -v`
 12. **Phase 6 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_ingest_nist_docs.py tests/integration/test_phase6_remediation_pipeline.py -v`
 13. **Phase 6 coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_phase6_remediation_pipeline.py --cov=backend.intelligence --cov-report=term-missing -v`
-14. **Coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_discovery_analysis_bridge.py --cov=backend.analysis --cov=backend.discovery --cov-report=term-missing -v`
-15. **Health Check:** `curl http://localhost:8000/health`
+14. **Phase 7 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_certificate_signer.py tests/unit/test_certificate_oid_encoding.py -v`
+15. **Phase 7 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_phase7_certificate_pipeline.py -v`
+16. **Phase 7 runtime tests:** `docker compose exec backend python -m pytest tests/infra/test_certificate_signing_runtime.py -v`
+17. **Coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_discovery_analysis_bridge.py --cov=backend.analysis --cov=backend.discovery --cov-report=term-missing -v`
+18. **Health Check:** `curl http://localhost:8000/health`

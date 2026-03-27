@@ -59,12 +59,12 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [x] Integrate generated HNDL timelines, patches, and migration roadmaps into the `RemediationBundle` persistence layer with source citations.
 
 ## Phase 7: Certification Engine
-- [ ] Create `backend/cert/signer.py` wrapping the `liboqs` / OQS OpenSSL subprocess for generating ML-DSA-65 signed X.509 certificates.
-- [ ] Implement fallback ECDSA signing logic using Python's `cryptography` library in `signer.py`.
-- [ ] Implement custom OID extension injection (`PQC-STATUS`, `FIPS-COMPLIANT`, `BROKEN-ALGORITHMS`, `Remediation-Bundle-ID`) based on compliance tier.
-- [ ] Implement three-tier certificate issuance logic: Tier 1 → 90-day, Tier 2 → 30-day, Tier 3 → 7-day validity.
-- [ ] Write unit tests verifying generated certificates parse correctly and contain the required OID extensions.
-- [ ] Persist generated certificates into the `ComplianceCertificate` repository.
+- [x] Create `backend/cert/signer.py` wrapping the `liboqs` / OQS OpenSSL subprocess for generating ML-DSA-65 signed X.509 certificates.
+- [x] Implement fallback ECDSA signing logic using Python's `cryptography` library in `signer.py`.
+- [x] Implement custom OID extension injection (`PQC-STATUS`, `FIPS-COMPLIANT`, `BROKEN-ALGORITHMS`, `Remediation-Bundle-ID`) based on compliance tier.
+- [x] Implement three-tier certificate issuance logic: Tier 1 → 90-day, Tier 2 → 30-day, Tier 3 → 7-day validity.
+- [x] Write unit tests verifying generated certificates parse correctly and contain the required OID extensions.
+- [x] Persist generated certificates into the `ComplianceCertificate` repository.
 
 ## Phase 8: Pipeline Orchestrator & API
 - [ ] Create `backend/pipeline/orchestrator.py` — the async orchestrator that chains Discovery → Analysis → CBOM → PQC Rules Engine → Certification (all assets) and RAG (Tier 2 / Tier 3 only, triggered only after Rules classification), then writes all results to PostgreSQL.
