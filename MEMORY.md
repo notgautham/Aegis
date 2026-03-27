@@ -4,16 +4,16 @@
 Aegis is an autonomous, continuous Cryptographic Intelligence Platform designed for the banking sector to combat the Harvest Now, Decrypt Later (HNDL) quantum threat vector. It discovers public-facing cryptographic assets, generates a CycloneDX 1.6 CBOM, scores quantum risk, evaluates NIST FIPS 203/204/205 compliance via a deterministic rules engine, generates Post-Quantum Cryptography (PQC) remediation patches via a RAG pipeline, and issues three-tier X.509 compliance certificates.
 
 ## 2. Current Development Phase
-**Status: Phase 7 Complete — Phase 8 Starting**
+**Status: Phase 8 Complete - Phase 9 Starting**
 
-Phase 7 (Certification Engine) has been implemented and verified in Docker. The project is now ready to begin **Phase 8: Pipeline Orchestrator & API**.
+Phase 8 (Pipeline Orchestrator & API) has been implemented and verified in Docker. The project is now ready to begin **Phase 9: Frontend Foundation**.
 
 ## 3. Current State of the System
 
 ### Completed
 - `SOLUTION.md` — Product definition, threat models, business context. **Never modify.**
 - `IMPLEMENTATION.md` — Authoritative technical specification.
-- `TODO.md` — 10-phase roadmap. Phases 1–6 tasks marked `[x]`.
+- `TODO.md` — 10-phase roadmap. Phases 1-8 tasks are now marked `[x]`.
 - `AGENTS.md`, `RULES.md`, `MEMORY.md` — Project governance documents.
 - `.agents/skills/` — Reusable agent skills.
 
@@ -82,7 +82,7 @@ Phase 7 (Certification Engine) has been implemented and verified in Docker. The 
   - Docker-based live validation now passes for DNS validation, port scanning, TLS probing, certificate extraction, and end-to-end aggregation using `tests/infra/validate_phase3_full.py`
   - `dns_enumerator.py` was adjusted for installed Amass CLI compatibility by removing the unsupported `-noalts` flag
   - `tls_probe.py` was hardened with a more resilient pyOpenSSL handshake loop and a stdlib SSL fallback path while preserving the `TLSProbeResult` contract for later phases
-  - The only remaining live validation issue is Amass passive enumeration timing out against the public test target even with increased timeout; this is being treated as deferred external-tool/runtime tuning rather than a Phase 3 logic blocker
+  - The current live-validation caveat is operational only: the Docker validator may skip Amass enumeration when the backend image does not have the `amass` binary installed; all other live discovery checks are passing
 
 #### Phase 4 Deliverables
 - **Cryptographic Analysis Engine (`backend/analysis/`):**
@@ -178,8 +178,25 @@ Phase 7 (Certification Engine) has been implemented and verified in Docker. The 
   - Broad backend regression across Phases 1–7 passed in Docker: `85 passed, 1 warning in 6.14s`
   - The remaining live discovery caveat is operational only: Amass enumeration is currently skipped in Docker because the `amass` binary is not installed in the backend image
 
-### Pending (Phases 8–10)
-- Pipeline orchestrator and FastAPI REST API endpoints
+#### Phase 8 Deliverables
+- **Pipeline Orchestrator (`backend/pipeline/`):**
+  - `orchestrator.py` - Async scan coordinator that guards duplicate runs, transitions scan jobs through `pending -> running -> completed/failed`, derives scope from the submitted target, runs Discovery -> Analysis -> CBOM -> Rules -> optional Remediation -> Certification, and persists outputs with per-asset failure isolation.
+  - `orchestrator.py` - Read-side assembly helpers for scan status, compiled scan results, and deterministic latest-artifact selection for CBOMs, certificates, and remediation bundles.
+- **FastAPI API Surface (`backend/api/v1/`):**
+  - `schemas.py` - Request/response schemas for scan creation, status polling, compiled results, CBOM retrieval, certificate retrieval, and remediation retrieval.
+  - `endpoints/scans.py` - `POST /api/v1/scan`, `GET /api/v1/scan/{scan_id}`, and `GET /api/v1/scan/{scan_id}/results` with background task dispatch and progress derivation from persisted rows.
+  - `endpoints/assets.py` - `GET /api/v1/assets/{asset_id}/cbom`, `GET /api/v1/assets/{asset_id}/certificate`, and `GET /api/v1/assets/{asset_id}/remediation` using deterministic latest-artifact selection.
+  - `router.py` - Phase 8 route registration for the `Scans` and `Assets` API groups.
+  - `backend/main.py` - App-state task registry initialization plus global JSON exception handlers for request validation, lookup failures, and unexpected server errors.
+- **Testing:**
+  - `tests/unit/test_pipeline_orchestrator.py` - Orchestrator coverage for happy path, duplicate-run guards, terminal timestamps, per-asset isolation, Tier 1 remediation skipping, and scan-level failure handling.
+  - `tests/integration/test_phase8_api.py` - DB-backed API coverage for scan creation, scan status polling, compiled results, deterministic latest-artifact selection, and asset retrieval endpoints.
+- **Validation Status:**
+  - Docker-based Phase 8 orchestrator/API verification passed: `10 passed in 6.21s`
+  - Broad backend regression across Phases 1-8 passed in Docker: `95 passed, 1 warning in 9.19s`
+  - Live Phase 3 Docker validation currently passes with `12 PASS / 0 FAIL / 1 SKIP`; the only skipped item is Amass enumeration when the container image does not include the `amass` binary
+
+### Pending (Phases 9-10)
 - Next.js 14 frontend dashboard
 
 ## 4. Key Technical Decisions (Immutable)
@@ -192,37 +209,30 @@ Phase 7 (Certification Engine) has been implemented and verified in Docker. The 
 - **IP address storage:** TEXT column (not PostgreSQL INET) for asyncpg compatibility.
 
 ## 5. Next Logical Task
-Execute **Phase 8** from `TODO.md`:
-1. Create `backend/pipeline/orchestrator.py` to chain Discovery → Analysis → CBOM → PQC Rules Engine → Certification, with RAG triggered only for Tier 2 / Tier 3 assets.
-2. Implement the first FastAPI orchestration endpoints (`POST /api/v1/scan`, `GET /api/v1/scan/{scan_id}`, `GET /api/v1/scan/{scan_id}/results`).
-3. Reuse the now-verified Phase 3–7 modules rather than introducing new business logic in the API layer.
+Execute **Phase 9** from `TODO.md`:
+1. Build the Next.js dashboard shell, navigation, and core page layout on top of the now-stable Phase 8 API surface.
+2. Wire the frontend API client to `POST /api/v1/scan`, scan polling, compiled results, and asset-level CBOM/certificate/remediation retrieval.
+3. Reuse the verified backend contracts from Phases 3-8 rather than introducing new business logic in the frontend layer.
 
-**Operational note:** Verify the existing Alembic migration is applied in Docker before wiring later phases:
+**Operational note:** Verify the existing Alembic migration is applied in Docker before continuing UI/API integration:
 ```bash
 docker-compose up -d
 docker-compose exec backend alembic upgrade head
 ```
 
-**Phase 6 setup note:** The intelligence layer ingests local source material only. Populate `docs/nist/` with the approved reference corpus before running:
+**Phase 6 corpus note:** Keep the approved local source corpus under `docs/nist/` current, then validate ingestion status with:
 ```bash
 docker compose exec backend python scripts/ingest_nist_docs.py
 docker compose exec backend python scripts/validate_ingested_corpus.py
 ```
 
-**Phase 7 verification note:** The certification engine is now verified in Docker with the commands below:
+**Phase 8 verification note:** The orchestrator and API layer are now verified in Docker with:
 ```bash
-docker compose exec backend python -m pytest tests/unit/test_certificate_signer.py tests/unit/test_certificate_oid_encoding.py -v
-docker compose exec backend python -m pytest tests/integration/test_phase7_certificate_pipeline.py -v
-docker compose exec backend python -m pytest tests/infra/test_certificate_signing_runtime.py -v
+docker compose exec backend python -m pytest tests/unit/test_pipeline_orchestrator.py tests/integration/test_phase8_api.py -v
+docker compose exec backend python -m pytest tests/unit tests/integration tests/infra/test_oqs.py tests/infra/test_certificate_signing_runtime.py -v
 ```
 
-**Validation note:** Before Phase 8 orchestration/API integration, run the Phase 3 live validators inside Docker so the discovery toolchain is fully verified in its intended runtime:
-```bash
-python tests/infra/validate_phase3_full.py --offline
-docker compose exec backend python tests/infra/validate_phase3_full.py
-```
-
-**Known deferred item:** Amass passive enumeration can still time out against slow public targets during validation. Revisit this before broader production-style discovery validation or Phase 8 end-to-end orchestration hardening.
+**Known deferred item:** Amass passive enumeration may still be skipped in Docker until the backend image includes the `amass` binary. The rest of the live discovery pipeline is passing.
 
 ## 6. Directory of Key Files
 
@@ -246,11 +256,15 @@ docker compose exec backend python tests/infra/validate_phase3_full.py
 | `backend/cbom/` | Phase 5 CycloneDX mapping, validation, persistence, and export helpers. |
 | `backend/intelligence/` | Phase 6 retrieval, HNDL calculation, deterministic patch generation, roadmap generation, and remediation orchestration. |
 | `backend/cert/` | Phase 7 certificate issuance, fallback signing, and X.509 custom extension helpers. |
+| `backend/pipeline/` | Phase 8 scan orchestration, read-side assembly, and deterministic latest-artifact selection. |
+| `backend/api/v1/endpoints/` | Phase 8 scan and asset API routes layered on top of the orchestrator/read service. |
 | `scripts/ingest_nist_docs.py` | Phase 6 local-only Qdrant ingestion entrypoint for the intelligence corpus. |
 | `tests/integration/test_discovery_analysis_bridge.py` | Cross-phase validation of Discovery output flowing into Analysis logic. |
 | `tests/integration/test_phase5_cbom_pipeline.py` | DB-backed validation of Phase 5 rules evaluation and CBOM persistence flow. |
 | `tests/integration/test_phase6_remediation_pipeline.py` | DB-backed validation of Phase 6 retrieval, roadmap, and remediation persistence flow. |
 | `tests/integration/test_phase7_certificate_pipeline.py` | DB-backed validation of Phase 7 certificate issuance and repository persistence flow. |
+| `tests/unit/test_pipeline_orchestrator.py` | Phase 8 orchestrator coverage for lifecycle transitions, asset isolation, and duplicate-run safety. |
+| `tests/integration/test_phase8_api.py` | Phase 8 API coverage for scan creation, polling, compiled results, and deterministic asset artifact retrieval. |
 | `alembic.ini` | Alembic migration configuration. |
 | `migrations/env.py` | Async Alembic environment with model auto-detection. |
 | `docker/Dockerfile.oqs` | OQS-patched OpenSSL Docker build. |
@@ -268,12 +282,12 @@ To start development:
 7. **Cross-phase validation:** `docker compose exec backend python -m pytest tests/unit/test_cert_analyzer.py tests/unit/test_cert_extractor.py tests/integration/test_discovery_analysis_bridge.py -v`
 8. **Phase 5 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_rules_engine.py tests/unit/test_cyclonedx_mapper.py -v`
 9. **Phase 5 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_phase5_cbom_pipeline.py -v`
-10. **Phase 5 coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_phase5_cbom_pipeline.py --cov=backend.compliance --cov=backend.cbom --cov-report=term-missing -v`
-11. **Phase 6 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_hndl_calculator.py tests/unit/test_patch_generator.py tests/unit/test_retrieval.py tests/unit/test_roadmap_generator.py tests/unit/test_rag_orchestrator.py -v`
-12. **Phase 6 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_ingest_nist_docs.py tests/integration/test_phase6_remediation_pipeline.py -v`
-13. **Phase 6 coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_phase6_remediation_pipeline.py --cov=backend.intelligence --cov-report=term-missing -v`
-14. **Phase 7 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_certificate_signer.py tests/unit/test_certificate_oid_encoding.py -v`
-15. **Phase 7 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_phase7_certificate_pipeline.py -v`
-16. **Phase 7 runtime tests:** `docker compose exec backend python -m pytest tests/infra/test_certificate_signing_runtime.py -v`
-17. **Coverage sweep:** `docker compose exec backend python -m pytest tests/unit tests/integration/test_discovery_analysis_bridge.py --cov=backend.analysis --cov=backend.discovery --cov-report=term-missing -v`
+10. **Phase 6 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_hndl_calculator.py tests/unit/test_patch_generator.py tests/unit/test_retrieval.py tests/unit/test_roadmap_generator.py tests/unit/test_rag_orchestrator.py -v`
+11. **Phase 6 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_ingest_nist_docs.py tests/integration/test_phase6_remediation_pipeline.py -v`
+12. **Phase 7 unit tests:** `docker compose exec backend python -m pytest tests/unit/test_certificate_signer.py tests/unit/test_certificate_oid_encoding.py -v`
+13. **Phase 7 integration tests:** `docker compose exec backend python -m pytest tests/integration/test_phase7_certificate_pipeline.py -v`
+14. **Phase 7 runtime tests:** `docker compose exec backend python -m pytest tests/infra/test_certificate_signing_runtime.py -v`
+15. **Phase 8 orchestrator/API tests:** `docker compose exec backend python -m pytest tests/unit/test_pipeline_orchestrator.py tests/integration/test_phase8_api.py -v`
+16. **Broad backend regression:** `docker compose exec backend python -m pytest tests/unit tests/integration tests/infra/test_oqs.py tests/infra/test_certificate_signing_runtime.py -v`
+17. **Live discovery validator:** `docker compose exec backend python tests/infra/validate_phase3_full.py`
 18. **Health Check:** `curl http://localhost:8000/health`

@@ -67,14 +67,14 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [x] Persist generated certificates into the `ComplianceCertificate` repository.
 
 ## Phase 8: Pipeline Orchestrator & API
-- [ ] Create `backend/pipeline/orchestrator.py` — the async orchestrator that chains Discovery → Analysis → CBOM → PQC Rules Engine → Certification (all assets) and RAG (Tier 2 / Tier 3 only, triggered only after Rules classification), then writes all results to PostgreSQL.
-- [ ] Initialize FastAPI app with CORS middleware and global exception handlers in `backend/main.py`.
-- [ ] Implement `POST /api/v1/scan` endpoint to accept targets, trigger the async pipeline orchestrator, and return `scan_id`.
-- [ ] Implement `GET /api/v1/scan/{scan_id}` endpoint for scan status and progress polling.
-- [ ] Implement `GET /api/v1/scan/{scan_id}/results` endpoint to return compiled assessment data.
-- [ ] Implement `GET /api/v1/assets/{asset_id}/cbom` endpoint for CBOM JSON download.
-- [ ] Implement `GET /api/v1/assets/{asset_id}/certificate` endpoint for X.509 PEM download.
-- [ ] Implement `GET /api/v1/assets/{asset_id}/remediation` endpoint for patch, HNDL timeline, and migration roadmap retrieval.
+- [x] Create `backend/pipeline/orchestrator.py` - the async orchestrator that chains Discovery -> Analysis -> CBOM -> PQC Rules Engine -> Certification (all assets) and RAG (Tier 2 / Tier 3 only, triggered only after Rules classification), then writes all results to PostgreSQL.
+- [x] Initialize FastAPI app with CORS middleware and global exception handlers in `backend/main.py`.
+- [x] Implement `POST /api/v1/scan` endpoint to accept targets, trigger the async pipeline orchestrator, and return `scan_id`.
+- [x] Implement `GET /api/v1/scan/{scan_id}` endpoint for scan status and progress polling.
+- [x] Implement `GET /api/v1/scan/{scan_id}/results` endpoint to return compiled assessment data.
+- [x] Implement `GET /api/v1/assets/{asset_id}/cbom` endpoint for CBOM JSON download.
+- [x] Implement `GET /api/v1/assets/{asset_id}/certificate` endpoint for X.509 certificate JSON retrieval.
+- [x] Implement `GET /api/v1/assets/{asset_id}/remediation` endpoint for patch, HNDL timeline, and migration roadmap retrieval.
 
 ## Phase 9: Frontend Foundation
 - [ ] Setup Next.js page layout and navigation shell (Sidebar, Header) using `shadcn-ui`.
@@ -98,3 +98,4 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [ ] Trigger alerts when:
       - risk score increases
       - certification tier drops
+
