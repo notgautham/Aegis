@@ -9,11 +9,8 @@ import type {
   ScanProfile,
 } from "@/lib/mission-control-storage";
 
-import { BackgroundGradient } from "@/components/aceternity/background-gradient";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 
 const profiles: Array<{
   id: ScanProfile;
@@ -83,58 +80,90 @@ export function ScanWorkflowPanel({
   onSavedTargetSelect,
 }: ScanWorkflowPanelProps) {
   return (
-    <BackgroundGradient className="h-full p-5">
+    <div className="overflow-hidden rounded-xl border border-white/5 bg-[#1a1c20]/70 backdrop-blur-2xl">
+      <div className="flex items-center justify-between border-b border-white/5 bg-[#282a2e] px-6 py-3">
+        <span className="font-[var(--font-display)] text-xs font-bold uppercase tracking-[0.2em] text-[#e2e2e8]">
+          Scan Workflow // Engine_v4
+        </span>
+        <span className="font-mono text-sm text-slate-500">...</span>
+      </div>
       <form
-        className="space-y-5"
+        className="space-y-4 p-6"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-              Scan workflow
-            </p>
-            <h3 className="mt-3 text-2xl font-semibold text-foreground">
-              Run quantum readiness assessment
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Replace the toy textbox flow with a structured launch sequence designed for repeatable compliance scans.
-            </p>
-          </div>
-          <Badge variant="outline" className="gap-2">
-            UI-only workflow profiles
-          </Badge>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label
               htmlFor="scan-target"
-              className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground"
+              className="ml-1 font-[var(--font-display)] text-[10px] uppercase tracking-[0.2em] text-slate-500"
             >
-              Target input
+              Target Assets (FQDN/IP)
             </label>
-            <Input
+            <textarea
               id="scan-target"
               value={value}
               onChange={(event) => onValueChange(event.target.value)}
               placeholder="example.com, 203.0.113.0/24, or 198.51.100.14"
               disabled={isSubmitting}
               autoComplete="off"
+              className="min-h-[112px] w-full rounded-lg border border-[#3b4b37]/30 bg-[#0c0e12] p-3 text-sm text-[#e2e2e8] placeholder:text-slate-600 outline-none focus:border-[#00FF41] focus:ring-1 focus:ring-[#00FF41]"
             />
           </div>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label
+                htmlFor="scan-profile"
+                className="ml-1 font-[var(--font-display)] text-[10px] uppercase tracking-[0.2em] text-slate-500"
+              >
+                Scan Profile
+              </label>
+              <select
+                id="scan-profile"
+                value={profile}
+                onChange={(event) => onProfileChange(event.target.value as ScanProfile)}
+                className="w-full appearance-none rounded-lg border border-[#3b4b37]/30 bg-[#0c0e12] p-3 text-sm text-[#e2e2e8] outline-none focus:border-[#00FF41] focus:ring-1 focus:ring-[#00FF41]"
+              >
+                {profiles.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              type="submit"
+              className="w-full rounded-lg bg-[#00FF41] py-4 font-[var(--font-display)] font-bold uppercase tracking-[0.16em] text-[#003907] shadow-lg shadow-[#00FF41]/20 hover:bg-[#2aff63]"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Initiating
+                </>
+              ) : (
+                <>
+                  <Radar className="h-4 w-4" />
+                  Initiate Scan
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-4">
           <div className="space-y-2">
             <label
               htmlFor="saved-target"
-              className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground"
+              className="ml-1 font-[var(--font-display)] text-[10px] uppercase tracking-[0.2em] text-slate-500"
             >
-              Saved target
+              Saved Target
             </label>
             <select
               id="saved-target"
-              className="flex h-11 w-full rounded-2xl border border-input bg-background px-4 text-sm text-foreground outline-none transition-colors focus-visible:border-sidebar-accent"
+              className="flex h-11 w-full rounded-lg border border-[#3b4b37]/30 bg-[#0c0e12] px-4 text-sm text-[#e2e2e8] outline-none transition-colors focus:border-[#00FF41] focus:ring-1 focus:ring-[#00FF41]"
               defaultValue=""
               onChange={(event) => {
                 if (event.target.value) {
@@ -142,7 +171,7 @@ export function ScanWorkflowPanel({
                 }
               }}
             >
-              <option value="">Select a saved target</option>
+              <option value="">Select target</option>
               {savedTargets.map((target) => (
                 <option key={target.id} value={target.id}>
                   {target.label} | {target.target}
@@ -150,41 +179,6 @@ export function ScanWorkflowPanel({
               ))}
             </select>
           </div>
-        </div>
-
-        <div className="grid gap-3 xl:grid-cols-2">
-          {profiles.map((item) => {
-            const Icon = item.icon;
-            const active = item.id === profile;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onProfileChange(item.id)}
-                className={cn(
-                  "rounded-[22px] border px-4 py-4 text-left transition-colors",
-                  active
-                    ? "border-sidebar-accent/30 bg-sidebar-accent/10"
-                    : "border-white/8 bg-white/[0.03] hover:border-white/15"
-                )}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-sidebar-accent/20 bg-sidebar-accent/10 text-sidebar-accent">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      {item.description}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-3">
           <SelectField
             label="Environment"
             value={environmentTag ?? ""}
@@ -228,29 +222,12 @@ export function ScanWorkflowPanel({
           </div>
         </div>
 
-        {error ? (
-          <p className="text-sm text-status-failed">{error}</p>
-        ) : (
-          <p className="text-sm leading-6 text-muted-foreground">
-            The workflow fields sharpen operator intent, but the backend scan engine remains scan-centric and still accepts only the target.
-          </p>
-        )}
-
-        <Button type="submit" className="w-full rounded-full" disabled={isSubmitting}>
-          {isSubmitting ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Creating scan
-            </>
-          ) : (
-            <>
-              <Radar className="h-4 w-4" />
-              Run Quantum Readiness Assessment
-            </>
-          )}
-        </Button>
+        {error ? <p className="text-sm text-status-failed">{error}</p> : null}
+        <p className="text-sm leading-6 text-slate-500">
+          Workflow presets sharpen operator intent. The scan engine remains scan-centric and still submits only the target to the backend.
+        </p>
       </form>
-    </BackgroundGradient>
+    </div>
   );
 }
 
@@ -267,13 +244,13 @@ function SelectField({
 }) {
   return (
     <div className="space-y-2">
-      <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+      <label className="ml-1 font-[var(--font-display)] text-[10px] uppercase tracking-[0.2em] text-slate-500">
         {label}
       </label>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="flex h-11 w-full rounded-2xl border border-input bg-background px-4 text-sm text-foreground outline-none transition-colors focus-visible:border-sidebar-accent"
+        className="flex h-11 w-full rounded-lg border border-[#3b4b37]/30 bg-[#0c0e12] px-4 text-sm text-[#e2e2e8] outline-none transition-colors focus:border-[#00FF41] focus:ring-1 focus:ring-[#00FF41]"
       >
         {options.map(([optionValue, optionLabel]) => (
           <option key={`${label}-${optionValue}`} value={optionValue}>

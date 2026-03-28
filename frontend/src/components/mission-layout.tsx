@@ -23,34 +23,22 @@ export function MissionLayout({
   contextScanId = null,
 }: MissionLayoutProps) {
   return (
-    <main className="min-h-screen bg-dashboard-bg text-foreground">
-      <div className="mx-auto flex min-h-screen max-w-[1680px] flex-col gap-5 px-4 py-4 lg:flex-row lg:px-5 lg:py-5">
-        <Suspense fallback={<MissionSidebarFallback />}>
-          <AppSidebar activeSection={activeSection} contextScanId={contextScanId} />
-        </Suspense>
-        <section className="flex min-w-0 flex-1 flex-col gap-5">
-          {header}
-          {children}
-        </section>
+    <main className="min-h-screen bg-[#111318] text-[#e2e2e8]">
+      <Suspense fallback={<MissionSidebarFallback />}>
+        <AppSidebar activeSection={activeSection} contextScanId={contextScanId} />
+      </Suspense>
+      <div className="lg:pl-[18.5rem]">
+        {header}
+        <section className="min-w-0 px-4 pb-6 pt-20 lg:px-6">{children}</section>
       </div>
+      <div className="pointer-events-none fixed right-[-8rem] top-[-6rem] h-96 w-96 rounded-full bg-[#00ff41]/[0.05] blur-[120px]" />
+      <div className="pointer-events-none fixed bottom-[-6rem] left-[-4rem] h-72 w-72 rounded-full bg-[#c31e00]/[0.05] blur-[100px]" />
     </main>
   );
 }
 
 function MissionSidebarFallback() {
   return (
-    <aside className="telemetry-panel flex w-full max-w-full flex-col overflow-hidden rounded-[30px] border border-border/70 bg-sidebar-panel px-5 py-6 text-sidebar-foreground shadow-command lg:w-80">
-      <div className="h-8 w-28 rounded-full bg-white/[0.05]" />
-      <div className="mt-5 h-20 rounded-[24px] border border-white/6 bg-white/[0.03]" />
-      <div className="mt-10 space-y-3">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            key={index}
-            className="h-[84px] rounded-2xl border border-white/6 bg-white/[0.03]"
-          />
-        ))}
-      </div>
-      <div className="mt-auto h-28 rounded-[24px] border border-white/6 bg-white/[0.03]" />
-    </aside>
+    <aside className="fixed bottom-4 left-4 top-20 hidden w-64 rounded-xl border border-white/5 bg-[#1a1c20]/70 p-4 backdrop-blur-2xl lg:flex" />
   );
 }

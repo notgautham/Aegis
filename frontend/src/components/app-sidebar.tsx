@@ -5,14 +5,15 @@ import {
   BarChart3,
   FileCog,
   FolderKanban,
+  HardDrive,
+  HelpCircle,
   History,
-  Sparkles,
+  UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   buildScanHref,
@@ -58,7 +59,6 @@ export function AppSidebar({
   const navItems = [
     {
       label: "Mission Control",
-      description: "Banking command center",
       icon: ActivitySquare,
       href: "/",
       active: activeSection === "mission-control",
@@ -66,7 +66,6 @@ export function AppSidebar({
     },
     {
       label: "Risk Heatmap",
-      description: resolvedScanId ? "Analytical posture" : "Await scan",
       icon: BarChart3,
       href: buildScanHref("/risk-heatmap", resolvedScanId),
       active: activeSection === "risk-heatmap",
@@ -74,7 +73,6 @@ export function AppSidebar({
     },
     {
       label: "Assets",
-      description: resolvedScanId ? "Forensic workbench" : "Await scan",
       icon: FolderKanban,
       href: assetWorkbenchHref,
       active: activeSection === "assets",
@@ -82,7 +80,6 @@ export function AppSidebar({
     },
     {
       label: "Reports",
-      description: resolvedScanId ? "Engineer first" : "Await scan",
       icon: FileCog,
       href: buildScanHref("/reports", resolvedScanId),
       active: activeSection === "reports",
@@ -90,7 +87,6 @@ export function AppSidebar({
     },
     {
       label: "History",
-      description: "Recent scan timeline",
       icon: History,
       href: buildScanHref("/history", resolvedScanId),
       active: activeSection === "history",
@@ -99,58 +95,34 @@ export function AppSidebar({
   ] as const;
 
   return (
-    <aside className="telemetry-panel relative flex w-full max-w-full flex-col overflow-hidden rounded-[30px] border border-border/70 bg-sidebar-panel px-5 py-6 text-sidebar-foreground shadow-command lg:w-80">
-      <div className="telemetry-grid pointer-events-none absolute inset-0 opacity-35" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_top,_rgba(84,117,255,0.26),_transparent_62%)]" />
-      <div className="pointer-events-none absolute -left-8 top-28 h-36 w-36 rounded-full border border-sidebar-accent/15" />
-      <div className="pointer-events-none absolute -left-2 top-34 h-24 w-24 rounded-full border border-sidebar-accent/10" />
-      <div className="pointer-events-none absolute bottom-24 right-[-32px] h-28 w-28 rounded-full bg-[radial-gradient(circle,_rgba(39,216,154,0.16),_transparent_68%)] blur-xl" />
-
-      <div className="relative flex items-start justify-between">
+    <aside className="fixed bottom-4 left-4 top-20 z-40 hidden w-64 flex-col rounded-xl border border-white/5 bg-[#1a1c20]/70 p-4 shadow-2xl shadow-black/50 backdrop-blur-2xl lg:flex">
+      <div className="mb-4 flex items-center gap-3 px-4 py-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded bg-[#111318] border border-[#00FF41]/20 text-[#00FF41]">
+          <UserRound className="h-5 w-5" />
+        </div>
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-sidebar-muted">
-            Aegis
+          <p className="font-[var(--font-display)] text-sm font-bold tracking-tight text-[#00FF41]">
+            OPERATOR_01
           </p>
-          <h1 className="mt-3 text-2xl font-semibold tracking-tight">
-            Quantum Command
-          </h1>
-          <p className="mt-2 max-w-[18rem] text-sm leading-6 text-sidebar-muted">
-            A focused operations deck for external cryptographic discovery,
-            compliance posture, and post-quantum migration readiness.
+          <p className="font-[var(--font-display)] text-[10px] uppercase tracking-[0.18em] text-slate-500">
+            Level 5 Clearance
           </p>
         </div>
-        <Badge
-          variant="outline"
-          className="border-sidebar-accent/25 bg-sidebar-accent/10 text-sidebar-accent"
-        >
-          Final Prototype
-        </Badge>
       </div>
 
-      <div className="relative mt-8 rounded-[24px] border border-white/8 bg-black/20 p-4 backdrop-blur-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-sidebar-muted">
-              Interface posture
-            </p>
-            <h2 className="mt-3 text-lg font-semibold text-sidebar-foreground">
-              Ground-truth telemetry
-            </h2>
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-sidebar-accent/25 bg-sidebar-accent/10 text-sidebar-accent">
-            <Sparkles className="h-4 w-4" />
-          </div>
-        </div>
-        <p className="mt-3 text-sm leading-6 text-sidebar-muted">
-          One remembered scan now opens into analytical, forensic, reporting,
-          and history routes while Mission Control keeps backend truth front
-          and center.
-        </p>
-      </div>
-
-      <div className="relative mt-10 space-y-3">
+      <nav className="flex flex-col space-y-2">
         {navItems.map((item) => {
           const Icon = item.icon;
+          const content = (
+            <div className="flex w-full items-center gap-3">
+              <Icon className="h-5 w-5 shrink-0" />
+              <div className="min-w-0">
+                <p className="font-[var(--font-display)] text-sm font-medium tracking-tight">
+                  {item.label}
+                </p>
+              </div>
+            </div>
+          );
 
           return (
             <Button
@@ -159,65 +131,50 @@ export function AppSidebar({
               variant="ghost"
               disabled={item.disabled}
               className={cn(
-                "h-auto w-full justify-start rounded-2xl border px-4 py-4 transition-colors",
+                "h-auto w-full justify-start px-4 py-2.5 text-sm",
                 item.active
-                  ? "border-sidebar-accent/30 bg-sidebar-accent/10 text-sidebar-foreground"
-                  : "border-white/5 bg-white/[0.02] text-sidebar-muted hover:bg-white/[0.05]"
+                  ? "border-l-2 border-[#00FF41] bg-[#00FF41]/10 text-[#00FF41] [clip-path:polygon(0%_0%,90%_0%,100%_20%,100%_100%,0%_100%)]"
+                  : "text-slate-400 hover:bg-white/5"
               )}
             >
               {item.disabled ? (
-                <div className="flex w-full items-center gap-4">
-                  <div
-                    className={cn(
-                      "flex h-11 w-11 items-center justify-center rounded-2xl border",
-                      item.active
-                        ? "border-sidebar-accent/35 bg-sidebar-accent/15 text-sidebar-accent"
-                        : "border-white/8 bg-black/10 text-sidebar-muted"
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 text-left">
-                    <p className="text-sm font-medium">{item.label}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-sidebar-muted">
-                      {item.description}
-                    </p>
-                  </div>
+                <div className="font-[var(--font-display)] tracking-tight text-slate-500">
+                  {content}
                 </div>
               ) : (
-                <Link href={item.href} className="flex w-full items-center gap-4">
-                  <div
-                    className={cn(
-                      "flex h-11 w-11 items-center justify-center rounded-2xl border",
-                      item.active
-                        ? "border-sidebar-accent/35 bg-sidebar-accent/15 text-sidebar-accent"
-                        : "border-white/8 bg-black/10 text-sidebar-muted"
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 text-left">
-                    <p className="text-sm font-medium">{item.label}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-sidebar-muted">
-                      {item.description}
-                    </p>
-                  </div>
+                <Link
+                  href={item.href}
+                  className="font-[var(--font-display)] tracking-tight transition-all duration-200 hover:translate-x-1"
+                >
+                  {content}
                 </Link>
               )}
             </Button>
           );
         })}
-      </div>
+      </nav>
 
-      <div className="relative mt-auto rounded-[24px] border border-white/8 bg-black/20 p-4 backdrop-blur-sm">
-        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-sidebar-muted">
-          Mission note
-        </p>
-        <p className="mt-3 text-sm leading-6 text-sidebar-muted">
-          Aegis stays scan-centric on purpose: assess, prioritize, remediate,
-          certify, and report without drifting into generic asset-management
-          sprawl.
-        </p>
+      <div className="mt-auto space-y-2 border-t border-white/5 pt-4">
+        <Button
+          asChild
+          className="w-full rounded border border-[#00FF41]/20 bg-[#00FF41]/10 py-2 font-[var(--font-display)] text-[10px] uppercase tracking-[0.22em] text-[#00FF41] hover:bg-[#00FF41]/20"
+        >
+          <Link href="/">Relaunch Scan</Link>
+        </Button>
+        <button
+          type="button"
+          className="flex items-center gap-3 px-4 py-2 text-sm font-[var(--font-display)] tracking-tight text-slate-400 transition-all duration-200 hover:translate-x-1 hover:bg-white/5"
+        >
+          <HelpCircle className="h-4 w-4" />
+          Support
+        </button>
+        <button
+          type="button"
+          className="flex items-center gap-3 px-4 py-2 text-sm font-[var(--font-display)] tracking-tight text-slate-400 transition-all duration-200 hover:translate-x-1 hover:bg-white/5"
+        >
+          <HardDrive className="h-4 w-4" />
+          System
+        </button>
       </div>
     </aside>
   );

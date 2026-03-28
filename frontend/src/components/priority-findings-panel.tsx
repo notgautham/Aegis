@@ -1,16 +1,13 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import type { MissionControlPriorityFindingResponse } from "@/lib/api";
 import {
   getActionPriorityLabel,
-  getTierVariant,
   getUrgencyLabel,
 } from "@/lib/result-helpers";
 import { buildAssetHref, buildScanHref } from "@/lib/scan-storage";
 
-import { BackgroundGradient } from "@/components/aceternity/background-gradient";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export function PriorityFindingsPanel({
@@ -19,66 +16,66 @@ export function PriorityFindingsPanel({
   findings: MissionControlPriorityFindingResponse[];
 }) {
   return (
-    <BackgroundGradient className="h-full p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-            Priority findings
-          </p>
-          <h3 className="mt-3 text-xl font-semibold text-foreground">
-            Critical internet-facing exposure
-          </h3>
-        </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-status-failed/20 bg-status-failed/10 text-status-failed">
-          <AlertTriangle className="h-4 w-4" />
-        </div>
+    <div className="overflow-hidden rounded-xl border border-white/5 bg-[#1a1c20]/70 backdrop-blur-2xl">
+      <div className="machined-header border-b border-white/5 bg-[#282a2e] px-6 py-3">
+        <span className="font-[var(--font-display)] text-xs font-bold uppercase tracking-[0.2em] text-[#e2e2e8]">
+          Priority Findings
+        </span>
       </div>
 
       {findings.length ? (
-        <div className="mt-5 space-y-3">
-          {findings.map((finding) => (
+        <div className="space-y-4 p-4">
+          {findings.slice(0, 3).map((finding) => (
             <div
               key={`${finding.scan_id}-${finding.asset_id}`}
-              className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4"
+              className="group rounded-lg border border-white/5 bg-[#1e2024] p-3 transition-all hover:border-[#c31e00]/30"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="mb-1 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-base font-semibold text-foreground">
+                  <p className="text-xs font-bold text-[#e2e2e8]">
                     {finding.asset_label}
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {finding.target}:{finding.port} | {finding.service_type ?? "Unknown service"}
-                  </p>
                 </div>
-                <Badge variant={getTierVariant(finding.tier)}>
-                  {finding.tier ? finding.tier.replaceAll("_", " ") : "No tier"}
-                </Badge>
+                <span className="rounded border border-[#c31e00]/30 bg-[#c31e00]/20 px-1.5 py-0.5 text-[8px] font-bold uppercase text-[#ffb4a5]">
+                  {getUrgencyLabel(finding.tier)}
+                </span>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Badge variant="outline">
-                  Risk{" "}
-                  {typeof finding.risk_score === "number"
-                    ? finding.risk_score.toFixed(1)
-                    : "Unavailable"}
-                </Badge>
-                <Badge variant="warning">{getUrgencyLabel(finding.tier)}</Badge>
-                <Badge variant="outline">{getActionPriorityLabel(finding.tier)}</Badge>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button asChild size="sm" className="rounded-full px-4">
+              <p className="mb-2 text-[10px] text-slate-500">
+                {finding.target}:{finding.port} | Risk{" "}
+                {typeof finding.risk_score === "number"
+                  ? finding.risk_score.toFixed(1)
+                  : "Unavailable"}{" "}
+                | {getActionPriorityLabel(finding.tier)}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto p-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[#00FF41] hover:bg-transparent hover:text-[#72ff70]"
+                >
                   <Link href={buildAssetHref(finding.asset_id, finding.scan_id)}>
-                    Open workbench
-                    <ArrowRight className="h-4 w-4" />
+                    View Report <ArrowRight className="h-3 w-3" />
                   </Link>
                 </Button>
-                <Button asChild variant="outline" size="sm" className="rounded-full px-4">
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto p-0 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 hover:bg-transparent hover:text-[#e2e2e8]"
+                >
                   <Link href={buildAssetHref(finding.asset_id, finding.scan_id, "remediation")}>
-                    Review remediation
+                    Remediation
                   </Link>
                 </Button>
-                <Button asChild variant="ghost" size="sm" className="rounded-full px-4">
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto p-0 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 hover:bg-transparent hover:text-[#e2e2e8]"
+                >
                   <Link href={buildScanHref("/reports", finding.scan_id)}>
-                    Open report
+                    Report
                   </Link>
                 </Button>
               </div>
@@ -86,10 +83,10 @@ export function PriorityFindingsPanel({
           ))}
         </div>
       ) : (
-        <div className="mt-5 rounded-[22px] border border-dashed border-white/10 bg-black/15 px-4 py-4 text-sm leading-6 text-muted-foreground">
+        <div className="p-4 text-sm leading-6 text-slate-500">
           No priority findings are available yet. Run a completed compliance scan to surface the most urgent endpoints first.
         </div>
       )}
-    </BackgroundGradient>
+    </div>
   );
 }

@@ -1,7 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Edit3, Plus, Rocket, Save, Trash2 } from "lucide-react";
+import {
+  Building2,
+  Edit3,
+  Globe2,
+  Network,
+  Plus,
+  Rocket,
+  Save,
+  Trash2,
+} from "lucide-react";
 
 import type { MissionControlRecentScanResponse } from "@/lib/api";
 import type {
@@ -11,7 +20,6 @@ import type {
   SavedTarget,
 } from "@/lib/mission-control-storage";
 
-import { BentoCard } from "@/components/aceternity/bento-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +50,7 @@ export function SavedTargetsPanel({
   const [businessCriticality, setBusinessCriticality] = useState<
     BusinessCriticality | ""
   >("");
+  const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
 
   const lastStatusByTarget = useMemo(() => {
     const map = new Map<string, MissionControlRecentScanResponse>();
@@ -62,6 +71,7 @@ export function SavedTargetsPanel({
   };
 
   const handleEdit = (savedTarget: SavedTarget) => {
+    setSelectedTargetId(savedTarget.id);
     setEditingId(savedTarget.id);
     setLabel(savedTarget.label);
     setTarget(savedTarget.target);
@@ -81,43 +91,88 @@ export function SavedTargetsPanel({
       environment_tag: environmentTag || null,
       business_criticality: businessCriticality || null,
     });
+    setSelectedTargetId(editingId ?? null);
     resetForm();
   };
 
+  const selectedTarget =
+    savedTargets.find((item) => item.id === selectedTargetId) ?? savedTargets[0] ?? null;
+
   return (
-    <BentoCard className="xl:col-span-4">
+    <div className="rounded-xl border border-white/5 bg-[#1a1c20]/70 p-6 backdrop-blur-2xl">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-            Saved targets
-          </p>
-          <h3 className="mt-3 text-2xl font-semibold text-foreground">
-            Repeatable launch context
-          </h3>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Saved targets live only in the browser and exist to remove the single-textbox-tool feeling from Mission Control.
+          <p className="font-[var(--font-display)] text-xs font-bold uppercase tracking-[0.2em] text-[#e2e2e8]">
+            Saved Target Groups
           </p>
         </div>
         <Badge variant="outline">{savedTargets.length} saved</Badge>
       </div>
 
-      <div className="mt-5 rounded-[22px] border border-white/8 bg-black/15 p-4">
+      <div className="mt-4 space-y-2">
+        {savedTargets.map((item) => {
+          const lastScan = lastStatusByTarget.get(item.target);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setSelectedTargetId(item.id);
+                onSelectTarget(item);
+              }}
+              className="group flex w-full items-center justify-between rounded-lg border border-white/5 bg-[#0c0e12] p-3 text-left transition-all hover:bg-white/5"
+            >
+              <div className="flex items-center gap-3">
+                <div className="text-slate-500 transition-colors group-hover:text-[#00FF41]">
+                  {item.business_criticality === "critical" ? (
+                    <Building2 className="h-4 w-4" />
+                  ) : item.environment_tag === "external" ? (
+                    <Globe2 className="h-4 w-4" />
+                  ) : (
+                    <Network className="h-4 w-4" />
+                  )}
+                </div>
+                <div>
+                  <span className="text-xs text-[#e2e2e8]">{item.label}</span>
+                  <p className="text-[9px] uppercase tracking-[0.16em] text-slate-600">
+                    {lastScan
+                      ? `${lastScan.summary.vulnerable_assets} vulnerable`
+                      : item.target}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedTargetId === item.id ? (
+                  <span className="h-2 w-2 rounded-full bg-[#00FF41]" />
+                ) : null}
+                <span className="font-[var(--font-display)] text-[9px] text-slate-600">
+                  {item.environment_tag ?? "untagged"}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 rounded-lg border border-white/5 bg-[#111318] p-4">
         <div className="grid gap-3">
           <Input
             value={label}
             onChange={(event) => setLabel(event.target.value)}
             placeholder="Target label"
+            className="rounded-lg border-[#3b4b37]/30 bg-[#0c0e12] text-[#e2e2e8] placeholder:text-slate-600"
           />
           <Input
             value={target}
             onChange={(event) => setTarget(event.target.value)}
             placeholder="example.com or 203.0.113.10"
+            className="rounded-lg border-[#3b4b37]/30 bg-[#0c0e12] text-[#e2e2e8] placeholder:text-slate-600"
           />
           <div className="grid gap-3 sm:grid-cols-2">
             <select
               value={environmentTag}
               onChange={(event) => setEnvironmentTag(event.target.value as EnvironmentTag | "")}
-              className="flex h-11 w-full rounded-2xl border border-input bg-background px-4 text-sm text-foreground outline-none transition-colors focus-visible:border-sidebar-accent"
+              className="flex h-11 w-full rounded-lg border border-[#3b4b37]/30 bg-[#0c0e12] px-4 text-sm text-[#e2e2e8] outline-none transition-colors focus:border-[#00FF41] focus:ring-1 focus:ring-[#00FF41]"
             >
               <option value="">Environment</option>
               <option value="prod">Production</option>
@@ -129,7 +184,7 @@ export function SavedTargetsPanel({
               onChange={(event) =>
                 setBusinessCriticality(event.target.value as BusinessCriticality | "")
               }
-              className="flex h-11 w-full rounded-2xl border border-input bg-background px-4 text-sm text-foreground outline-none transition-colors focus-visible:border-sidebar-accent"
+              className="flex h-11 w-full rounded-lg border border-[#3b4b37]/30 bg-[#0c0e12] px-4 text-sm text-[#e2e2e8] outline-none transition-colors focus:border-[#00FF41] focus:ring-1 focus:ring-[#00FF41]"
             >
               <option value="">Criticality</option>
               <option value="critical">Critical</option>
@@ -138,7 +193,11 @@ export function SavedTargetsPanel({
             </select>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" className="rounded-full px-4" onClick={handleSave}>
+            <Button
+              type="button"
+              className="rounded-lg bg-[#00FF41]/10 px-4 text-[#00FF41] hover:bg-[#00FF41]/20"
+              onClick={handleSave}
+            >
               {editingId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               {editingId ? "Update target" : "Save target"}
             </Button>
@@ -151,93 +210,8 @@ export function SavedTargetsPanel({
         </div>
       </div>
 
-      <div className="mt-5 space-y-3">
-        {savedTargets.length ? (
-          savedTargets.map((item) => {
-            const lastScan = lastStatusByTarget.get(item.target);
-            return (
-              <div
-                key={item.id}
-                className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-base font-semibold text-foreground">{item.label}</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.target}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {item.environment_tag ? (
-                      <Badge variant="outline">{item.environment_tag}</Badge>
-                    ) : null}
-                    {item.business_criticality ? (
-                      <Badge variant="warning">{item.business_criticality}</Badge>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {lastScan ? (
-                    <>
-                      <Badge variant="outline">Last status {lastScan.status}</Badge>
-                      <Badge variant="danger">
-                        Vulnerable {lastScan.summary.vulnerable_assets}
-                      </Badge>
-                    </>
-                  ) : (
-                    <Badge variant="outline">No matching recent scan</Badge>
-                  )}
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="rounded-full px-4"
-                    onClick={() => onSelectTarget(item)}
-                  >
-                    <Rocket className="h-4 w-4" />
-                    Select
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full px-4"
-                    onClick={() => onRelaunchTarget(item.target)}
-                  >
-                    Relaunch
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-full px-4"
-                    onClick={() => handleEdit(item)}
-                  >
-                    <Edit3 className="h-4 w-4" />
-                    Edit
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-full px-4 text-status-failed hover:text-status-failed"
-                    onClick={() => onDeleteTarget(item.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Remove
-                  </Button>
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="rounded-[22px] border border-dashed border-white/10 bg-black/15 px-4 py-4 text-sm leading-6 text-muted-foreground">
-            No saved targets yet. Save one production or external endpoint to make repeat assessments feel like a real operator workflow.
-          </div>
-        )}
-      </div>
-
-      <div className="mt-5 rounded-[22px] border border-white/8 bg-black/15 p-4">
-        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+      <div className="mt-5 rounded-lg border border-white/5 bg-[#111318] p-4">
+        <p className="font-[var(--font-display)] text-[10px] uppercase tracking-[0.2em] text-slate-500">
           Recent launches
         </p>
         {recentLaunches.length ? (
@@ -245,23 +219,63 @@ export function SavedTargetsPanel({
             {recentLaunches.map((launch) => (
               <div
                 key={launch.scan_id}
-                className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3"
+                className="rounded-lg border border-white/5 bg-[#0c0e12] px-4 py-3"
               >
-                <p className="text-sm font-semibold text-foreground">
+                <p className="text-sm font-semibold text-[#e2e2e8]">
                   {launch.target_label ?? launch.target}
                 </p>
-                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
                   {launch.scan_profile.replaceAll("_", " ")}
                 </p>
               </div>
             ))}
           </div>
         ) : (
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          <p className="mt-3 text-sm leading-6 text-slate-500">
             Recent launches appear here after the first successful scan submission.
           </p>
         )}
       </div>
-    </BentoCard>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {selectedTarget ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="px-0 text-[10px] uppercase tracking-[0.16em] text-slate-500 hover:bg-transparent hover:text-[#00FF41]"
+            onClick={() => onRelaunchTarget(selectedTarget.target)}
+          >
+            <Rocket className="h-3.5 w-3.5" />
+            Relaunch selected
+          </Button>
+        ) : null}
+        {selectedTarget ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="px-0 text-[10px] uppercase tracking-[0.16em] text-slate-500 hover:bg-transparent hover:text-[#e2e2e8]"
+            onClick={() => handleEdit(selectedTarget)}
+          >
+            <Edit3 className="h-3.5 w-3.5" />
+            Edit selected
+          </Button>
+        ) : null}
+        {selectedTarget ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="px-0 text-[10px] uppercase tracking-[0.16em] text-slate-500 hover:bg-transparent hover:text-[#ffb4a5]"
+            onClick={() => {
+              onDeleteTarget(selectedTarget.id);
+              if (selectedTargetId === selectedTarget.id) {
+                setSelectedTargetId(null);
+              }
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Remove selected
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 }

@@ -1,14 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bell, Search, UserRound } from "lucide-react";
 
-import { AppHeader } from "@/components/app-header";
-import { BentoGrid } from "@/components/aceternity/bento-grid";
-import { BackgroundGradient } from "@/components/aceternity/background-gradient";
-import { Spotlight } from "@/components/aceternity/spotlight";
-import { CommandActionsPanel } from "@/components/command-actions-panel";
 import { MissionLayout } from "@/components/mission-layout";
-import { PostureOverviewStrip, PostureStatusLegend } from "@/components/posture-overview-strip";
 import { PriorityFindingsPanel } from "@/components/priority-findings-panel";
 import { RecentScansPanel } from "@/components/recent-scans-panel";
 import { SavedTargetsPanel } from "@/components/saved-targets-panel";
@@ -34,7 +29,10 @@ import {
   type ScanProfile,
   upsertSavedTarget,
 } from "@/lib/mission-control-storage";
-import { loadPersistedScanState, persistScanState } from "@/lib/scan-storage";
+import {
+  loadPersistedScanState,
+  persistScanState,
+} from "@/lib/scan-storage";
 import { useBackendHealth } from "@/lib/use-backend-health";
 import { useMissionControlOverview } from "@/lib/use-mission-control-overview";
 
@@ -90,8 +88,6 @@ export function DashboardWorkspace() {
   } = useMissionControlOverview();
 
   const activeTarget = activeScan?.target ?? null;
-  const activeStatus = activeScan?.status ?? null;
-  const isPolling = pollingState === "polling" || pollingState === "retrying";
   const canPoll =
     activeScan?.scan_id &&
     (activeScan.status === "pending" || activeScan.status === "running");
@@ -231,13 +227,6 @@ export function DashboardWorkspace() {
     };
   }, []);
 
-  const shellStatus = useMemo(() => {
-    if (pollingState === "retrying") {
-      return "running";
-    }
-    return activeStatus;
-  }, [activeStatus, pollingState]);
-
   const resolvedActionScanId = useMemo(() => {
     if (activeScan?.status === "completed") {
       return activeScan.scan_id;
@@ -372,26 +361,50 @@ export function DashboardWorkspace() {
   };
 
   const header = (
-    <div className="relative overflow-hidden rounded-[30px]">
-      <Spotlight />
-      <AppHeader
-        healthState={healthState}
-        activeTarget={activeTarget}
-        activeStatus={shellStatus}
-        activeStage={activeScan?.stage ?? null}
-        elapsedSeconds={activeScan?.elapsed_seconds ?? null}
-        summary={activeScan?.summary ?? null}
-        degradedModeCount={
-          activeScan?.degraded_modes.length ??
-          overview?.portfolio_summary.degraded_scan_count ??
-          0
-        }
-        eyebrow="Mission Control"
-        title="Quantum readiness command platform"
-        description="Portfolio-level scan launch, posture visibility, remediation prioritization, and certificate-readiness evidence for internet-facing banking assets."
-        telemetryNote="Mission Control stays scan-centric while adding saved targets, workflow presets, and a stronger banking operations presentation layer."
-      />
-    </div>
+    <header className="fixed left-0 right-0 top-0 z-50 h-14 border-b border-[#00FF41]/10 bg-[#111318]/70 backdrop-blur-xl shadow-[0_1px_10px_rgba(0,255,65,0.05)] lg:pl-[18.5rem]">
+      <div className="flex h-full items-center justify-between px-6">
+        <div className="flex items-center gap-8">
+          <span className="font-[var(--font-display)] text-xl font-bold tracking-tighter text-[#00FF41]">
+            AEGIS_OS
+          </span>
+          <nav className="hidden gap-6 md:flex">
+            <span className="font-[var(--font-display)] text-xs font-bold uppercase tracking-[0.2em] text-[#00FF41]">
+              HEALTH: {healthState === "healthy" ? "100%" : healthState === "checking" ? "SYNC" : "OFFLINE"}
+            </span>
+            <span className="font-[var(--font-display)] text-xs uppercase tracking-[0.2em] text-slate-500">
+              ACTIVE: {activeTarget ? "01" : "00"}
+            </span>
+            <span className="font-[var(--font-display)] text-xs uppercase tracking-[0.2em] text-slate-500">
+              SAVED TARGETS: {savedTargets.length}
+            </span>
+          </nav>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="relative hidden lg:block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#00FF41]/45" />
+            <input
+              className="w-52 rounded border border-[#00FF41]/10 bg-white/5 py-1 pl-9 pr-3 font-[var(--font-display)] text-[10px] uppercase tracking-[0.18em] text-[#00FF41] placeholder:text-[#00FF41]/30 focus:outline-none focus:border-[#00FF41]/40"
+              placeholder="SEARCH_SYSTEM..."
+              type="text"
+            />
+          </div>
+          <button
+            type="button"
+            className="text-slate-500 transition-all hover:text-[#00FF41]"
+            aria-label="Notifications"
+          >
+            <Bell className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="text-slate-500 transition-all hover:text-[#00FF41]"
+            aria-label="Account"
+          >
+            <UserRound className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </header>
   );
 
   return (
@@ -400,60 +413,61 @@ export function DashboardWorkspace() {
       contextScanId={activeScan?.scan_id ?? resolvedActionScanId}
       header={header}
     >
-      <div className="space-y-5">
-        <PostureOverviewStrip summary={overview?.portfolio_summary ?? null} />
-
-        <BackgroundGradient className="px-5 py-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                Command posture
-              </p>
-              <h3 className="mt-3 text-xl font-semibold text-foreground">
-                Decision-first banking security console
-              </h3>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                Judges should be able to see posture, relaunch known targets, move into risk evidence, and open executive reporting without hunting through passive widgets.
-              </p>
+      <div className="space-y-6">
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+          <div className="relative overflow-hidden rounded-xl border border-white/5 bg-[#1a1c20]/70 p-6 backdrop-blur-2xl lg:col-span-3">
+            <div className="relative z-10">
+              <h2 className="mb-1 font-[var(--font-display)] text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                Portfolio Security Posture
+              </h2>
+              <div className="flex flex-wrap items-baseline gap-4">
+                <span className="font-[var(--font-display)] text-5xl font-bold tracking-tighter text-[#00FF41]">
+                  {overview?.portfolio_summary.compliant_assets ?? 0}
+                </span>
+                <span className="font-[var(--font-display)] text-xs uppercase tracking-[0.18em] text-[#72ff70]">
+                  compliant assets in recent scan window
+                </span>
+              </div>
             </div>
-            <PostureStatusLegend />
+            <div className="absolute bottom-4 right-0 hidden h-16 w-2/3 opacity-40 md:block">
+              <svg className="h-full w-full" viewBox="0 0 400 60" fill="none">
+                <path
+                  d="M0 50 Q 50 45, 100 48 T 200 35 T 300 42 T 400 10"
+                  stroke="#00FF41"
+                  strokeWidth="2"
+                />
+              </svg>
+            </div>
           </div>
-          {overviewError ? (
-            <div className="mt-4 rounded-[22px] border border-status-failed/25 bg-status-failed/10 px-4 py-4 text-sm leading-6 text-status-failed">
-              Mission Control overview failed to load: {overviewError}
-              <button
-                type="button"
-                className="ml-2 underline underline-offset-4"
-                onClick={() => void retryOverview()}
-              >
-                Retry overview
-              </button>
-            </div>
-          ) : overviewLoading ? (
-            <div className="mt-4 rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-muted-foreground">
-              Loading portfolio summary, recent scans, and priority findings...
-            </div>
-          ) : null}
-        </BackgroundGradient>
+          <div className="flex flex-col items-center justify-center rounded-xl border border-[#c31e00]/20 bg-[#1a1c20]/70 p-6 backdrop-blur-2xl">
+            <h2 className="mb-1 font-[var(--font-display)] text-[10px] uppercase tracking-[0.2em] text-[#ffb4a5]">
+              Active Threats
+            </h2>
+            <span className="font-[var(--font-display)] text-5xl font-bold tracking-tighter text-[#ffb4a5]">
+              {overview?.portfolio_summary.vulnerable_assets ?? 0}
+            </span>
+          </div>
+        </section>
 
-        <BentoGrid>
-          <SavedTargetsPanel
-            savedTargets={savedTargets}
-            recentLaunches={recentLaunches}
-            recentScans={overview?.recent_scans ?? []}
-            onSelectTarget={handleSelectSavedTargetObject}
-            onSaveTarget={handleSaveTarget}
-            onDeleteTarget={(targetId) => {
-              removeSavedTarget(targetId);
-              refreshSavedTargets();
-            }}
-            onRelaunchTarget={(target) => {
-              setInputValue(target);
-              void handleSubmitForTarget(target);
-            }}
-          />
+        {overviewError ? (
+          <div className="rounded-xl border border-status-failed/25 bg-status-failed/10 px-4 py-4 text-sm leading-6 text-status-failed">
+            Mission Control overview failed to load: {overviewError}
+            <button
+              type="button"
+              className="ml-2 underline underline-offset-4"
+              onClick={() => void retryOverview()}
+            >
+              Retry overview
+            </button>
+          </div>
+        ) : overviewLoading ? (
+          <div className="rounded-xl border border-white/5 bg-[#1a1c20]/70 px-4 py-4 text-sm leading-6 text-slate-400 backdrop-blur-2xl">
+            Loading portfolio summary, recent scans, and priority findings...
+          </div>
+        ) : null}
 
-          <div className="space-y-5 xl:col-span-5">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="space-y-6 lg:col-span-8">
             <ScanWorkflowPanel
               value={inputValue}
               onValueChange={setInputValue}
@@ -471,38 +485,105 @@ export function DashboardWorkspace() {
               savedTargets={savedTargets}
               onSavedTargetSelect={handleSelectSavedTarget}
             />
-            <CommandActionsPanel
-              scanId={resolvedActionScanId}
-              priorityFindings={overview?.priority_findings ?? []}
-            />
-          </div>
 
-          <div className="xl:col-span-3">
             <ScanStatusCard
               scan={activeScan}
               isHydrated={isHydrated}
-              isPolling={isPolling}
-              pollingState={pollingState}
               pollingError={pollingError}
               onManualRefresh={handleManualRefresh}
               onClear={handleClearScan}
             />
-          </div>
-        </BentoGrid>
 
-        <BentoGrid>
-          <RecentScansPanel
-            scans={overview?.recent_scans ?? []}
-            onRelaunch={(target) => {
-              setInputValue(target);
-              void handleSubmitForTarget(target);
-            }}
-          />
-          <div className="space-y-5 xl:col-span-5">
-            <PriorityFindingsPanel findings={overview?.priority_findings ?? []} />
+            <RecentScansPanel
+              scans={overview?.recent_scans ?? []}
+            />
           </div>
-        </BentoGrid>
+
+          <div className="space-y-6 lg:col-span-4">
+            <div className="grid grid-cols-2 gap-3">
+              <MissionMetricCard label="Running" value={overview?.portfolio_summary.running_scans ?? 0} />
+              <MissionMetricCard
+                label="Vulnerable"
+                value={overview?.portfolio_summary.vulnerable_assets ?? 0}
+                danger
+              />
+              <MissionMetricCard
+                label="Compliant"
+                value={overview?.portfolio_summary.compliant_assets ?? 0}
+                accent
+              />
+              <MissionMetricCard label="Completed" value={overview?.portfolio_summary.completed_scans ?? 0} />
+              <MissionMetricCard label="Certificates" value={overview?.portfolio_summary.certificates_issued ?? 0} />
+              <MissionMetricCard label="Remediation" value={overview?.portfolio_summary.remediation_bundles_generated ?? 0} />
+            </div>
+
+            <PriorityFindingsPanel findings={overview?.priority_findings ?? []} />
+
+            <SavedTargetsPanel
+              savedTargets={savedTargets}
+              recentLaunches={recentLaunches}
+              recentScans={overview?.recent_scans ?? []}
+              onSelectTarget={handleSelectSavedTargetObject}
+              onSaveTarget={handleSaveTarget}
+              onDeleteTarget={(targetId) => {
+                removeSavedTarget(targetId);
+                refreshSavedTargets();
+              }}
+              onRelaunchTarget={(target) => {
+                setInputValue(target);
+                void handleSubmitForTarget(target);
+              }}
+            />
+
+            <div className="border-t border-white/5 pt-4">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="font-[var(--font-display)] text-[9px] uppercase tracking-[0.2em] text-slate-600">
+                  SYSTEM_ENTITY_STATUS
+                </span>
+                <span className="h-2 w-2 rounded-full bg-[#00FF41]" />
+              </div>
+              <div className="font-mono text-[9px] leading-tight text-slate-700">
+                ID: AE-992-K
+                <br />
+                ENTROPY: 0.00293
+                <br />
+                SYNC: GLOBAL_MAINFRAME
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </MissionLayout>
+  );
+}
+
+function MissionMetricCard({
+  label,
+  value,
+  accent = false,
+  danger = false,
+}: Readonly<{
+  label: string;
+  value: number;
+  accent?: boolean;
+  danger?: boolean;
+}>) {
+  return (
+    <div className="rounded-xl border border-white/5 bg-[#1a1c20]/70 p-4 backdrop-blur-2xl">
+      <p
+        className={`mb-1 font-[var(--font-display)] text-[9px] uppercase tracking-[0.18em] ${
+          danger ? "text-[#ffb4a5]" : "text-slate-500"
+        }`}
+      >
+        {label}
+      </p>
+      <p
+        className={`font-[var(--font-display)] text-xl font-bold ${
+          danger ? "text-[#ffb4a5]" : accent ? "text-[#00FF41]" : "text-[#e2e2e8]"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
