@@ -3,10 +3,11 @@ import { Suspense, type ReactNode } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 
 type SidebarSection =
-  | "scan-control"
+  | "mission-control"
   | "risk-heatmap"
-  | "asset-workbench"
-  | "reports";
+  | "assets"
+  | "reports"
+  | "history";
 
 interface MissionLayoutProps {
   activeSection: SidebarSection;

@@ -4,9 +4,9 @@
 Aegis is an autonomous, continuous Cryptographic Intelligence Platform designed for the banking sector to combat the Harvest Now, Decrypt Later (HNDL) quantum threat vector. It discovers public-facing cryptographic assets, generates a CycloneDX 1.6 CBOM, scores quantum risk, evaluates NIST FIPS 203/204/205 compliance via a deterministic rules engine, generates Post-Quantum Cryptography (PQC) remediation patches via a RAG pipeline, and issues three-tier X.509 compliance certificates.
 
 ## 2. Current Development Phase
-**Status: Phase 9 Complete and Stabilized - Phase 10 Starting**
+**Status: Final Prototype UI / Mission Control Upgrade Implemented - Demo Validation Pending**
 
-Phase 9 (Frontend Foundation) has been implemented and then stabilized with richer scan observability. Frontend lint now passes locally, and the build completed successfully when run by the user during the Phase 9 session. Post-Phase-9 stabilization also fixed same-day CBOM rescan collisions by making CBOM serials deterministic per persisted asset, added bounded port scanning to prevent discovery hangs, and upgraded the live scan dashboard with stage telemetry, degraded-mode visibility, recent event feeds, and clearer operational summaries.
+The frontend has now moved beyond the Phase 9/10 shell into a jury-facing final-prototype shape. Aegis keeps scan as the primary execution and truth object, but now layers on Mission Control portfolio visibility, frontend-local saved targets and recent launches, a structured scan workflow panel, lightweight recent-scan history, stronger banking-context presentation, and upgraded analytical / forensic / reporting routes. Frontend lint and type-check both pass locally after this upgrade, and the new Mission Control/history backend endpoints passed Docker-backed integration tests. The remaining validation step is a fresh user-run production build plus one real public-target end-to-end demo scan from the upgraded UI.
 
 ## 3. Current State of the System
 
@@ -216,11 +216,33 @@ Phase 9 (Frontend Foundation) has been implemented and then stabilized with rich
   - A follow-up Phase 9 stabilization fix corrected the OQS/OpenSSL CA serial-file formatting in `backend/cert/signer.py` by padding odd-length hexadecimal serials before invoking `openssl ca`; this removes a recoverable ML-DSA issuance error that previously caused some assets to fall back to ECDSA during otherwise successful scans
   - Focused certificate verification after the serial-format fix passed: `13 passed` across `tests/unit/test_certificate_signer.py` and `tests/infra/test_certificate_signing_runtime.py`
 
-### Pending (Phase 10 and Beyond)
-- Frontend dashboards and detailed result views
-- Final frontend-to-backend end-to-end integration pass
+#### Final Prototype Deliverables
+- **Backend read-model upgrades (`backend/api/v1/`, `backend/pipeline/`, `backend/repositories/`):**
+  - `backend/api/v1/endpoints/mission_control.py` - Added `GET /api/v1/mission-control/overview` and `GET /api/v1/scan/history` as lightweight read-only portfolio/timeline endpoints.
+  - `backend/api/v1/schemas.py` - Added Mission Control overview, recent-scan, priority-finding, system-health, and scan-history response contracts.
+  - `backend/pipeline/orchestrator.py` - Extended `ScanReadService` with recent-scan aggregation, portfolio summary generation, priority-finding ordering, and lightweight scan-history assembly.
+  - `backend/repositories/scan_job_repo.py` - Added deterministic recent-scan retrieval with optional exact-target filtering.
+- **Mission Control / Final Prototype UI (`frontend/src/`):**
+  - `components/dashboard-workspace.tsx` - Rebuilt `/` into Mission Control with posture overview, structured scan workflow, saved targets, recent launches, recent scans, priority findings, and deterministic quick actions.
+  - `components/scan-workflow-panel.tsx`, `components/saved-targets-panel.tsx`, `components/recent-scans-panel.tsx`, `components/priority-findings-panel.tsx`, `components/command-actions-panel.tsx`, `components/posture-overview-strip.tsx` - New command-center panels supporting the final prototype flow.
+  - `components/history-workspace.tsx` and `app/history/page.tsx` - Added a lightweight recent-scan timeline route.
+  - `lib/mission-control-storage.ts`, `lib/use-mission-control-overview.ts`, `lib/use-scan-history.ts` - Added frontend-local saved-target/recent-launch persistence and typed Mission Control/history fetch hooks.
+  - `components/aceternity/` - Added locally adapted Aceternity-style Spotlight, Bento Grid, Background Gradient, and Timeline primitives to lift the visual system while keeping the tone institutional.
+- **Route polish (`frontend/src/components/`):**
+  - `asset-workbench.tsx` - Added a stronger forensic summary rail, recommended next action / why risky framing, tab deep-linking via query param, and CBOM / PEM export affordances.
+  - `risk-heatmap-workspace.tsx` - Added severity-first asset ordering and clearer prioritization labels.
+  - `reports-workspace.tsx` - Polished the executive tab with a cleaner banking-ready exposure summary, top-risk asset list, and print action.
+  - `asset-catalog-workspace.tsx`, `app-sidebar.tsx`, `mission-layout.tsx`, `scan-status-card.tsx` - Updated route structure, navigation, and CTA language for the final prototype.
+- **Validation Status:**
+  - Frontend lint passes locally: `npm.cmd run lint`
+  - Frontend type-check passes locally: `npx.cmd tsc --noEmit`
+  - Docker-backed backend verification for the upgraded Phase 8 API surface now passes: `5 passed` in `tests/integration/test_phase8_api.py`
+
+### Pending (Demo Validation and Beyond)
+- User-run frontend production build on the new final-prototype UI
+- Final frontend-to-backend end-to-end demo scan against a safe public target from the new Mission Control flow
 - Continuous monitoring and scheduling features
-- Post-Phase-9 stabilization fixes surfaced by live scans, including any remaining real-world persistence or orchestration edge cases
+- Additional hardening/polish surfaced by real demo rehearsals
 
 ## 4. Key Technical Decisions (Immutable)
 - **Tech Stack:** Python 3.11 (FastAPI, asyncio), Next.js 14, PostgreSQL 15.
@@ -232,10 +254,11 @@ Phase 9 (Frontend Foundation) has been implemented and then stabilized with rich
 - **IP address storage:** TEXT column (not PostgreSQL INET) for asyncpg compatibility.
 
 ## 5. Next Logical Task
-Execute **Phase 10** from `TODO.md`:
-1. Build the Risk Heatmap, CBOM Viewer, Certificate Viewer, and HNDL Timeline/Remediation views on top of the typed Phase 9 API client.
-2. Add the dual-report layout so the same scan data can be consumed as both a CISO summary and an engineer-focused technical view.
-3. Verify frontend-to-backend end-to-end integration against a safe public test target and close the remaining UX/data mismatches one by one.
+Execute the **final prototype demo-validation pass**:
+1. Run the frontend production build from `frontend/` on the upgraded Mission Control / history / reporting UI.
+2. Launch a fresh public-target scan from Mission Control and verify the demo flow end-to-end:
+   - Mission Control -> priority finding -> remediation / certificate evidence -> executive report
+3. Capture and fix any remaining visual or behavioral mismatches that surface during this real scan rehearsal before moving on to continuous monitoring.
 
 **Operational note:** Verify the existing Alembic migration is applied in Docker before continuing frontend/report integration:
 ```bash
@@ -249,9 +272,10 @@ docker compose exec backend python scripts/ingest_nist_docs.py
 docker compose exec backend python scripts/validate_ingested_corpus.py
 ```
 
-**Phase 9 verification note:** The frontend foundation is currently validated with:
+**Frontend verification note:** The final-prototype frontend is currently validated with:
 ```bash
 cd frontend && npm run lint
+cd frontend && npx tsc --noEmit
 cd frontend && npm run build
 ```
 

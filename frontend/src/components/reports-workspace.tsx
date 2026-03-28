@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { FileCog, ShieldCheck, Wrench } from "lucide-react";
+import { FileCog, Printer, ShieldCheck, Wrench } from "lucide-react";
 
 import { AppHeader } from "@/components/app-header";
 import { MetricCard } from "@/components/metric-card";
@@ -12,8 +12,14 @@ import { EmptyRouteState, ErrorRouteState, LoadingRouteState } from "@/component
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatTimestamp } from "@/lib/formatters";
-import { getAssetLabel, getAssetTier, getTierVariant } from "@/lib/result-helpers";
-import { buildScanHref } from "@/lib/scan-storage";
+import {
+  getActionPriorityLabel,
+  getAssetLabel,
+  getAssetTier,
+  getRecommendedNextAction,
+  getTierVariant,
+} from "@/lib/result-helpers";
+import { buildAssetHref, buildScanHref } from "@/lib/scan-storage";
 import { useBackendHealth } from "@/lib/use-backend-health";
 import { useScanResults } from "@/lib/use-scan-results";
 
@@ -139,9 +145,12 @@ export function ReportsWorkspace({
     );
   }
 
-  const vulnerableAssets = results.assets.filter(
-    (asset) => getAssetTier(asset) === "QUANTUM_VULNERABLE"
-  );
+  const topFiveAssets = [...results.assets]
+    .sort(
+      (left, right) =>
+        (right.assessment?.risk_score ?? -1) - (left.assessment?.risk_score ?? -1)
+    )
+    .slice(0, 5);
 
   return (
     <MissionLayout activeSection="reports" contextScanId={results.scan_id} header={header}>
@@ -231,10 +240,17 @@ export function ReportsWorkspace({
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Button asChild variant="outline" size="sm" className="rounded-full px-4">
-                        <Link href={`/assets/${asset.asset_id}?scan=${results.scan_id}`}>
+                        <Link href={buildAssetHref(asset.asset_id, results.scan_id)}>
                           Open asset workbench
                         </Link>
                       </Button>
+                      {asset.remediation ? (
+                        <Button asChild variant="ghost" size="sm" className="rounded-full px-4">
+                          <Link href={buildAssetHref(asset.asset_id, results.scan_id, "remediation")}>
+                            Review remediation
+                          </Link>
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -267,12 +283,25 @@ export function ReportsWorkspace({
         ) : (
           <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
             <div className="telemetry-panel overflow-hidden rounded-[28px] border border-white/8 bg-card/90 p-5 shadow-command">
-              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-                CISO summary
-              </p>
-              <h3 className="mt-3 text-2xl font-semibold text-foreground">
-                Executive posture snapshot
-              </h3>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                    Executive summary
+                  </p>
+                  <h3 className="mt-3 text-2xl font-semibold text-foreground">
+                    Banking leadership posture snapshot
+                  </h3>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full px-4"
+                  onClick={() => window.print()}
+                >
+                  <Printer className="h-4 w-4" />
+                  Print view
+                </Button>
+              </div>
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
                 <MetricCard label="Assets scanned" value={results.summary.total_assets} />
                 <MetricCard label="TLS assets" value={results.summary.tls_assets} />
@@ -293,7 +322,7 @@ export function ReportsWorkspace({
 
               <div className="mt-5 rounded-[24px] border border-white/8 bg-black/15 p-5">
                 <p className="text-base font-semibold text-foreground">
-                  Current posture narrative
+                  Exposure narrative
                 </p>
                 <p className="mt-3 text-sm leading-7 text-muted-foreground">
                   The completed scan against <span className="text-foreground">{results.target}</span> found{" "}
@@ -304,17 +333,28 @@ export function ReportsWorkspace({
                   compliance certificates were issued from the same backend pipeline, and degraded-mode notices{" "}
                   {results.degraded_modes.length ? "were observed during execution." : "were not observed for this scan."}
                 </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Badge variant="danger">
+                    Vulnerable {results.summary.vulnerable_assets}
+                  </Badge>
+                  <Badge variant="warning">
+                    Transitioning {results.summary.transitioning_assets}
+                  </Badge>
+                  <Badge variant="success">
+                    Ready {results.summary.fully_quantum_safe_assets}
+                  </Badge>
+                </div>
               </div>
             </div>
 
             <div className="space-y-5">
               <div className="rounded-[24px] border border-white/8 bg-black/15 p-5">
                 <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                  Priority exposure list
+                  Top 5 critical assets
                 </p>
                 <div className="mt-4 space-y-3">
-                  {vulnerableAssets.length ? (
-                    vulnerableAssets.map((asset) => (
+                  {topFiveAssets.length ? (
+                    topFiveAssets.map((asset) => (
                       <div
                         key={asset.asset_id}
                         className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4"
@@ -325,18 +365,46 @@ export function ReportsWorkspace({
                               {getAssetLabel(asset)}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                              {asset.assessment?.cipher_suite ?? "Cipher suite unavailable"}
+                              {getRecommendedNextAction(getAssetTier(asset))}
                             </p>
                           </div>
-                          <Badge variant="danger">Vulnerable</Badge>
+                          <Badge variant={getTierVariant(getAssetTier(asset))}>
+                            {getActionPriorityLabel(getAssetTier(asset))}
+                          </Badge>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge variant="outline">
+                            Risk{" "}
+                            {typeof asset.assessment?.risk_score === "number"
+                              ? asset.assessment.risk_score.toFixed(1)
+                              : "Unavailable"}
+                          </Badge>
+                          <Badge variant="outline">
+                            {asset.assessment?.cipher_suite ?? "Cipher unavailable"}
+                          </Badge>
                         </div>
                       </div>
                     ))
                   ) : (
                     <div className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4 text-sm leading-6 text-muted-foreground">
-                      No vulnerable assets were reported in the backend summary.
+                      No ranked assets were reported in the backend summary.
                     </div>
                   )}
+                </div>
+              </div>
+              <div className="rounded-[24px] border border-white/8 bg-black/15 p-5">
+                <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                  Remediation readiness
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <MetricCard
+                    label="Remediation bundles"
+                    value={results.progress?.remediations_created ?? "Unavailable"}
+                  />
+                  <MetricCard
+                    label="Certificates issued"
+                    value={results.progress?.certificates_created ?? "Unavailable"}
+                  />
                 </div>
               </div>
               <DegradedModePanel degradedModes={results.degraded_modes} />

@@ -21,12 +21,14 @@ import { EmptyRouteState, ErrorRouteState, LoadingRouteState } from "@/component
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  getActionPriorityLabel,
   getAssetLabel,
   getAssetLocation,
   getAssetTier,
   getRiskScore,
   getRiskTone,
   getTierVariant,
+  getUrgencyLabel,
 } from "@/lib/result-helpers";
 import { buildScanHref } from "@/lib/scan-storage";
 import { useBackendHealth } from "@/lib/use-backend-health";
@@ -199,6 +201,26 @@ export function RiskHeatmapWorkspace({
         { label: "Certificates", value: results.progress.certificates_created },
       ]
     : [];
+  const orderedAssets = [...results.assets].sort((left, right) => {
+    const rank = (tier: ReturnType<typeof getAssetTier>) => {
+      switch (tier) {
+        case "QUANTUM_VULNERABLE":
+          return 0;
+        case "PQC_TRANSITIONING":
+          return 1;
+        case "FULLY_QUANTUM_SAFE":
+          return 2;
+        default:
+          return 3;
+      }
+    };
+
+    return (
+      rank(getAssetTier(left)) -
+      rank(getAssetTier(right)) ||
+      (getRiskScore(right) ?? -1) - (getRiskScore(left) ?? -1)
+    );
+  });
 
   return (
     <MissionLayout activeSection="risk-heatmap" contextScanId={results.scan_id} header={header}>
@@ -322,7 +344,7 @@ export function RiskHeatmapWorkspace({
 
           {results.assets.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-              {results.assets.map((asset) => {
+              {orderedAssets.map((asset) => {
                 const tier = getAssetTier(asset);
                 const riskScore = getRiskScore(asset);
 
@@ -365,6 +387,11 @@ export function RiskHeatmapWorkspace({
                           hint={asset.assessment?.cipher_suite ?? "No cipher suite captured"}
                           className="min-h-[120px]"
                         />
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Badge variant="warning">{getUrgencyLabel(tier)}</Badge>
+                        <Badge variant="outline">{getActionPriorityLabel(tier)}</Badge>
                       </div>
 
                       <div className="mt-4 flex items-center justify-between gap-3 text-sm text-muted-foreground">

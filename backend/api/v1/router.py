@@ -7,9 +7,10 @@ that is mounted on the FastAPI application at /api/v1.
 
 from fastapi import APIRouter
 
-from backend.api.v1.endpoints import assets, scans
+from backend.api.v1.endpoints import assets, mission_control, scans
 
 api_router = APIRouter()
+api_router.include_router(mission_control.router)
 api_router.include_router(scans.router)
 api_router.include_router(assets.router)
 

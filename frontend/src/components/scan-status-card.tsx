@@ -483,7 +483,7 @@ export function ScanStatusCard({
                     </Button>
                     <Button asChild variant="ghost" size="sm" className="h-9 rounded-full px-4">
                       <Link href={buildScanHref("/assets", scan.scan_id)}>
-                        Open asset workbench
+                        Open assets
                       </Link>
                     </Button>
                   </div>

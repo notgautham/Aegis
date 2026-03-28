@@ -16,6 +16,7 @@ from backend.core.database import get_db
 from backend.main import app
 from backend.models.cbom_document import CbomDocument
 from backend.models.compliance_certificate import ComplianceCertificate
+from backend.models.crypto_assessment import CryptoAssessment
 from backend.models.discovered_asset import DiscoveredAsset
 from backend.models.enums import ComplianceTier, ScanStatus, ServiceType
 from backend.models.remediation_bundle import RemediationBundle
@@ -276,6 +277,194 @@ async def test_invalid_target_and_failure_cleanup_are_reported(tmp_path, session
         assert status_response.json()["status"] == "failed"
         assert status_response.json()["stage"] == "failed"
         assert missing_response.status_code == 404
+    finally:
+        await client.aclose()
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_mission_control_overview_aggregates_recent_scans_and_priority_findings(
+    session_factory,
+) -> None:
+    runtime_store = ScanRuntimeStore()
+    vulnerable_scan_id = uuid.uuid4()
+    transitioning_scan_id = uuid.uuid4()
+    failed_scan_id = uuid.uuid4()
+    vulnerable_target = f"critical-{uuid.uuid4().hex[:8]}.example.com"
+    transitioning_target = f"transition-{uuid.uuid4().hex[:8]}.example.com"
+    failed_target = f"failed-{uuid.uuid4().hex[:8]}.example.com"
+    base_time = datetime(2099, 12, 31, 0, 0, tzinfo=UTC) + timedelta(
+        seconds=int(uuid.uuid4().hex[:4], 16)
+    )
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                    ScanJob(
+                        id=vulnerable_scan_id,
+                        target=vulnerable_target,
+                    status=ScanStatus.COMPLETED,
+                    created_at=base_time,
+                    completed_at=base_time + timedelta(minutes=4),
+                ),
+                    ScanJob(
+                        id=transitioning_scan_id,
+                        target=transitioning_target,
+                    status=ScanStatus.COMPLETED,
+                    created_at=base_time - timedelta(hours=1),
+                    completed_at=base_time - timedelta(hours=1) + timedelta(minutes=3),
+                ),
+                    ScanJob(
+                        id=failed_scan_id,
+                        target=failed_target,
+                    status=ScanStatus.FAILED,
+                    created_at=base_time - timedelta(hours=2),
+                    completed_at=base_time - timedelta(hours=2) + timedelta(minutes=1),
+                ),
+            ]
+        )
+
+        vulnerable_asset_id = uuid.uuid4()
+        transitioning_asset_id = uuid.uuid4()
+        session.add_all(
+            [
+                DiscoveredAsset(
+                        id=vulnerable_asset_id,
+                        scan_id=vulnerable_scan_id,
+                        hostname=vulnerable_target,
+                    ip_address="198.51.100.61",
+                    port=443,
+                    protocol="tcp",
+                    service_type=ServiceType.TLS,
+                    server_software="nginx",
+                ),
+                DiscoveredAsset(
+                        id=transitioning_asset_id,
+                        scan_id=transitioning_scan_id,
+                        hostname=transitioning_target,
+                    ip_address="198.51.100.62",
+                    port=8443,
+                    protocol="tcp",
+                    service_type=ServiceType.TLS,
+                    server_software="apache",
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                CryptoAssessment(
+                    asset_id=vulnerable_asset_id,
+                    tls_version="1.2",
+                    cipher_suite="TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+                    risk_score=84.5,
+                    compliance_tier=ComplianceTier.QUANTUM_VULNERABLE,
+                ),
+                CryptoAssessment(
+                    asset_id=transitioning_asset_id,
+                    tls_version="1.3",
+                    cipher_suite="TLS_AES_256_GCM_SHA384",
+                    risk_score=48.0,
+                    compliance_tier=ComplianceTier.PQC_TRANSITIONING,
+                ),
+            ]
+        )
+        await session.commit()
+
+    runtime_store.register_scan(
+        scan_id=vulnerable_scan_id,
+        target=vulnerable_target,
+        created_at=base_time,
+    )
+    runtime_store.add_degraded_mode(
+        vulnerable_scan_id,
+        f"{vulnerable_target}:443 used ECDSA certificate signing fallback.",
+    )
+    app.state.scan_read_service = ScanReadService(
+        session_factory=session_factory,
+        runtime_store=runtime_store,
+    )
+
+    client = await _make_client(session_factory)
+    try:
+        response = await client.get("/api/v1/mission-control/overview?recent_limit=3")
+        assert response.status_code == 200
+        payload = response.json()
+
+        assert payload["portfolio_summary"]["completed_scans"] == 2
+        assert payload["portfolio_summary"]["running_scans"] == 0
+        assert payload["portfolio_summary"]["failed_scans"] == 1
+        assert payload["portfolio_summary"]["vulnerable_assets"] == 1
+        assert payload["portfolio_summary"]["transitioning_assets"] == 1
+        assert payload["portfolio_summary"]["compliant_assets"] == 0
+        assert payload["portfolio_summary"]["degraded_scan_count"] == 1
+        assert payload["recent_scans"][0]["scan_id"] == str(vulnerable_scan_id)
+        assert payload["recent_scans"][0]["degraded_mode_count"] == 1
+        assert payload["priority_findings"][0]["scan_id"] == str(vulnerable_scan_id)
+        assert payload["priority_findings"][0]["tier"] == "QUANTUM_VULNERABLE"
+        assert payload["priority_findings"][1]["tier"] == "PQC_TRANSITIONING"
+        assert payload["system_health"]["backend_status"] == "reachable"
+        assert payload["system_health"]["degraded_runtime_notice_count"] == 1
+    finally:
+        await client.aclose()
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_scan_history_supports_exact_target_filter_and_recent_ordering(
+    session_factory,
+) -> None:
+    latest_scan_id = uuid.uuid4()
+    older_scan_id = uuid.uuid4()
+    other_scan_id = uuid.uuid4()
+    shared_target = f"shared-{uuid.uuid4().hex[:8]}.example.com"
+    other_target = f"other-{uuid.uuid4().hex[:8]}.example.com"
+    base_time = datetime(2099, 12, 31, 12, 0, tzinfo=UTC) + timedelta(
+        seconds=int(uuid.uuid4().hex[:4], 16)
+    )
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                    ScanJob(
+                        id=latest_scan_id,
+                        target=shared_target,
+                    status=ScanStatus.COMPLETED,
+                    created_at=base_time,
+                    completed_at=base_time + timedelta(minutes=2),
+                ),
+                    ScanJob(
+                        id=older_scan_id,
+                        target=shared_target,
+                    status=ScanStatus.FAILED,
+                    created_at=base_time - timedelta(days=1),
+                    completed_at=base_time - timedelta(days=1) + timedelta(minutes=1),
+                ),
+                    ScanJob(
+                        id=other_scan_id,
+                        target=other_target,
+                    status=ScanStatus.COMPLETED,
+                    created_at=base_time - timedelta(hours=2),
+                    completed_at=base_time - timedelta(hours=2) + timedelta(minutes=2),
+                ),
+            ]
+        )
+        await session.commit()
+
+    app.state.scan_read_service = ScanReadService(
+        session_factory=session_factory,
+        runtime_store=ScanRuntimeStore(),
+    )
+
+    client = await _make_client(session_factory)
+    try:
+        response = await client.get(f"/api/v1/scan/history?target={shared_target}&limit=2")
+        assert response.status_code == 200
+        payload = response.json()
+        assert [item["scan_id"] for item in payload["items"]] == [
+            str(latest_scan_id),
+            str(older_scan_id),
+        ]
+        assert all(item["target"] == shared_target for item in payload["items"])
     finally:
         await client.aclose()
         app.dependency_overrides.clear()

@@ -72,3 +72,19 @@ export function buildScanHref(pathname: string, scanId: string | null): string {
 
   return `${pathname}?scan=${scanId}`;
 }
+
+export function buildAssetHref(
+  assetId: string,
+  scanId: string | null,
+  tab?: string | null
+): string {
+  const search = new URLSearchParams();
+  if (scanId) {
+    search.set("scan", scanId);
+  }
+  if (tab) {
+    search.set("tab", tab);
+  }
+  const query = search.toString();
+  return `/assets/${assetId}${query ? `?${query}` : ""}`;
+}

@@ -1054,6 +1054,81 @@ class ScanReadService:
         payload.update(self._build_runtime_payload(bundle))
         return payload
 
+    async def get_mission_control_overview(
+        self,
+        *,
+        recent_limit: int = 10,
+        priority_limit: int = 5,
+    ) -> dict[str, Any]:
+        async with self.session_factory() as session:
+            scan_repository = ScanJobRepository(session)
+            scans = list(await scan_repository.get_recent(limit=recent_limit))
+
+        bundles = [await self._load_scan_bundle(scan_id=scan.id) for scan in scans]
+        recent_scans = [self._serialize_recent_scan(bundle) for bundle in bundles]
+        priority_findings = self._build_priority_findings(
+            bundles=bundles,
+            priority_limit=priority_limit,
+        )
+
+        completed_scans = sum(
+            1 for bundle in bundles if bundle["scan"].status is ScanStatus.COMPLETED
+        )
+        running_scans = sum(
+            1
+            for bundle in bundles
+            if bundle["scan"].status in {ScanStatus.PENDING, ScanStatus.RUNNING}
+        )
+        failed_scans = sum(
+            1 for bundle in bundles if bundle["scan"].status is ScanStatus.FAILED
+        )
+        degraded_counts = [len(bundle["runtime"]["degraded_modes"]) for bundle in bundles]
+
+        return {
+            "portfolio_summary": {
+                "completed_scans": completed_scans,
+                "running_scans": running_scans,
+                "failed_scans": failed_scans,
+                "vulnerable_assets": sum(
+                    bundle["summary"]["vulnerable_assets"] for bundle in bundles
+                ),
+                "transitioning_assets": sum(
+                    bundle["summary"]["transitioning_assets"] for bundle in bundles
+                ),
+                "compliant_assets": sum(
+                    bundle["summary"]["fully_quantum_safe_assets"] for bundle in bundles
+                ),
+                "certificates_issued": sum(
+                    bundle["progress"]["certificates_created"] for bundle in bundles
+                ),
+                "remediation_bundles_generated": sum(
+                    bundle["progress"]["remediations_created"] for bundle in bundles
+                ),
+                "degraded_scan_count": sum(1 for count in degraded_counts if count > 0),
+            },
+            "recent_scans": recent_scans,
+            "priority_findings": priority_findings,
+            "system_health": {
+                "backend_status": "reachable",
+                "degraded_runtime_notice_count": sum(degraded_counts),
+            },
+        }
+
+    async def get_scan_history(
+        self,
+        *,
+        limit: int = 10,
+        target: str | None = None,
+    ) -> dict[str, Any]:
+        async with self.session_factory() as session:
+            scan_repository = ScanJobRepository(session)
+            scans = list(await scan_repository.get_recent(limit=limit, target=target))
+
+        bundles = [await self._load_scan_bundle(scan_id=scan.id) for scan in scans]
+        return {
+            "items": [self._serialize_recent_scan(bundle) for bundle in bundles],
+        }
+
     async def get_latest_cbom(self, *, asset_id: uuid.UUID) -> dict[str, Any]:
         async with self.session_factory() as session:
             repository = CbomDocumentRepository(session)
@@ -1080,84 +1155,157 @@ class ScanReadService:
 
     async def _load_scan_bundle(self, *, scan_id: uuid.UUID) -> dict[str, Any]:
         async with self.session_factory() as session:
-            scan_repository = ScanJobRepository(session)
-            asset_repository = DiscoveredAssetRepository(session)
-            assessment_repository = CryptoAssessmentRepository(session)
-            cbom_repository = CbomDocumentRepository(session)
-            remediation_repository = RemediationBundleRepository(session)
-            certificate_repository = ComplianceCertificateRepository(session)
+            return await self._load_scan_bundle_from_session(session=session, scan_id=scan_id)
 
-            scan = await scan_repository.get_by_id(scan_id)
-            if scan is None:
-                raise ScanNotFoundError(f"Scan {scan_id} does not exist.")
+    async def _load_scan_bundle_from_session(
+        self,
+        *,
+        session: AsyncSession,
+        scan_id: uuid.UUID,
+    ) -> dict[str, Any]:
+        scan_repository = ScanJobRepository(session)
+        asset_repository = DiscoveredAssetRepository(session)
+        assessment_repository = CryptoAssessmentRepository(session)
+        cbom_repository = CbomDocumentRepository(session)
+        remediation_repository = RemediationBundleRepository(session)
+        certificate_repository = ComplianceCertificateRepository(session)
 
-            assets = list(await asset_repository.get_by_scan_id(scan_id))
-            assessments: dict[uuid.UUID, CryptoAssessment] = {}
-            cboms: dict[uuid.UUID, Any] = {}
-            remediations: dict[uuid.UUID, Any] = {}
-            certificates: dict[uuid.UUID, Any] = {}
+        scan = await scan_repository.get_by_id(scan_id)
+        if scan is None:
+            raise ScanNotFoundError(f"Scan {scan_id} does not exist.")
 
-            for asset in assets:
-                assessment_rows = await assessment_repository.get_by_asset_id(asset.id)
-                if assessment_rows:
-                    assessments[asset.id] = select_latest(
-                        assessment_rows,
-                        timestamp_getter=lambda record: None,
-                    )
+        assets = list(await asset_repository.get_by_scan_id(scan_id))
+        assessments: dict[uuid.UUID, CryptoAssessment] = {}
+        cboms: dict[uuid.UUID, Any] = {}
+        remediations: dict[uuid.UUID, Any] = {}
+        certificates: dict[uuid.UUID, Any] = {}
 
-                cbom = select_latest_cbom(await cbom_repository.get_by_asset_id(asset.id))
-                if cbom is not None:
-                    cboms[asset.id] = cbom
-
-                remediation = select_latest_remediation(
-                    await remediation_repository.get_by_asset_id(asset.id)
+        for asset in assets:
+            assessment_rows = await assessment_repository.get_by_asset_id(asset.id)
+            if assessment_rows:
+                assessments[asset.id] = select_latest(
+                    assessment_rows,
+                    timestamp_getter=lambda record: None,
                 )
-                if remediation is not None:
-                    remediations[asset.id] = remediation
 
-                certificate = select_latest_certificate(
-                    await certificate_repository.get_by_asset_id(asset.id)
+            cbom = select_latest_cbom(await cbom_repository.get_by_asset_id(asset.id))
+            if cbom is not None:
+                cboms[asset.id] = cbom
+
+            remediation = select_latest_remediation(
+                await remediation_repository.get_by_asset_id(asset.id)
+            )
+            if remediation is not None:
+                remediations[asset.id] = remediation
+
+            certificate = select_latest_certificate(
+                await certificate_repository.get_by_asset_id(asset.id)
+            )
+            if certificate is not None:
+                certificates[asset.id] = certificate
+
+        tier_counts = {
+            ComplianceTier.FULLY_QUANTUM_SAFE: 0,
+            ComplianceTier.PQC_TRANSITIONING: 0,
+            ComplianceTier.QUANTUM_VULNERABLE: 0,
+        }
+        risk_scores = []
+        for assessment in assessments.values():
+            if assessment.compliance_tier in tier_counts:
+                tier_counts[assessment.compliance_tier] += 1
+            if assessment.risk_score is not None:
+                risk_scores.append(assessment.risk_score)
+        tls_assets = sum(1 for asset in assets if asset.service_type is ServiceType.TLS)
+
+        bundle = {
+            "scan": scan,
+            "assets": assets,
+            "assessments": assessments,
+            "cboms": cboms,
+            "remediations": remediations,
+            "certificates": certificates,
+            "progress": {
+                "assets_discovered": len(assets),
+                "assessments_created": len(assessments),
+                "cboms_created": len(cboms),
+                "remediations_created": len(remediations),
+                "certificates_created": len(certificates),
+            },
+            "summary": {
+                "total_assets": len(assets),
+                "tls_assets": tls_assets,
+                "non_tls_assets": len(assets) - tls_assets,
+                "fully_quantum_safe_assets": tier_counts[ComplianceTier.FULLY_QUANTUM_SAFE],
+                "transitioning_assets": tier_counts[ComplianceTier.PQC_TRANSITIONING],
+                "vulnerable_assets": tier_counts[ComplianceTier.QUANTUM_VULNERABLE],
+                "highest_risk_score": max(risk_scores) if risk_scores else None,
+            },
+        }
+        bundle["runtime"] = self._build_runtime_payload(bundle)
+        return bundle
+
+    def _serialize_recent_scan(self, bundle: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "scan_id": bundle["scan"].id,
+            "target": bundle["scan"].target,
+            "status": bundle["scan"].status,
+            "created_at": bundle["scan"].created_at,
+            "completed_at": bundle["scan"].completed_at,
+            "summary": {
+                "vulnerable_assets": bundle["summary"]["vulnerable_assets"],
+                "transitioning_assets": bundle["summary"]["transitioning_assets"],
+                "fully_quantum_safe_assets": bundle["summary"]["fully_quantum_safe_assets"],
+                "highest_risk_score": bundle["summary"]["highest_risk_score"],
+            },
+            "progress": bundle["progress"],
+            "degraded_mode_count": len(bundle["runtime"]["degraded_modes"]),
+        }
+
+    def _build_priority_findings(
+        self,
+        *,
+        bundles: Sequence[dict[str, Any]],
+        priority_limit: int,
+    ) -> list[dict[str, Any]]:
+        findings: list[dict[str, Any]] = []
+        for bundle in bundles:
+            if bundle["scan"].status is not ScanStatus.COMPLETED:
+                continue
+
+            for asset in bundle["assets"]:
+                assessment = bundle["assessments"].get(asset.id)
+                findings.append(
+                    {
+                        "scan_id": bundle["scan"].id,
+                        "asset_id": asset.id,
+                        "target": bundle["scan"].target,
+                        "asset_label": asset.hostname or asset.ip_address or str(asset.id),
+                        "port": asset.port,
+                        "service_type": asset.service_type,
+                        "tier": getattr(assessment, "compliance_tier", None),
+                        "risk_score": getattr(assessment, "risk_score", None),
+                    }
                 )
-                if certificate is not None:
-                    certificates[asset.id] = certificate
 
-            tier_counts = {
-                ComplianceTier.FULLY_QUANTUM_SAFE: 0,
-                ComplianceTier.PQC_TRANSITIONING: 0,
-                ComplianceTier.QUANTUM_VULNERABLE: 0,
-            }
-            risk_scores = []
-            for assessment in assessments.values():
-                if assessment.compliance_tier in tier_counts:
-                    tier_counts[assessment.compliance_tier] += 1
-                if assessment.risk_score is not None:
-                    risk_scores.append(assessment.risk_score)
-            tls_assets = sum(1 for asset in assets if asset.service_type is ServiceType.TLS)
-
-            return {
-                "scan": scan,
-                "assets": assets,
-                "assessments": assessments,
-                "cboms": cboms,
-                "remediations": remediations,
-                "certificates": certificates,
-                "progress": {
-                    "assets_discovered": len(assets),
-                    "assessments_created": len(assessments),
-                    "cboms_created": len(cboms),
-                    "remediations_created": len(remediations),
-                    "certificates_created": len(certificates),
-                },
-                "summary": {
-                    "total_assets": len(assets),
-                    "tls_assets": tls_assets,
-                    "non_tls_assets": len(assets) - tls_assets,
-                    "fully_quantum_safe_assets": tier_counts[ComplianceTier.FULLY_QUANTUM_SAFE],
-                    "transitioning_assets": tier_counts[ComplianceTier.PQC_TRANSITIONING],
-                    "vulnerable_assets": tier_counts[ComplianceTier.QUANTUM_VULNERABLE],
-                    "highest_risk_score": max(risk_scores) if risk_scores else None,
-                },
-            }
+        tier_rank = {
+            ComplianceTier.QUANTUM_VULNERABLE: 0,
+            ComplianceTier.PQC_TRANSITIONING: 1,
+            ComplianceTier.FULLY_QUANTUM_SAFE: 2,
+            None: 3,
+        }
+        findings.sort(
+            key=lambda finding: (
+                tier_rank.get(finding["tier"], 3),
+                -(
+                    finding["risk_score"]
+                    if isinstance(finding["risk_score"], (float, int))
+                    else -1.0
+                ),
+                str(finding["scan_id"]),
+                str(finding["asset_id"]),
+            )
+        )
+        return findings[:priority_limit]
 
     def _build_runtime_payload(self, bundle: dict[str, Any]) -> dict[str, Any]:
         runtime_snapshot = None

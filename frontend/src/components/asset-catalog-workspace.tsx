@@ -10,11 +10,13 @@ import { EmptyRouteState, ErrorRouteState, LoadingRouteState } from "@/component
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  getActionPriorityLabel,
   getAssetLabel,
   getAssetLocation,
   getAssetTier,
   getRiskScore,
   getTierVariant,
+  getUrgencyLabel,
 } from "@/lib/result-helpers";
 import { buildScanHref } from "@/lib/scan-storage";
 import { useBackendHealth } from "@/lib/use-backend-health";
@@ -49,7 +51,7 @@ export function AssetCatalogWorkspace({
 
   if (!isHydrated) {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={null} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={null} header={header}>
         <LoadingRouteState
           eyebrow="Asset workbench"
           title="Resolving asset catalog"
@@ -61,7 +63,7 @@ export function AssetCatalogWorkspace({
 
   if (invalidQueryParam) {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={resolvedScanId} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={resolvedScanId} header={header}>
         <EmptyRouteState
           eyebrow="Invalid scan reference"
           title="The asset catalog needs a valid scan ID"
@@ -73,7 +75,7 @@ export function AssetCatalogWorkspace({
 
   if (!resolvedScanId) {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={resolvedScanId} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={resolvedScanId} header={header}>
         <EmptyRouteState
           eyebrow="No scan context"
           title="No scan is available for asset investigation"
@@ -85,7 +87,7 @@ export function AssetCatalogWorkspace({
 
   if (isLoading && !results) {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={resolvedScanId} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={resolvedScanId} header={header}>
         <LoadingRouteState
           eyebrow="Asset workbench"
           title="Loading catalog data"
@@ -97,7 +99,7 @@ export function AssetCatalogWorkspace({
 
   if (error) {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={resolvedScanId} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={resolvedScanId} header={header}>
         <ErrorRouteState
           eyebrow="Asset catalog unavailable"
           title="The asset workbench could not load this scan"
@@ -112,7 +114,7 @@ export function AssetCatalogWorkspace({
 
   if (!results || results.status === "pending" || results.status === "running") {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={results?.scan_id ?? resolvedScanId} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={results?.scan_id ?? resolvedScanId} header={header}>
         <EmptyRouteState
           eyebrow="Scan still running"
           title="The asset workbench opens after result compilation"
@@ -125,7 +127,7 @@ export function AssetCatalogWorkspace({
   }
 
   return (
-    <MissionLayout activeSection="asset-workbench" contextScanId={results.scan_id} header={header}>
+    <MissionLayout activeSection="assets" contextScanId={results.scan_id} header={header}>
       <div className="space-y-5">
         <SummaryMetricGrid summary={results.summary} progress={results.progress} />
 
@@ -197,6 +199,10 @@ export function AssetCatalogWorkspace({
                         label="Remediation"
                         value={asset.remediation ? "Available" : "Not needed / missing"}
                       />
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Badge variant="warning">{getUrgencyLabel(tier)}</Badge>
+                      <Badge variant="outline">{getActionPriorityLabel(tier)}</Badge>
                     </div>
                   </Link>
                 );

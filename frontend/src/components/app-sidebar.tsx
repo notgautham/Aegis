@@ -5,6 +5,7 @@ import {
   BarChart3,
   FileCog,
   FolderKanban,
+  History,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
@@ -22,10 +23,11 @@ import {
 import { cn } from "@/lib/utils";
 
 type SidebarSection =
-  | "scan-control"
+  | "mission-control"
   | "risk-heatmap"
-  | "asset-workbench"
-  | "reports";
+  | "assets"
+  | "reports"
+  | "history";
 
 interface AppSidebarProps {
   activeSection?: SidebarSection;
@@ -33,7 +35,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({
-  activeSection = "scan-control",
+  activeSection = "mission-control",
   contextScanId = null,
 }: AppSidebarProps) {
   const pathname = usePathname();
@@ -55,27 +57,27 @@ export function AppSidebar({
       : buildScanHref("/assets", resolvedScanId);
   const navItems = [
     {
-      label: "Scan Control",
-      description: "Mission control",
+      label: "Mission Control",
+      description: "Banking command center",
       icon: ActivitySquare,
       href: "/",
-      active: activeSection === "scan-control",
+      active: activeSection === "mission-control",
       disabled: false,
     },
     {
       label: "Risk Heatmap",
-      description: resolvedScanId ? "Phase 10 live" : "Await scan",
+      description: resolvedScanId ? "Analytical posture" : "Await scan",
       icon: BarChart3,
       href: buildScanHref("/risk-heatmap", resolvedScanId),
       active: activeSection === "risk-heatmap",
       disabled: !resolvedScanId,
     },
     {
-      label: "Asset Workbench",
-      description: resolvedScanId ? "Deep inspection" : "Await scan",
+      label: "Assets",
+      description: resolvedScanId ? "Forensic workbench" : "Await scan",
       icon: FolderKanban,
       href: assetWorkbenchHref,
-      active: activeSection === "asset-workbench",
+      active: activeSection === "assets",
       disabled: !resolvedScanId,
     },
     {
@@ -85,6 +87,14 @@ export function AppSidebar({
       href: buildScanHref("/reports", resolvedScanId),
       active: activeSection === "reports",
       disabled: !resolvedScanId,
+    },
+    {
+      label: "History",
+      description: "Recent scan timeline",
+      icon: History,
+      href: buildScanHref("/history", resolvedScanId),
+      active: activeSection === "history",
+      disabled: false,
     },
   ] as const;
 
@@ -113,7 +123,7 @@ export function AppSidebar({
           variant="outline"
           className="border-sidebar-accent/25 bg-sidebar-accent/10 text-sidebar-accent"
         >
-          Phase 10
+          Final Prototype
         </Badge>
       </div>
 
@@ -132,8 +142,9 @@ export function AppSidebar({
           </div>
         </div>
         <p className="mt-3 text-sm leading-6 text-sidebar-muted">
-          One remembered scan now opens into dedicated risk, asset, and report
-          surfaces while the dashboard keeps backend truth front and center.
+          One remembered scan now opens into analytical, forensic, reporting,
+          and history routes while Mission Control keeps backend truth front
+          and center.
         </p>
       </div>
 
@@ -203,9 +214,9 @@ export function AppSidebar({
           Mission note
         </p>
         <p className="mt-3 text-sm leading-6 text-sidebar-muted">
-          The output layer is now split into analytical, forensic, and
-          reporting routes so real scan data can be investigated without losing
-          the ground-truth posture established in Phase 9.
+          Aegis stays scan-centric on purpose: assess, prioritize, remediate,
+          certify, and report without drifting into generic asset-management
+          sprawl.
         </p>
       </div>
     </aside>

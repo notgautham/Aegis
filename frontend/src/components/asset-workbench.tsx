@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ClipboardCopy,
   FileBadge2,
@@ -20,7 +21,17 @@ import {
 } from "@/lib/api";
 import { getErrorMessage, isAbortError, isNotFoundError } from "@/lib/api-helpers";
 import { formatTimestamp, formatTitleCase } from "@/lib/formatters";
-import { findAssetInResults, getAssetLabel, getAssetLocation, getAssetTier, getTierVariant } from "@/lib/result-helpers";
+import {
+  findAssetInResults,
+  getActionPriorityLabel,
+  getAssetLabel,
+  getAssetLocation,
+  getAssetTier,
+  getRecommendedNextAction,
+  getRiskReason,
+  getTierVariant,
+  getUrgencyLabel,
+} from "@/lib/result-helpers";
 import { buildScanHref, normalizeUuid } from "@/lib/scan-storage";
 import { useBackendHealth } from "@/lib/use-backend-health";
 import { useScanResults } from "@/lib/use-scan-results";
@@ -157,11 +168,15 @@ function useAssetArtifacts({
 export function AssetWorkbench({
   assetId,
   initialScanParam,
+  initialTabParam,
 }: {
   assetId: string;
   initialScanParam?: string | null;
+  initialTabParam?: string | null;
 }) {
-  const [activeTab, setActiveTab] = useState<AssetTab>("cbom");
+  const router = useRouter();
+  const initialTab = normalizeAssetTab(initialTabParam);
+  const [activeTab, setActiveTab] = useState<AssetTab>(initialTab);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const healthState = useBackendHealth();
   const normalizedAssetId = normalizeUuid(assetId);
@@ -182,6 +197,8 @@ export function AssetWorkbench({
     assetId: normalizedAssetId ?? "",
     enabled: Boolean(results && asset && normalizedAssetId),
   });
+  const assetFileStem =
+    asset?.hostname ?? asset?.ip_address ?? normalizedAssetId ?? "asset";
 
   const header = (
     <AppHeader
@@ -212,6 +229,28 @@ export function AssetWorkbench({
     }
   }, [certificate.data?.certificate_pem]);
 
+  const handleDownloadCbom = useCallback(() => {
+    if (!cbom.data) {
+      return;
+    }
+    downloadBlob(
+      JSON.stringify(cbom.data.cbom_json, null, 2),
+      `${assetFileStem}-cbom.json`,
+      "application/json"
+    );
+  }, [assetFileStem, cbom.data]);
+
+  const handleDownloadPem = useCallback(() => {
+    if (!certificate.data?.certificate_pem) {
+      return;
+    }
+    downloadBlob(
+      certificate.data.certificate_pem,
+      `${assetFileStem}-certificate.pem`,
+      "application/x-pem-file"
+    );
+  }, [assetFileStem, certificate.data?.certificate_pem]);
+
   useEffect(() => {
     if (copyState === "idle") {
       return;
@@ -223,7 +262,7 @@ export function AssetWorkbench({
 
   if (!isHydrated) {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={null} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={null} header={header}>
         <LoadingRouteState
           eyebrow="Asset workbench"
           title="Resolving asset context"
@@ -235,7 +274,7 @@ export function AssetWorkbench({
 
   if (invalidQueryParam) {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={resolvedScanId} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={resolvedScanId} header={header}>
         <EmptyRouteState
           eyebrow="Invalid scan reference"
           title="This asset route needs a valid scan ID"
@@ -247,7 +286,7 @@ export function AssetWorkbench({
 
   if (!resolvedScanId) {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={resolvedScanId} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={resolvedScanId} header={header}>
         <EmptyRouteState
           eyebrow="No scan context"
           title="No scan is available for asset inspection"
@@ -259,7 +298,7 @@ export function AssetWorkbench({
 
   if (!normalizedAssetId) {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={resolvedScanId} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={resolvedScanId} header={header}>
         <EmptyRouteState
           eyebrow="Invalid asset reference"
           title="This asset route needs a valid asset ID"
@@ -273,7 +312,7 @@ export function AssetWorkbench({
 
   if (isLoading && !results) {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={resolvedScanId} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={resolvedScanId} header={header}>
         <LoadingRouteState
           eyebrow="Asset workbench"
           title="Loading scan and asset context"
@@ -285,7 +324,7 @@ export function AssetWorkbench({
 
   if (error) {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={results?.scan_id ?? resolvedScanId} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={results?.scan_id ?? resolvedScanId} header={header}>
         <ErrorRouteState
           eyebrow="Scan results unavailable"
           title="The workbench could not load the active scan"
@@ -300,7 +339,7 @@ export function AssetWorkbench({
 
   if (!results || results.status === "pending" || results.status === "running") {
     return (
-      <MissionLayout activeSection="asset-workbench" contextScanId={results?.scan_id ?? resolvedScanId} header={header}>
+      <MissionLayout activeSection="assets" contextScanId={results?.scan_id ?? resolvedScanId} header={header}>
         <EmptyRouteState
           eyebrow="Scan still running"
           title="Asset deep-dive opens after results compilation"
@@ -314,7 +353,7 @@ export function AssetWorkbench({
 
   if (!asset) {
     return (
-      <MissionLayout activeSection="asset-workbench" header={header}>
+      <MissionLayout activeSection="assets" header={header}>
         <ErrorRouteState
           eyebrow="Invalid asset for this scan"
           title="This asset does not belong to the active scan"
@@ -327,6 +366,8 @@ export function AssetWorkbench({
   }
 
   const tier = getAssetTier(asset);
+  const recommendedNextAction = getRecommendedNextAction(tier);
+  const riskReason = getRiskReason(asset);
   const hndlTimeline = remediation.data?.hndl_timeline ?? null;
   const hndlEntries = Array.isArray(hndlTimeline?.entries) ? hndlTimeline.entries : [];
   const citations = Array.isArray(remediation.data?.source_citations?.documents)
@@ -334,7 +375,7 @@ export function AssetWorkbench({
     : [];
 
   return (
-    <MissionLayout activeSection="asset-workbench" header={header}>
+    <MissionLayout activeSection="assets" header={header}>
       <div className="space-y-5">
         <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="telemetry-panel overflow-hidden rounded-[28px] border border-white/8 bg-card/90 p-5 shadow-command">
@@ -369,6 +410,7 @@ export function AssetWorkbench({
                     ? asset.assessment.risk_score.toFixed(1)
                     : "Unavailable"
                 }
+                hint={`${getUrgencyLabel(tier)} | ${getActionPriorityLabel(tier)}`}
               />
               <MetricCard
                 label="Cipher suite"
@@ -394,6 +436,22 @@ export function AssetWorkbench({
                     : "No remediation urgency available"
                 }
               />
+            </div>
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-[24px] border border-white/8 bg-black/15 p-4">
+                <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                  Why this asset is risky
+                </p>
+                <p className="mt-3 text-sm leading-7 text-muted-foreground">{riskReason}</p>
+              </div>
+              <div className="rounded-[24px] border border-white/8 bg-black/15 p-4">
+                <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                  Recommended next action
+                </p>
+                <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                  {recommendedNextAction}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -426,36 +484,68 @@ export function AssetWorkbench({
             label="CBOM"
             icon={FileJson2}
             active={activeTab === "cbom"}
-            onClick={() => setActiveTab("cbom")}
+            onClick={() =>
+              updateAssetTab(
+                router,
+                assetId,
+                results?.scan_id ?? resolvedScanId ?? initialScanParam ?? null,
+                "cbom"
+              )
+            }
           />
           <TabButton
             label="Certificate"
             icon={FileBadge2}
             active={activeTab === "certificate"}
-            onClick={() => setActiveTab("certificate")}
+            onClick={() =>
+              updateAssetTab(
+                router,
+                assetId,
+                results?.scan_id ?? resolvedScanId ?? initialScanParam ?? null,
+                "certificate"
+              )
+            }
           />
           <TabButton
             label="HNDL & Remediation"
             icon={ShieldCheck}
             active={activeTab === "remediation"}
-            onClick={() => setActiveTab("remediation")}
+            onClick={() =>
+              updateAssetTab(
+                router,
+                assetId,
+                results?.scan_id ?? resolvedScanId ?? initialScanParam ?? null,
+                "remediation"
+              )
+            }
           />
         </div>
 
         {activeTab === "cbom" ? (
           <div className="telemetry-panel overflow-hidden rounded-[28px] border border-white/8 bg-card/90 p-5 shadow-command">
-            <div className="mb-5 flex items-start justify-between gap-3">
-              <div>
+              <div className="mb-5 flex items-start justify-between gap-3">
+                <div>
                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
                   CBOM viewer
                 </p>
                 <h3 className="mt-3 text-2xl font-semibold text-foreground">
                   Cryptographic bill of materials
                 </h3>
+                </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" className="rounded-full px-4" onClick={() => void retryArtifacts()}>
+                  Reload artifacts
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full px-4"
+                  onClick={handleDownloadCbom}
+                  disabled={!cbom.data}
+                >
+                  Download JSON
+                </Button>
               </div>
-              <Button variant="outline" size="sm" className="rounded-full px-4" onClick={() => void retryArtifacts()}>
-                Reload artifacts
-              </Button>
             </div>
 
             {cbom.status === "ready" && cbom.data ? (
@@ -534,6 +624,15 @@ export function AssetWorkbench({
                 >
                   <ClipboardCopy className="h-4 w-4" />
                   {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy PEM"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full px-4"
+                  onClick={handleDownloadPem}
+                  disabled={!certificate.data?.certificate_pem}
+                >
+                  Download PEM
                 </Button>
               </div>
             </div>
@@ -733,6 +832,40 @@ function TabButton({
       {label}
     </Button>
   );
+}
+
+function normalizeAssetTab(value: string | null | undefined): AssetTab {
+  switch (value) {
+    case "certificate":
+    case "remediation":
+      return value;
+    default:
+      return "cbom";
+  }
+}
+
+function updateAssetTab(
+  router: ReturnType<typeof useRouter>,
+  assetId: string,
+  scanId: string | null,
+  tab: AssetTab
+) {
+  const nextParams = new URLSearchParams();
+  if (scanId) {
+    nextParams.set("scan", scanId);
+  }
+  nextParams.set("tab", tab);
+  router.replace(`/assets/${assetId}?${nextParams.toString()}`, { scroll: false });
+}
+
+function downloadBlob(contents: string, filename: string, type: string) {
+  const blob = new Blob([contents], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function StructuredCbomPanel({ cbom }: { cbom: CbomResponse }) {

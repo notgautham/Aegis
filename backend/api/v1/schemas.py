@@ -50,6 +50,15 @@ class ScanSummaryResponse(BaseModel):
     highest_risk_score: float | None
 
 
+class RecentScanSummaryResponse(BaseModel):
+    """Compact posture counts for recent scan cards and timeline items."""
+
+    vulnerable_assets: int
+    transitioning_assets: int
+    fully_quantum_safe_assets: int
+    highest_risk_score: float | None
+
+
 class ScanAcceptedResponse(BaseModel):
     """Accepted scan creation response."""
 
@@ -157,6 +166,81 @@ class ScanResultsResponse(BaseModel):
     events: list[ScanRuntimeEventResponse] = Field(default_factory=list)
     degraded_modes: list[str] = Field(default_factory=list)
     assets: list[AssetResultResponse]
+
+
+class MissionControlPortfolioSummaryResponse(BaseModel):
+    """Portfolio-level summary derived from recent persisted scans."""
+
+    completed_scans: int
+    running_scans: int
+    failed_scans: int
+    vulnerable_assets: int
+    transitioning_assets: int
+    compliant_assets: int
+    certificates_issued: int
+    remediation_bundles_generated: int
+    degraded_scan_count: int
+
+
+class MissionControlRecentScanResponse(BaseModel):
+    """Compact recent scan card for Mission Control."""
+
+    scan_id: uuid.UUID
+    target: str
+    status: ScanStatus
+    created_at: datetime | None
+    completed_at: datetime | None
+    summary: RecentScanSummaryResponse
+    progress: ProgressResponse
+    degraded_mode_count: int = 0
+
+
+class MissionControlPriorityFindingResponse(BaseModel):
+    """Priority finding surfaced across recent completed scans."""
+
+    scan_id: uuid.UUID
+    asset_id: uuid.UUID
+    target: str
+    asset_label: str
+    port: int
+    service_type: ServiceType | None
+    tier: ComplianceTier | None
+    risk_score: float | None
+
+
+class MissionControlSystemHealthResponse(BaseModel):
+    """Backend/system strip data for Mission Control."""
+
+    backend_status: str
+    degraded_runtime_notice_count: int = 0
+
+
+class MissionControlOverviewResponse(BaseModel):
+    """Mission Control home-page aggregate payload."""
+
+    portfolio_summary: MissionControlPortfolioSummaryResponse
+    recent_scans: list[MissionControlRecentScanResponse] = Field(default_factory=list)
+    priority_findings: list[MissionControlPriorityFindingResponse] = Field(default_factory=list)
+    system_health: MissionControlSystemHealthResponse
+
+
+class ScanHistoryItemResponse(BaseModel):
+    """Compact timeline item for recent scan history."""
+
+    scan_id: uuid.UUID
+    target: str
+    status: ScanStatus
+    created_at: datetime | None
+    completed_at: datetime | None
+    summary: RecentScanSummaryResponse
+    progress: ProgressResponse
+    degraded_mode_count: int = 0
+
+
+class ScanHistoryResponse(BaseModel):
+    """Recent scan timeline payload."""
+
+    items: list[ScanHistoryItemResponse] = Field(default_factory=list)
 
 
 class ErrorEnvelope(BaseModel):

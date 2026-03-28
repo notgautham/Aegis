@@ -83,12 +83,19 @@ This document translates the system architecture defined in `SOLUTION.md` and `I
 - [x] Implement scan polling UI with progress counters, stage telemetry, degraded-mode notices, and a resilient command-center presentation for the async backend pipeline.
 
 ## Phase 10: Frontend Dashboards & Integration
-- [ ] Build the "Risk Heatmap" component using `Recharts` to display aggregate quantum risk scores across all scanned assets.
-- [ ] Implement the CBOM Viewer component (expandable JSON tree focusing on `cryptoProperties` and `quantumRiskSummary`).
-- [ ] Implement the Certificate Viewer component (displaying tier badge, validity window, signing algorithm, and embedded OID extensions).
-- [ ] Implement the HNDL Timeline & Remediation view (displaying HNDL break year, patch snippets, migration roadmap, and NIST source citations).
-- [ ] Create the Dual Report Layout (tabs for "CISO Summary" executive view and "Engineer Details" technical view).
+- [x] Build the "Risk Heatmap" component using `Recharts` to display aggregate quantum risk scores across all scanned assets.
+- [x] Implement the CBOM Viewer component (expandable JSON tree focusing on `cryptoProperties` and `quantumRiskSummary`).
+- [x] Implement the Certificate Viewer component (displaying tier badge, validity window, signing algorithm, and embedded OID extensions).
+- [x] Implement the HNDL Timeline & Remediation view (displaying HNDL break year, patch snippets, migration roadmap, and NIST source citations).
+- [x] Create the Dual Report Layout (tabs for "CISO Summary" executive view and "Engineer Details" technical view).
 - [ ] Verify frontend-to-backend end-to-end integration by scanning a public test target (e.g., `testssl.sh`).
+
+## Final Prototype UX & Jury Positioning
+- [x] Add read-only Mission Control overview and lightweight scan history endpoints on top of the existing scan-centric backend.
+- [x] Add frontend-local saved targets and recent launch context without introducing a backend target model.
+- [x] Redesign `/` into a banking-grade Mission Control surface with posture overview, structured scan workflow, recent scans, priority findings, and deterministic quick actions.
+- [x] Add a lightweight `/history` timeline route for recent scan activity.
+- [x] Upgrade the risk heatmap, asset workbench, and reporting routes with stronger banking context, prioritization cues, and evidence export affordances.
 
 ## Continuous Monitoring & Scheduling
 - [ ] Implement scheduled scans using APScheduler / cron

@@ -32,6 +32,13 @@ export interface ScanSummaryResponse {
   highest_risk_score: number | null;
 }
 
+export interface RecentScanSummaryResponse {
+  vulnerable_assets: number;
+  transitioning_assets: number;
+  fully_quantum_safe_assets: number;
+  highest_risk_score: number | null;
+}
+
 export interface ScanAcceptedResponse {
   scan_id: string;
   target: string;
@@ -125,6 +132,67 @@ export interface ScanResultsResponse {
   assets: AssetResultResponse[];
 }
 
+export interface MissionControlPortfolioSummaryResponse {
+  completed_scans: number;
+  running_scans: number;
+  failed_scans: number;
+  vulnerable_assets: number;
+  transitioning_assets: number;
+  compliant_assets: number;
+  certificates_issued: number;
+  remediation_bundles_generated: number;
+  degraded_scan_count: number;
+}
+
+export interface MissionControlRecentScanResponse {
+  scan_id: string;
+  target: string;
+  status: ScanStatus;
+  created_at: string | null;
+  completed_at: string | null;
+  summary: RecentScanSummaryResponse;
+  progress: ProgressResponse;
+  degraded_mode_count: number;
+}
+
+export interface MissionControlPriorityFindingResponse {
+  scan_id: string;
+  asset_id: string;
+  target: string;
+  asset_label: string;
+  port: number;
+  service_type: ServiceType | null;
+  tier: ComplianceTier | null;
+  risk_score: number | null;
+}
+
+export interface MissionControlSystemHealthResponse {
+  backend_status: string;
+  degraded_runtime_notice_count: number;
+}
+
+export interface MissionControlOverviewResponse {
+  portfolio_summary: MissionControlPortfolioSummaryResponse;
+  recent_scans: MissionControlRecentScanResponse[];
+  priority_findings: MissionControlPriorityFindingResponse[];
+  system_health: MissionControlSystemHealthResponse;
+}
+
+export interface ScanHistoryItemResponse {
+  scan_id: string;
+  target: string;
+  status: ScanStatus;
+  created_at: string | null;
+  completed_at: string | null;
+  summary: RecentScanSummaryResponse;
+  progress: ProgressResponse;
+  degraded_mode_count: number;
+}
+
+export interface ScanHistoryResponse {
+  items: ScanHistoryItemResponse[];
+}
+
 interface ErrorEnvelope {
   error?: {
     type?: string;
@@ -215,4 +283,41 @@ export async function getAssetRemediation(
   options?: RequestInit
 ): Promise<RemediationResponse> {
   return apiFetch(`/api/v1/assets/${assetId}/remediation`, options);
+}
+
+export async function getMissionControlOverview(
+  options?: RequestInit & {
+    recentLimit?: number;
+    priorityLimit?: number;
+  }
+): Promise<MissionControlOverviewResponse> {
+  const search = new URLSearchParams();
+  if (typeof options?.recentLimit === "number") {
+    search.set("recent_limit", String(options.recentLimit));
+  }
+  if (typeof options?.priorityLimit === "number") {
+    search.set("priority_limit", String(options.priorityLimit));
+  }
+  const query = search.toString();
+  return apiFetch(
+    `/api/v1/mission-control/overview${query ? `?${query}` : ""}`,
+    options
+  );
+}
+
+export async function getScanHistory(
+  options?: RequestInit & {
+    limit?: number;
+    target?: string | null;
+  }
+): Promise<ScanHistoryResponse> {
+  const search = new URLSearchParams();
+  if (typeof options?.limit === "number") {
+    search.set("limit", String(options.limit));
+  }
+  if (options?.target?.trim()) {
+    search.set("target", options.target.trim());
+  }
+  const query = search.toString();
+  return apiFetch(`/api/v1/scan/history${query ? `?${query}` : ""}`, options);
 }
