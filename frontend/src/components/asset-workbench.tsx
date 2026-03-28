@@ -4,11 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ClipboardCopy,
+  AlertTriangle,
+  ArrowRight,
+  Copy,
+  Download,
   FileBadge2,
   FileJson2,
   FileText,
+  Network,
   ShieldCheck,
+  ShieldAlert,
+  ShieldEllipsis,
+  UserRound,
 } from "lucide-react";
 
 import {
@@ -20,7 +27,7 @@ import {
   type RemediationResponse,
 } from "@/lib/api";
 import { getErrorMessage, isAbortError, isNotFoundError } from "@/lib/api-helpers";
-import { formatTimestamp, formatTitleCase } from "@/lib/formatters";
+import { formatDuration, formatStage, formatTimestamp, formatTitleCase } from "@/lib/formatters";
 import {
   findAssetInResults,
   getActionPriorityLabel,
@@ -36,11 +43,10 @@ import { buildScanHref, normalizeUuid } from "@/lib/scan-storage";
 import { useBackendHealth } from "@/lib/use-backend-health";
 import { useScanResults } from "@/lib/use-scan-results";
 
-import { AppHeader } from "@/components/app-header";
 import { JsonTreeViewer } from "@/components/json-tree-viewer";
 import { MissionLayout } from "@/components/mission-layout";
 import { MetricCard } from "@/components/metric-card";
-import { DegradedModePanel, EventFeedPanel } from "@/components/scan-overview-panels";
+import { DegradedModePanel } from "@/components/scan-overview-panels";
 import {
   ArtifactStateCard,
   EmptyRouteState,
@@ -201,19 +207,35 @@ export function AssetWorkbench({
     asset?.hostname ?? asset?.ip_address ?? normalizedAssetId ?? "asset";
 
   const header = (
-    <AppHeader
-      healthState={healthState}
-      activeTarget={results?.target ?? null}
-      activeStatus={results?.status ?? null}
-      activeStage={results?.stage ?? null}
-      elapsedSeconds={results?.elapsed_seconds ?? null}
-      summary={results?.summary ?? null}
-      degradedModeCount={results?.degraded_modes.length ?? 0}
-      eyebrow="Asset Workbench"
-      title="Forensic asset deep-dive"
-      description="CBOM structure, compliance certificate, and remediation evidence for one asset within the active scan."
-      telemetryNote="Asset-level investigation stays anchored to the active scan and rejects cross-scan mismatches before loading deep artifacts."
-    />
+    <header className="fixed left-0 right-0 top-0 z-50 h-14 border-b border-[#00FF41]/10 bg-[#111318]/70 backdrop-blur-xl shadow-[0_1px_10px_rgba(0,255,65,0.05)] lg:pl-[18.5rem]">
+      <div className="flex h-full items-center justify-between px-6">
+        <div className="flex items-center gap-8">
+          <span className="font-[var(--font-display)] text-xl font-bold tracking-tighter text-[#00FF41]">
+            AEGIS_OS
+          </span>
+          <nav className="hidden gap-6 md:flex">
+            <span className="font-[var(--font-display)] text-xs font-bold uppercase tracking-[0.2em] text-[#00FF41]">
+              HEALTH: {healthState === "healthy" ? "100%" : healthState === "checking" ? "SYNC" : "OFFLINE"}
+            </span>
+            <span className="font-[var(--font-display)] text-xs uppercase tracking-[0.2em] text-slate-500">
+              TARGET: {results?.target ?? "UNBOUND"}
+            </span>
+            <span className="font-[var(--font-display)] text-xs uppercase tracking-[0.2em] text-slate-500">
+              STAGE: {results?.stage ? formatStage(results.stage) : "UNBOUND"}
+            </span>
+          </nav>
+        </div>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            className="text-slate-500 transition-all hover:text-[#00FF41]"
+            aria-label="Account"
+          >
+            <UserRound className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </header>
   );
 
   const handleCopyPem = useCallback(async () => {
@@ -373,11 +395,133 @@ export function AssetWorkbench({
   const citations = Array.isArray(remediation.data?.source_citations?.documents)
     ? remediation.data?.source_citations?.documents
     : [];
+  const assetSpecificDegradedModes = results.degraded_modes.filter(
+    (message) =>
+      message.includes(getAssetLabel(asset)) ||
+      message.includes(asset.hostname ?? "") ||
+      message.includes(asset.ip_address ?? "") ||
+      message.includes(String(asset.port))
+  );
+  const riskSignals = [
+    riskReason,
+    asset.certificate
+      ? `Certificate validity is tracked through ${formatTimestamp(asset.certificate.valid_from)} to ${formatTimestamp(asset.certificate.valid_until)}.`
+      : "No compliance certificate metadata was persisted for this asset in the compiled scan payload.",
+    asset.remediation
+      ? "A remediation bundle is available and can be reviewed in the HNDL and remediation section."
+      : "No remediation bundle is currently attached to this asset.",
+  ];
+  const nextSteps = [
+    recommendedNextAction,
+    asset.certificate
+      ? "Review certificate details and confirm whether signing posture matches the required compliance tier."
+      : "Issue or inspect certificate evidence after validating the remediation path.",
+    remediation.data?.migration_roadmap
+      ? "Review the migration roadmap and apply the staged guidance in order."
+      : "Use the artifact tabs below to inspect the available evidence before applying operational changes.",
+  ];
 
   return (
-    <MissionLayout activeSection="assets" header={header}>
-      <div className="space-y-5">
-        <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+    <MissionLayout activeSection="assets" contextScanId={results.scan_id} header={header}>
+      <div className="space-y-8 pb-20">
+        <header className="mb-8">
+          <div className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+            <div>
+              <div className="mb-1 flex items-center gap-3">
+                <Network className="h-5 w-5 text-[#00FF41]" />
+                <h1 className="font-[var(--font-display)] text-3xl font-bold tracking-tight text-white">
+                  {getAssetLabel(asset)}
+                </h1>
+              </div>
+              <p className="font-[var(--font-display)] text-xs uppercase tracking-[0.18em] text-slate-400">
+                {asset.service_type ? formatTitleCase(asset.service_type) : "Unknown service"} | {results.target}
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <HeroStatCard
+                label="Risk score"
+                value={
+                  typeof asset.assessment?.risk_score === "number"
+                    ? asset.assessment.risk_score.toFixed(1)
+                    : "Unavailable"
+                }
+                tone="danger"
+              />
+              <HeroStatCard
+                label="Posture"
+                value={tier ? formatTitleCase(tier) : "Unavailable"}
+                tone={tier === "QUANTUM_VULNERABLE" ? "danger" : tier === "PQC_TRANSITIONING" ? "accent" : "default"}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-0.5 overflow-hidden rounded-xl border border-white/10 bg-white/5 md:grid-cols-3 lg:grid-cols-6">
+            <SummaryRailTile label="Identity" value={asset.asset_id.slice(0, 12)} />
+            <SummaryRailTile label="Port / Protocol" value={`${asset.port} / ${asset.protocol.toUpperCase()}`} />
+            <SummaryRailTile label="Service" value={asset.service_type ? formatTitleCase(asset.service_type) : "Unknown"} />
+            <SummaryRailTile label="Tier" value={tier ? formatTitleCase(tier) : "Unavailable"} />
+            <SummaryRailTile label="Urgency" value={getUrgencyLabel(tier)} tone="danger" />
+            <SummaryRailTile label="Action Priority" value={getActionPriorityLabel(tier)} tone="accent" />
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#1a1c20]/80 p-6 lg:col-span-2">
+            <div className="absolute right-[-4rem] top-[-4rem] h-40 w-40 rounded-full bg-[#c31e00]/10 blur-3xl" />
+            <h3 className="mb-4 flex items-center gap-2 font-[var(--font-display)] text-lg font-bold text-white">
+              <ShieldAlert className="h-5 w-5 text-[#ffb4a5]" />
+              Why is this asset risky?
+            </h3>
+            <div className="space-y-4">
+              {riskSignals.map((signal, index) => (
+                <div key={`${signal}-${index}`} className="flex items-start gap-4">
+                  <div className="mt-1 h-2 w-2 rounded-full bg-[#ff4b2b] shadow-[0_0_8px_#ff4b2b]" />
+                  <p className="text-sm leading-7 text-[#b9ccb2]">{signal}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div className="clip-path-chamfer-tr rounded-xl border border-white/10 bg-[#282a2e]/80 p-6">
+              <h3 className="mb-4 flex items-center gap-2 font-[var(--font-display)] text-lg font-bold text-[#00FF41]">
+                <ShieldEllipsis className="h-5 w-5" />
+                Recommended next steps
+              </h3>
+              <div className="space-y-3">
+                {nextSteps.map((step, index) => (
+                  <div key={`${step}-${index}`} className="flex items-start gap-3 rounded-lg border border-white/8 bg-[#0c0e12]/80 p-3">
+                    <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-[#00FF41]" />
+                    <p className="text-xs uppercase tracking-[0.12em] text-slate-200">{step}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {assetSpecificDegradedModes.length ? (
+              <DegradedModePanel degradedModes={assetSpecificDegradedModes} />
+            ) : null}
+            <div className="rounded-xl border border-white/10 bg-[#1a1c20]/80 p-5">
+              <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
+                Navigation
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button asChild variant="outline" className="rounded-full px-5">
+                  <Link href={buildScanHref("/assets", results.scan_id)}>Asset catalog</Link>
+                </Button>
+                <Button asChild variant="ghost" className="rounded-full px-5">
+                  <Link href={buildScanHref("/risk-heatmap", results.scan_id)}>Back to heatmap</Link>
+                </Button>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <CompactInfoTile label="TLS" value={asset.assessment?.tls_version ?? "Unavailable"} />
+                <CompactInfoTile label="Runtime" value={formatDuration(results.elapsed_seconds)} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden">
+          <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="telemetry-panel overflow-hidden rounded-[28px] border border-white/8 bg-card/90 p-5 shadow-command">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -479,7 +623,10 @@ export function AssetWorkbench({
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0c0e12]/80">
+          <div className="flex flex-wrap border-b border-white/10 bg-[#1a1c20]/50">
           <TabButton
             label="CBOM"
             icon={FileJson2}
@@ -519,6 +666,7 @@ export function AssetWorkbench({
               )
             }
           />
+          </div>
         </div>
 
         {activeTab === "cbom" ? (
@@ -551,13 +699,13 @@ export function AssetWorkbench({
             {cbom.status === "ready" && cbom.data ? (
               <div className="space-y-5">
                 <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-                  <MetricCard label="Serial" value={cbom.data.serial_number} />
-                  <MetricCard label="Generated" value={formatTimestamp(cbom.data.created_at)} />
-                  <MetricCard
+                  <ArtifactMiniTile label="Serial" value={cbom.data.serial_number} />
+                  <ArtifactMiniTile label="Generated" value={formatTimestamp(cbom.data.created_at)} />
+                  <ArtifactMiniTile
                     label="Risk score"
                     value={String((cbom.data.cbom_json.quantumRiskSummary as Record<string, unknown> | undefined)?.overallScore ?? "Unavailable")}
                   />
-                  <MetricCard
+                  <ArtifactMiniTile
                     label="Tier"
                     value={String((cbom.data.cbom_json.quantumRiskSummary as Record<string, unknown> | undefined)?.tier ?? "Unavailable")}
                   />
@@ -622,7 +770,7 @@ export function AssetWorkbench({
                   onClick={() => void handleCopyPem()}
                   disabled={!certificate.data?.certificate_pem}
                 >
-                  <ClipboardCopy className="h-4 w-4" />
+                  <Copy className="h-4 w-4" />
                   {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy PEM"}
                 </Button>
                 <Button
@@ -809,7 +957,37 @@ export function AssetWorkbench({
           </div>
         ) : null}
 
-        <EventFeedPanel events={results.events} />
+        <div className="rounded-xl border border-white/10 bg-[#1a1c20]/80 p-5">
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
+              Scan runtime context
+            </p>
+            <span className="font-[var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-[#00FF41]">
+              {formatStage(results.stage)}
+            </span>
+          </div>
+          {results.events.length ? (
+            <div className="mt-4 space-y-3">
+              {[...results.events].slice(-4).reverse().map((event) => (
+                <div key={`${event.timestamp}-${event.message}`} className="rounded-lg border border-white/8 bg-[#0c0e12]/80 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-[var(--font-display)] text-[10px] uppercase tracking-[0.14em] text-slate-400">
+                      {formatStage(event.stage)}
+                    </span>
+                    <span className="font-[var(--font-display)] text-[9px] uppercase text-slate-500">
+                      {formatTimestamp(event.timestamp)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-[#b9ccb2]">{event.message}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm leading-6 text-slate-500">
+              No runtime events were persisted for this asset context.
+            </p>
+          )}
+        </div>
       </div>
     </MissionLayout>
   );
@@ -827,10 +1005,108 @@ function TabButton({
   onClick: () => void;
 }) {
   return (
-    <Button variant={active ? "default" : "outline"} className="rounded-full px-5" onClick={onClick}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 px-8 py-4 text-xs font-[var(--font-display)] uppercase tracking-[0.18em] transition-colors ${
+        active
+          ? "border-b-2 border-[#00FF41] text-[#00FF41]"
+          : "text-slate-500 hover:text-white"
+      }`}
+    >
       <Icon className="h-4 w-4" />
       {label}
-    </Button>
+    </button>
+  );
+}
+
+function HeroStatCard({
+  label,
+  value,
+  tone = "default",
+}: Readonly<{
+  label: string;
+  value: string;
+  tone?: "default" | "danger" | "accent";
+}>) {
+  return (
+    <div
+      className={`rounded-lg border px-4 py-2 text-center ${
+        tone === "danger"
+          ? "border-[#ffb4a5]/30 bg-[#93000a]/20"
+          : tone === "accent"
+            ? "border-[#00FF41]/20 bg-[#1e2024]"
+            : "border-white/10 bg-[#1e2024]"
+      }`}
+    >
+      <p className="font-[var(--font-display)] text-[10px] uppercase text-slate-400">{label}</p>
+      <p
+        className={`font-[var(--font-display)] text-2xl font-black ${
+          tone === "danger" ? "text-[#ffb4a5]" : tone === "accent" ? "text-[#00FF41]" : "text-white"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SummaryRailTile({
+  label,
+  value,
+  tone = "default",
+}: Readonly<{
+  label: string;
+  value: string;
+  tone?: "default" | "danger" | "accent";
+}>) {
+  return (
+    <div className="bg-[#1a1c20] p-4">
+      <p className="font-[var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </p>
+      <p
+        className={`mt-1 text-sm font-medium ${
+          tone === "danger" ? "text-[#ffb4a5]" : tone === "accent" ? "text-[#00FF41]" : "text-white"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function CompactInfoTile({
+  label,
+  value,
+}: Readonly<{
+  label: string;
+  value: string;
+}>) {
+  return (
+    <div className="rounded-lg border border-white/8 bg-[#0c0e12]/80 p-3">
+      <p className="font-[var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-medium text-white">{value}</p>
+    </div>
+  );
+}
+
+function ArtifactMiniTile({
+  label,
+  value,
+}: Readonly<{
+  label: string;
+  value: string;
+}>) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#1e2024] p-4">
+      <p className="font-[var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-sm text-white">{value}</p>
+    </div>
   );
 }
 

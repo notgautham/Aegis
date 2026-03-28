@@ -189,6 +189,10 @@
     clip-path: polygon(0% 0%, 92% 0%, 100% 25%, 100% 100%, 0% 100%);
   }
 
+  .clip-path-chamfer-tr {
+    clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 0 100%);
+  }
+
   .glow-sm {
     text-shadow: 0 0 10px rgba(0, 255, 65, 0.4);
   }
