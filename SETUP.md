@@ -1,123 +1,112 @@
 # 🛡️ Aegis: Project Setup Guide
 
-This guide provides step-by-step instructions to set up the **Aegis Post-Quantum Cryptography Intelligence Platform**.
+Follow these steps to set up the **Aegis Post-Quantum Cryptography Platform** on your local machine.
 
 ## 📋 Prerequisites
 
-Before starting, ensure you have the following installed:
-
-*   **Docker & Docker Compose**: [Install Docker Desktop](https://www.docker.com/products/docker-desktop/)
-*   **Git**: [Install Git](https://git-scm.com/downloads)
-*   **Python 3.11+**: For running the terminal simulation script.
+*   **Docker Desktop**: [Install Here](https://www.docker.com/products/docker-desktop/)
+*   **Git**: [Install Here](https://git-scm.com/downloads)
+*   **API Keys**: You will need keys for **Groq** (primary LLM) and **Jina AI** (primary Embeddings).
 
 ---
 
-## 🚀 1. Initial Repository Setup
+## 🔑 1. Environment Configuration
 
-Clone the repository and move into the project directory:
-
-```bash
-git clone https://github.com/notgautham/Aegis.git
-cd Aegis
-```
-
----
-
-## 🔑 2. Environment Configuration
-
-Aegis uses high-performance cloud providers for its Intelligence layer. Create a `.env` file in the root directory:
+Create a `.env` file in the root directory. Copy the template below and replace the placeholder keys with your own.
 
 ```ini
-# ── Database & Infrastructure ──────────────────────────
+# ── Database & Vector DB ───────────────────────────────
 DATABASE_URL=postgresql+asyncpg://aegis:aegis@postgres:5432/aegis
 QDRANT_URL=http://qdrant:6333
 QDRANT_COLLECTION_NAME=aegis_nist_docs
 DOCS_SOURCE_DIR=docs/nist
 
-# ── Application Settings ──────────────────────────────
+# ── Application ────────────────────────────────────────
 SECRET_KEY=change-me-in-production
 PROJECT_NAME=Aegis
 API_V1_STR=/api/v1
 SKIP_ENUMERATION=true
 
-# ── Intelligence Layer (Cloud-Only) ───────────────────
+# ── Cloud Intelligence (RAG) ──────────────────────────
 EMBEDDING_PROVIDER_MODE=cloud
 LLM_PROVIDER_MODE=cloud
 LLM_TIMEOUT_SECONDS=20.0
 EMBEDDING_TIMEOUT_SECONDS=20.0
 
-# LLM Providers (Primary: Groq | Fallback: OpenRouter)
-GROQ_API_KEY=your_groq_key
+# Groq (Primary LLM)
+GROQ_API_KEY=gsk_...
 GROQ_MODEL=llama-3.3-70b-versatile
 
-OPENROUTER_API_KEY=your_openrouter_key
-OPENROUTER_MODEL=google/gemma-3-27b-it
-
-# Embedding Providers (Primary: Jina | Fallback: Cohere)
-JINA_API_KEY=your_jina_key
+# Jina AI (Primary Embeddings)
+JINA_API_KEY=jina_...
 JINA_EMBEDDING_MODEL=jina-embeddings-v3
 
-COHERE_API_KEY=your_cohere_key
+# Fallbacks
+OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_MODEL=google/gemma-3-27b-it
+COHERE_API_KEY=...
 COHERE_EMBEDDING_MODEL=embed-english-v3.0
 ```
 
 ---
 
-## 🏗️ 3. Infrastructure Deployment (Docker)
+## 🏗️ 2. Infrastructure Deployment
 
-Aegis runs on a specialized **Alpine Linux** environment with a custom **OQS-patched OpenSSL** build for byte-level PQC detection.
+Aegis uses a custom **Alpine Linux** build with a pre-compiled **OQS-OpenSSL** binary.
 
-1.  **Start the services**:
+1.  **Launch the services**:
     ```bash
     docker compose up -d --build
     ```
-    *Note: The build compiles `liboqs` and the `oqs-provider` from source. It takes ~3-5 minutes.*
+    *Note: The first build compiles libraries from source and takes 3-5 minutes.*
 
 2.  **Verify the PQC Engine**:
     ```bash
     docker exec aegis-backend openssl-oqs list -providers
     ```
-    You should see `oqsprovider` in the active status list.
+    Confirm that `oqsprovider` appears in the active list.
 
 ---
 
-## 🗄️ 4. Initialization
+## 🗄️ 3. Initialization
 
-Initialize the database schema and the vector search index:
+Once the containers are running, initialize the database and the vector index.
 
-1.  **Run Migrations**:
+1.  **Apply Database Schema**:
     ```bash
     docker exec aegis-backend alembic upgrade head
     ```
 
-2.  **Ingest NIST Intelligence Corpus**:
+2.  **Ingest NIST Standards**:
+    This step embeds the NIST standard documents into Qdrant using Jina AI.
     ```bash
     docker exec aegis-backend python scripts/ingest_nist_docs.py
     ```
 
 ---
 
-## 🌐 5. Running Scans
+## 🌐 4. Usage
 
-### via Frontend Dashboard
-1.  Start the frontend: `cd frontend && npm install && npm run dev`
-2.  Access [http://localhost:3000](http://localhost:3000)
-3.  Enter a target (e.g., `discord.com`) and click **Launch Scan**.
+### Dashboard Access
+*   **Frontend UI:** `http://localhost:3000` (run `cd frontend && npm install && npm run dev`)
+*   **Backend API (Swagger):** `http://localhost:8000/docs`
 
-### via Terminal Simulation
-Aegis includes a robust terminal simulation tool for automated benchmarking:
+### Terminal Simulation
+Aegis includes a terminal-based benchmark tool to verify the entire pipeline instantly:
 ```bash
-# Set up a local venv
+# Setup venv
 python3 -m venv .venv
 source .venv/bin/activate
-pip install httpx
+pip install -r requirements.txt
 
-# Run the simulation
+# Run simulation
 python simulate_aegis.py
 ```
 
 ---
 
-## 📊 Access Points
-*   **Backend API (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
-*   **Vector DB Dashboard**: [http://localhost:6333/dashboard](http://localhost:6333/dashboard)
+## 🛠️ Troubleshooting
+
+*   **SSL Errors**: If cloud API calls fail, ensure the `backend/intelligence/cloud_utils.py` tunnel is active.
+*   **N/A Scores**: Ensure the target site is reachable. Try `github.com` as a verified target.
+*   **Docker Crash**: Ensure Docker Desktop has at least 4GB of RAM allocated.
