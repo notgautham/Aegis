@@ -12,7 +12,7 @@ Aegis is built for the **Harvest Now, Decrypt Later (HNDL)** problem. It helps s
 - deterministic quantum-risk scoring
 - CycloneDX 1.6 Cryptographic Bill of Materials (CBOM) generation
 - NIST-aligned PQC readiness classification
-- remediation bundle generation with HNDL timeline context
+- remediation bundle generation with HNDL timeline context 
 - compliance certificate issuance
 - operator, engineer, and executive reporting surfaces
 

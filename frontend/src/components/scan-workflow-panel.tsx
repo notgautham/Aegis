@@ -80,12 +80,26 @@ export function ScanWorkflowPanel({
   onSavedTargetSelect,
 }: ScanWorkflowPanelProps) {
   return (
-    <div className="overflow-hidden rounded-xl border border-white/5 bg-[#1a1c20]/70 backdrop-blur-2xl">
-      <div className="flex items-center justify-between border-b border-white/5 bg-[#282a2e] px-6 py-3">
-        <span className="font-[var(--font-display)] text-xs font-bold uppercase tracking-[0.2em] text-[#e2e2e8]">
-          Scan Workflow // Engine_v4
-        </span>
-        <span className="font-mono text-sm text-slate-500">...</span>
+    <div className="group relative overflow-hidden rounded-xl border border-[#00FF41]/30 bg-[#1a1c20]/80 backdrop-blur-2xl shadow-[0_0_30px_-5px_rgba(0,255,65,0.15)] ring-1 ring-[#00FF41]/10 transition-all duration-300 hover:border-[#00FF41]/50 hover:shadow-[0_0_40px_-5px_rgba(0,255,65,0.25)]">
+      {/* Subtle top glowing line */}
+      <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-transparent via-[#00FF41] to-transparent opacity-70" />
+
+      <div className="relative z-10 flex items-center justify-between border-b border-[#00FF41]/20 bg-gradient-to-r from-[#1e2024] to-[#1a1c20] px-6 py-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-2 w-2 items-center justify-center">
+            <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-[#00FF41] opacity-60"></span>
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#00FF41]"></span>
+          </div>
+          <span className="font-[var(--font-display)] text-xs font-bold uppercase tracking-[0.2em] text-[#00FF41] drop-shadow-[0_0_8px_rgba(0,255,65,0.5)]">
+            Scan Workflow // Engine_v4
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex h-1 w-12 items-center overflow-hidden rounded-full bg-[#00FF41]/10">
+            <div className="h-full w-1/3 animate-pulse rounded-full bg-[#00FF41]" />
+          </div>
+          <span className="font-mono text-[10px] tracking-widest text-[#00FF41]/50">READY</span>
+        </div>
       </div>
       <form
         className="space-y-4 p-6"
@@ -109,7 +123,7 @@ export function ScanWorkflowPanel({
               placeholder="example.com, 203.0.113.0/24, or 198.51.100.14"
               disabled={isSubmitting}
               autoComplete="off"
-              className="min-h-[112px] w-full rounded-lg border border-[#3b4b37]/30 bg-[#0c0e12] p-3 text-sm text-[#e2e2e8] placeholder:text-slate-600 outline-none focus:border-[#00FF41] focus:ring-1 focus:ring-[#00FF41]"
+              className="min-h-[112px] w-full rounded-lg border border-[#3b4b37]/30 bg-[#0c0e12]/80 p-3 text-sm text-[#e2e2e8] placeholder:text-slate-600 outline-none transition-all duration-200 hover:border-[#00FF41]/30 focus:border-[#00FF41] focus:bg-[#0c0e12] focus:ring-1 focus:ring-[#00FF41] focus:drop-shadow-[0_0_8px_rgba(0,255,65,0.2)]"
             />
           </div>
           <div className="space-y-4">
@@ -124,7 +138,7 @@ export function ScanWorkflowPanel({
                 id="scan-profile"
                 value={profile}
                 onChange={(event) => onProfileChange(event.target.value as ScanProfile)}
-                className="w-full appearance-none rounded-lg border border-[#3b4b37]/30 bg-[#0c0e12] p-3 text-sm text-[#e2e2e8] outline-none focus:border-[#00FF41] focus:ring-1 focus:ring-[#00FF41]"
+                className="w-full appearance-none rounded-lg border border-[#3b4b37]/30 bg-[#0c0e12]/80 p-3 text-sm text-[#e2e2e8] outline-none transition-all duration-200 hover:border-[#00FF41]/30 focus:border-[#00FF41] focus:bg-[#0c0e12] focus:ring-1 focus:ring-[#00FF41] focus:drop-shadow-[0_0_8px_rgba(0,255,65,0.2)]"
               >
                 {profiles.map((item) => (
                   <option key={item.id} value={item.id}>
@@ -135,7 +149,7 @@ export function ScanWorkflowPanel({
             </div>
             <Button
               type="submit"
-              className="w-full rounded-lg bg-[#00FF41] py-4 font-[var(--font-display)] font-bold uppercase tracking-[0.16em] text-[#003907] shadow-lg shadow-[#00FF41]/20 hover:bg-[#2aff63]"
+              className="group/btn w-full rounded-lg bg-[#00FF41] py-4 font-[var(--font-display)] font-bold uppercase tracking-[0.16em] text-[#003907] shadow-[0_0_15px_rgba(0,255,65,0.2)] transition-all duration-300 hover:scale-[1.01] hover:bg-[#2aff63] hover:shadow-[0_0_25px_rgba(0,255,65,0.4)]"
               disabled={isSubmitting}
             >
               {isSubmitting ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -102,13 +103,28 @@ export function ScanStatusCard({
   onManualRefresh,
   onClear,
 }: ScanStatusCardProps) {
-  const statusVariant = getStatusVariant(scan?.status ?? null);
   const progress = hasCompleteProgress(scan?.progress) ? scan.progress : null;
   const summary = scan?.summary ?? null;
   const events = recentEvents(scan?.events);
   const discoveryStillRunning =
     scan?.status === "running" && (progress?.assets_discovered ?? 0) === 0;
   const completionPercent = approximateStageProgress(scan);
+  const [elapsedNowMs, setElapsedNowMs] = useState(() => deriveElapsedMs(scan));
+
+  useEffect(() => {
+    setElapsedNowMs(deriveElapsedMs(scan));
+    if (!scan || (scan.status !== "pending" && scan.status !== "running")) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setElapsedNowMs(deriveElapsedMs(scan));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [scan]);
+
+  const elapsedLabel = useMemo(() => formatDuration(elapsedNowMs), [elapsedNowMs]);
 
   return (
     <Card className="relative overflow-hidden rounded-xl border border-white/5 bg-[#1a1c20]/70 shadow-2xl shadow-black/50 backdrop-blur-2xl">
@@ -150,6 +166,9 @@ export function ScanStatusCard({
                 <span className="font-[var(--font-display)] text-2xl font-bold text-[#e2e2e8]">
                   {completionPercent}%
                 </span>
+                <p className="mt-1 font-[var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                  Elapsed {elapsedLabel}
+                </p>
               </div>
             </div>
 
@@ -294,6 +313,50 @@ export function ScanStatusCard({
       </CardContent>
     </Card>
   );
+}
+
+function deriveElapsedMs(scan: ScanStatusResponse | null): number {
+  if (!scan) {
+    return 0;
+  }
+
+  if (typeof scan.elapsed_seconds === "number" && Number.isFinite(scan.elapsed_seconds)) {
+    if (scan.status === "pending" || scan.status === "running") {
+      const stageReference = scan.stage_started_at ?? scan.created_at;
+      if (stageReference) {
+        const sinceStageMs = Date.now() - new Date(stageReference).getTime();
+        if (Number.isFinite(sinceStageMs) && sinceStageMs >= 0) {
+          return Math.max(scan.elapsed_seconds * 1000, sinceStageMs);
+        }
+      }
+    }
+    return Math.max(scan.elapsed_seconds * 1000, 0);
+  }
+
+  const start = scan.created_at ? new Date(scan.created_at).getTime() : NaN;
+  if (!Number.isFinite(start)) {
+    return 0;
+  }
+
+  const end =
+    scan.status === "completed" || scan.status === "failed"
+      ? scan.completed_at
+        ? new Date(scan.completed_at).getTime()
+        : Date.now()
+      : Date.now();
+  return Math.max(end - start, 0);
+}
+
+function formatDuration(durationMs: number): string {
+  const totalSeconds = Math.max(Math.floor(durationMs / 1000), 0);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+  }
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
 function approximateStageProgress(scan: ScanStatusResponse | null): number {

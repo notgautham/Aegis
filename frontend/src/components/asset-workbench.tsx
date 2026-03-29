@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   Copy,
   Download,
@@ -424,7 +425,16 @@ export function AssetWorkbench({
   return (
     <MissionLayout activeSection="assets" contextScanId={results.scan_id} header={header}>
       <div className="space-y-8 pb-20">
-        <header className="mb-8">
+        <header className="mb-8 space-y-4">
+          <Link
+            href={buildScanHref("/assets", results.scan_id)}
+            className="inline-flex w-fit items-center gap-2 group text-slate-400 hover:text-[#00FF41] transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+            <span className="font-[var(--font-display)] text-xs font-bold uppercase tracking-[0.15em]">
+              Return to Inventory
+            </span>
+          </Link>
           <div className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
             <div>
               <div className="mb-1 flex items-center gap-3">
@@ -466,20 +476,25 @@ export function AssetWorkbench({
         </header>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#1a1c20]/80 p-6 lg:col-span-2">
-            <div className="absolute right-[-4rem] top-[-4rem] h-40 w-40 rounded-full bg-[#c31e00]/10 blur-3xl" />
-            <h3 className="mb-4 flex items-center gap-2 font-[var(--font-display)] text-lg font-bold text-white">
-              <ShieldAlert className="h-5 w-5 text-[#ffb4a5]" />
-              Why is this asset risky?
-            </h3>
-            <div className="space-y-4">
-              {riskSignals.map((signal, index) => (
-                <div key={`${signal}-${index}`} className="flex items-start gap-4">
-                  <div className="mt-1 h-2 w-2 rounded-full bg-[#ff4b2b] shadow-[0_0_8px_#ff4b2b]" />
-                  <p className="text-sm leading-7 text-[#b9ccb2]">{signal}</p>
-                </div>
-              ))}
+          <div className="flex flex-col gap-5 lg:col-span-2">
+            <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#1a1c20]/80 p-6">
+              <div className="absolute right-[-4rem] top-[-4rem] h-40 w-40 rounded-full bg-[#c31e00]/10 blur-3xl" />
+              <h3 className="mb-4 flex items-center gap-2 font-[var(--font-display)] text-lg font-bold text-white">
+                <ShieldAlert className="h-5 w-5 text-[#ffb4a5]" />
+                Why is this asset risky?
+              </h3>
+              <div className="space-y-4">
+                {riskSignals.map((signal, index) => (
+                  <div key={`${signal}-${index}`} className="flex items-start gap-4">
+                    <div className="mt-1 h-2 w-2 rounded-full bg-[#ff4b2b] shadow-[0_0_8px_#ff4b2b]" />
+                    <p className="text-sm leading-7 text-[#b9ccb2]">{signal}</p>
+                  </div>
+                ))}
+              </div>
             </div>
+            {assetSpecificDegradedModes.length ? (
+              <DegradedModePanel degradedModes={assetSpecificDegradedModes} />
+            ) : null}
           </div>
 
           <div className="space-y-5">
@@ -497,9 +512,6 @@ export function AssetWorkbench({
                 ))}
               </div>
             </div>
-            {assetSpecificDegradedModes.length ? (
-              <DegradedModePanel degradedModes={assetSpecificDegradedModes} />
-            ) : null}
             <div className="rounded-xl border border-white/10 bg-[#1a1c20]/80 p-5">
               <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
                 Navigation
@@ -631,52 +643,55 @@ export function AssetWorkbench({
             label="CBOM"
             icon={FileJson2}
             active={activeTab === "cbom"}
-            onClick={() =>
+            onClick={() => {
+              setActiveTab("cbom");
               updateAssetTab(
                 router,
                 assetId,
                 results?.scan_id ?? resolvedScanId ?? initialScanParam ?? null,
                 "cbom"
-              )
-            }
+              );
+            }}
           />
           <TabButton
             label="Certificate"
             icon={FileBadge2}
             active={activeTab === "certificate"}
-            onClick={() =>
+            onClick={() => {
+              setActiveTab("certificate");
               updateAssetTab(
                 router,
                 assetId,
                 results?.scan_id ?? resolvedScanId ?? initialScanParam ?? null,
                 "certificate"
-              )
-            }
+              );
+            }}
           />
           <TabButton
             label="HNDL & Remediation"
             icon={ShieldCheck}
             active={activeTab === "remediation"}
-            onClick={() =>
+            onClick={() => {
+              setActiveTab("remediation");
               updateAssetTab(
                 router,
                 assetId,
                 results?.scan_id ?? resolvedScanId ?? initialScanParam ?? null,
                 "remediation"
-              )
-            }
+              );
+            }}
           />
           </div>
         </div>
 
         {activeTab === "cbom" ? (
-          <div className="telemetry-panel overflow-hidden rounded-[28px] border border-white/8 bg-card/90 p-5 shadow-command">
-              <div className="mb-5 flex items-start justify-between gap-3">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#1a1c20]/80 p-6 shadow-lg">
+              <div className="mb-6 flex items-start justify-between gap-3">
                 <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-slate-500">
                   CBOM viewer
                 </p>
-                <h3 className="mt-3 text-2xl font-semibold text-foreground">
+                <h3 className="mt-2 font-[var(--font-display)] text-2xl font-bold text-white">
                   Cryptographic bill of materials
                 </h3>
                 </div>
@@ -713,19 +728,19 @@ export function AssetWorkbench({
                 <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
                   <StructuredCbomPanel cbom={cbom.data} />
                   <div className="space-y-4">
-                    <div className="rounded-[24px] border border-white/8 bg-black/15 p-4">
-                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                    <div className="rounded-lg border border-white/10 bg-[#0c0e12]/80 p-5">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
                         Raw JSON tree
                       </p>
                       <div className="mt-4">
                         <JsonTreeViewer value={cbom.data.cbom_json} />
                       </div>
                     </div>
-                    <div className="rounded-[24px] border border-white/8 bg-black/15 p-4">
-                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                    <div className="rounded-lg border border-white/10 bg-[#0c0e12]/80 p-5">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
                         Full JSON
                       </p>
-                      <pre className="mt-4 max-h-[26rem] overflow-auto rounded-[20px] border border-white/8 bg-black/25 p-4 text-xs leading-6 text-muted-foreground">
+                      <pre className="mt-4 max-h-[26rem] overflow-auto rounded-md border border-white/5 bg-[#1a1c20] p-4 text-xs leading-6 text-slate-300">
                         {JSON.stringify(cbom.data.cbom_json, null, 2)}
                       </pre>
                     </div>
@@ -749,13 +764,13 @@ export function AssetWorkbench({
         ) : null}
 
         {activeTab === "certificate" ? (
-          <div className="telemetry-panel overflow-hidden rounded-[28px] border border-white/8 bg-card/90 p-5 shadow-command">
-            <div className="mb-5 flex items-start justify-between gap-3">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#1a1c20]/80 p-6 shadow-lg">
+            <div className="mb-6 flex items-start justify-between gap-3">
               <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-slate-500">
                   Certificate viewer
                 </p>
-                <h3 className="mt-3 text-2xl font-semibold text-foreground">
+                <h3 className="mt-2 font-[var(--font-display)] text-2xl font-bold text-white">
                   Compliance certificate and extensions
                 </h3>
               </div>
@@ -794,23 +809,23 @@ export function AssetWorkbench({
                   <MetricCard label="Valid until" value={formatTimestamp(certificate.data.valid_until)} />
                 </div>
                 <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-                  <div className="rounded-[24px] border border-white/8 bg-black/15 p-5">
-                    <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                  <div className="rounded-lg border border-white/10 bg-[#0c0e12]/80 p-5">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
                       Extension payload
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {Object.entries(certificate.data.extensions_json ?? {}).map(([key, value]) => (
-                        <Badge key={key} variant="outline" className="max-w-full whitespace-normal px-3 py-1.5 text-left">
+                        <Badge key={key} variant="outline" className="max-w-full whitespace-normal px-3 py-1.5 text-left bg-[#1e2024] border-white/10 text-white">
                           {key}: {typeof value === "string" ? value : JSON.stringify(value)}
                         </Badge>
                       ))}
                     </div>
                   </div>
-                  <div className="rounded-[24px] border border-white/8 bg-black/15 p-4">
-                    <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                  <div className="rounded-lg border border-white/10 bg-[#0c0e12]/80 p-5">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
                       PEM payload
                     </p>
-                    <pre className="mt-4 max-h-[30rem] overflow-auto rounded-[20px] border border-white/8 bg-black/25 p-4 text-xs leading-6 text-muted-foreground">
+                    <pre className="mt-4 max-h-[30rem] overflow-auto rounded-md border border-white/5 bg-[#1a1c20] p-4 text-xs leading-6 text-slate-300">
                       {certificate.data.certificate_pem ?? "Certificate PEM unavailable."}
                     </pre>
                   </div>
@@ -833,13 +848,13 @@ export function AssetWorkbench({
         ) : null}
 
         {activeTab === "remediation" ? (
-          <div className="telemetry-panel overflow-hidden rounded-[28px] border border-white/8 bg-card/90 p-5 shadow-command">
-            <div className="mb-5 flex items-start justify-between gap-3">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#1a1c20]/80 p-6 shadow-lg">
+            <div className="mb-6 flex items-start justify-between gap-3">
               <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-slate-500">
                   HNDL & remediation
                 </p>
-                <h3 className="mt-3 text-2xl font-semibold text-foreground">
+                <h3 className="mt-2 font-[var(--font-display)] text-2xl font-bold text-white">
                   Timeline, patching, and migration guidance
                 </h3>
               </div>
@@ -861,8 +876,8 @@ export function AssetWorkbench({
                 </div>
                 <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
                   <div className="space-y-5">
-                    <div className="rounded-[24px] border border-white/8 bg-black/15 p-5">
-                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                    <div className="rounded-lg border border-white/10 bg-[#0c0e12]/80 p-5">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
                         HNDL timeline
                       </p>
                       {hndlEntries.length ? (
@@ -870,31 +885,33 @@ export function AssetWorkbench({
                           {hndlEntries.map((entry, index) => (
                             <div
                               key={`${String(entry.algorithm)}-${index}`}
-                              className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4"
+                              className="rounded-md border border-white/10 bg-[#1e2024] p-4"
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div>
-                                  <p className="text-base font-semibold text-foreground">
+                                  <p className="text-sm font-medium text-white">
                                     {String(entry.algorithm ?? "Unknown algorithm")}
                                   </p>
-                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                                  <p className="mt-1 text-xs leading-6 text-slate-400">
                                     Break year {String(entry.breakYear ?? "Unavailable")} · {String(entry.logicalQubits ?? "Unknown")} logical qubits
                                   </p>
                                 </div>
-                                <Badge variant="outline">{String(entry.source ?? "Citation")}</Badge>
+                                <Badge variant="outline" className="bg-[#1a1c20] border-white/10 text-white">{String(entry.source ?? "Citation")}</Badge>
                               </div>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <ArtifactStateCard
-                          title="No HNDL entries"
-                          description="The remediation bundle did not include a structured HNDL entry list."
-                        />
+                        <div className="mt-4">
+                          <ArtifactStateCard
+                            title="No HNDL entries"
+                            description="The remediation bundle did not include a structured HNDL entry list."
+                          />
+                        </div>
                       )}
                     </div>
-                    <div className="rounded-[24px] border border-white/8 bg-black/15 p-5">
-                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                    <div className="rounded-lg border border-white/10 bg-[#0c0e12]/80 p-5">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
                         Source citations
                       </p>
                       {citations.length ? (
@@ -902,39 +919,41 @@ export function AssetWorkbench({
                           {citations.map((citation, index) => (
                             <div
                               key={`${String(citation.title ?? "citation")}-${index}`}
-                              className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4"
+                              className="rounded-md border border-white/10 bg-[#1e2024] p-4"
                             >
-                              <p className="text-sm font-semibold text-foreground">
+                              <p className="text-sm font-medium text-white">
                                 {String(citation.title ?? "Untitled source")}
                               </p>
-                              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                              <p className="mt-2 text-xs leading-6 text-slate-400">
                                 {String(citation.section ?? "Section unavailable")}
                               </p>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <ArtifactStateCard
-                          title="No citations available"
-                          description="The remediation bundle did not include structured source citations."
-                        />
+                        <div className="mt-4">
+                          <ArtifactStateCard
+                            title="No citations available"
+                            description="The remediation bundle did not include structured source citations."
+                          />
+                        </div>
                       )}
                     </div>
                   </div>
                   <div className="space-y-5">
-                    <div className="rounded-[24px] border border-white/8 bg-black/15 p-4">
-                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                    <div className="rounded-lg border border-white/10 bg-[#0c0e12]/80 p-5">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
                         Patch configuration
                       </p>
-                      <pre className="mt-4 max-h-[18rem] overflow-auto rounded-[20px] border border-white/8 bg-black/25 p-4 text-xs leading-6 text-muted-foreground">
+                      <pre className="mt-4 max-h-[18rem] overflow-auto rounded-md border border-white/5 bg-[#1a1c20] p-4 text-xs leading-6 text-slate-300">
                         {remediation.data.patch_config ?? "Patch configuration unavailable."}
                       </pre>
                     </div>
-                    <div className="rounded-[24px] border border-white/8 bg-black/15 p-4">
-                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                    <div className="rounded-lg border border-white/10 bg-[#0c0e12]/80 p-5">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
                         Migration roadmap
                       </p>
-                      <pre className="mt-4 max-h-[22rem] overflow-auto whitespace-pre-wrap rounded-[20px] border border-white/8 bg-black/25 p-4 text-sm leading-7 text-muted-foreground">
+                      <pre className="mt-4 max-h-[22rem] overflow-auto whitespace-pre-wrap rounded-md border border-white/5 bg-[#1a1c20] p-4 text-sm leading-7 text-slate-300">
                         {remediation.data.migration_roadmap ?? "Migration roadmap unavailable."}
                       </pre>
                     </div>
@@ -1162,19 +1181,19 @@ function StructuredCbomPanel({ cbom }: { cbom: CbomResponse }) {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-[24px] border border-white/8 bg-black/15 p-5">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+      <div className="rounded-lg border border-white/10 bg-[#0c0e12]/80 p-5">
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
           Crypto properties
         </p>
-        <pre className="mt-4 whitespace-pre-wrap rounded-[20px] border border-white/8 bg-black/25 p-4 text-sm leading-7 text-muted-foreground">
+        <pre className="mt-4 whitespace-pre-wrap rounded-md border border-white/5 bg-[#1a1c20] p-4 text-sm leading-7 text-slate-300">
           {JSON.stringify(cryptoProperties, null, 2)}
         </pre>
       </div>
-      <div className="rounded-[24px] border border-white/8 bg-black/15 p-5">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+      <div className="rounded-lg border border-white/10 bg-[#0c0e12]/80 p-5">
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
           Quantum risk summary
         </p>
-        <pre className="mt-4 whitespace-pre-wrap rounded-[20px] border border-white/8 bg-black/25 p-4 text-sm leading-7 text-muted-foreground">
+        <pre className="mt-4 whitespace-pre-wrap rounded-md border border-white/5 bg-[#1a1c20] p-4 text-sm leading-7 text-slate-300">
           {JSON.stringify(quantumRiskSummary, null, 2)}
         </pre>
       </div>
