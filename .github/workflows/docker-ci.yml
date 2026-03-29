@@ -1,0 +1,36 @@
+name: Docker CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'docker/**'
+      - 'docker-compose.yml'
+      - 'requirements.txt'
+      - '.github/workflows/docker-ci.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'docker/**'
+      - 'docker-compose.yml'
+      - 'requirements.txt'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Test backend image build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.oqs
+          push: false
+          tags: aegis-backend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

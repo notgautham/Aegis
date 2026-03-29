@@ -7,7 +7,6 @@ from .patch_generator import PatchGenerator
 from .rag_orchestrator import RagOrchestrationError, RagOrchestrator
 from .retrieval import (
     CorpusSetupError,
-    DeterministicLocalEmbeddingProvider,
     RetrievalError,
     RetrievalService,
     create_embedding_provider,
@@ -28,7 +27,6 @@ from .types import (
 __all__ = [
     "CorpusChunk",
     "CorpusSetupError",
-    "DeterministicLocalEmbeddingProvider",
     "HndlCalculationError",
     "HndlCalculator",
     "HndlTimelineEntry",

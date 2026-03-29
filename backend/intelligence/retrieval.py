@@ -51,35 +51,6 @@ class _LoadedDocument:
     section: str | None = None
 
 
-class DeterministicLocalEmbeddingProvider:
-    """Small deterministic local embedding model for fallback retrieval."""
-
-    def __init__(self, *, model_name: str = "deterministic-hash-v1", dimension: int = 256) -> None:
-        self.model_name = model_name
-        self.dimension = dimension
-
-    def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        return [self._embed_one(text) for text in texts]
-
-    def _embed_one(self, text: str) -> list[float]:
-        vector = [0.0] * self.dimension
-        tokens = _tokenize(text)
-        if not tokens:
-            return vector
-
-        counts = Counter(tokens)
-        for token, count in counts.items():
-            digest = hashlib.sha256(token.encode("utf-8")).digest()
-            index = int.from_bytes(digest[:2], "big") % self.dimension
-            sign = 1.0 if digest[2] % 2 == 0 else -1.0
-            vector[index] += sign * float(count)
-
-        norm = math.sqrt(sum(value * value for value in vector))
-        if norm == 0:
-            return vector
-        return [value / norm for value in vector]
-
-
 class OpenRouterEmbeddingProvider:
     """OpenAI-compatible embedding client pointed at an OpenRouter-style endpoint."""
 
@@ -114,6 +85,105 @@ class OpenRouterEmbeddingProvider:
         return embeddings
 
 
+class JinaEmbeddingProvider:
+    """Jina AI embedding client."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        model: str,
+        timeout_seconds: float,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.model = model
+        self.timeout_seconds = timeout_seconds
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        # For simplicity in this architecture, we use a generic task or no task
+        # Jina v3 performs well without explicit task, or we could default to retrieval.passage
+        response = httpx.post(
+            f"{self.base_url}/embeddings",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.model,
+                "input": list(texts),
+                "task": "retrieval.passage" # Default to passage for generic use
+            },
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        embeddings = [item["embedding"] for item in payload["data"]]
+        if not embeddings:
+            raise RetrievalError("Jina AI returned no vectors.")
+        return embeddings
+
+
+class CohereEmbeddingProvider:
+    """Cohere embedding client (v2 API)."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        model: str,
+        timeout_seconds: float,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.model = model
+        self.timeout_seconds = timeout_seconds
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        response = httpx.post(
+            f"{self.base_url}/embed",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.model,
+                "texts": list(texts),
+                "input_type": "search_document",
+                "embedding_types": ["float"],
+            },
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        embeddings = payload["embeddings"]["float"]
+        if not embeddings:
+            raise RetrievalError("Cohere returned no vectors.")
+        return embeddings
+
+
+class FallbackEmbeddingProvider:
+    """A wrapper that tries multiple embedding providers in order."""
+
+    def __init__(
+        self,
+        providers: Sequence[Any],
+    ) -> None:
+        self.providers = tuple(providers)
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        last_error: Exception | None = None
+        for provider in self.providers:
+            try:
+                return provider.embed(texts)
+            except (httpx.HTTPError, httpx.TimeoutException, RetrievalError) as e:
+                last_error = e
+                continue
+        raise RetrievalError(f"All embedding providers failed. Last error: {last_error}")
+
+
 class RetrievalService:
     """Coordinate corpus ingestion and grounded retrieval against Qdrant."""
 
@@ -125,7 +195,7 @@ class RetrievalService:
         *,
         client: QdrantClient,
         collection_name: str,
-        embedding_provider: DeterministicLocalEmbeddingProvider | OpenRouterEmbeddingProvider,
+        embedding_provider: Any,
         default_top_k: int = 5,
     ) -> None:
         self.client = client
@@ -376,22 +446,45 @@ class RetrievalService:
 
 def create_embedding_provider(
     settings: Settings | None = None,
-) -> DeterministicLocalEmbeddingProvider | OpenRouterEmbeddingProvider:
-    """Return the configured embedding provider, defaulting to local deterministic embeddings."""
+) -> Any:
+    """Return the configured cloud embedding provider with fallbacks."""
     configured = settings or get_settings()
-    if (
-        configured.EMBEDDING_PROVIDER_MODE.lower() == "cloud"
-        and configured.OPENROUTER_API_KEY
-    ):
-        return OpenRouterEmbeddingProvider(
-            base_url=configured.OPENROUTER_BASE_URL,
-            api_key=configured.OPENROUTER_API_KEY,
-            model=configured.OPENROUTER_EMBEDDING_MODEL,
-            timeout_seconds=configured.EMBEDDING_TIMEOUT_SECONDS,
+    providers = []
+
+    if getattr(configured, "JINA_API_KEY", None):
+        providers.append(
+            JinaEmbeddingProvider(
+                base_url=configured.JINA_BASE_URL,
+                api_key=configured.JINA_API_KEY,
+                model=configured.JINA_EMBEDDING_MODEL,
+                timeout_seconds=configured.EMBEDDING_TIMEOUT_SECONDS,
+            )
         )
-    return DeterministicLocalEmbeddingProvider(
-        model_name=configured.LOCAL_EMBEDDING_MODEL
-    )
+
+    if getattr(configured, "COHERE_API_KEY", None):
+        providers.append(
+            CohereEmbeddingProvider(
+                base_url=configured.COHERE_BASE_URL,
+                api_key=configured.COHERE_API_KEY,
+                model=configured.COHERE_EMBEDDING_MODEL,
+                timeout_seconds=configured.EMBEDDING_TIMEOUT_SECONDS,
+            )
+        )
+
+    if getattr(configured, "OPENROUTER_API_KEY", None):
+        providers.append(
+            OpenRouterEmbeddingProvider(
+                base_url=configured.OPENROUTER_BASE_URL,
+                api_key=configured.OPENROUTER_API_KEY,
+                model=configured.OPENROUTER_EMBEDDING_MODEL,
+                timeout_seconds=configured.EMBEDDING_TIMEOUT_SECONDS,
+            )
+        )
+
+    if not providers:
+        raise RetrievalError("No cloud embedding providers (Jina, Cohere, or OpenRouter) configured.")
+
+    return FallbackEmbeddingProvider(providers)
 
 
 def build_citation_payload(chunks: Sequence[RetrievedChunk]) -> dict[str, Any]:

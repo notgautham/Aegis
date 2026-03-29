@@ -32,13 +32,26 @@ class Settings(BaseSettings):
     DOCS_SOURCE_DIR: str = "docs/nist"
 
     # ── LLM / RAG ──────────────────────────────────────
-    EMBEDDING_PROVIDER_MODE: str = "local"
-    LOCAL_EMBEDDING_MODEL: str = "deterministic-hash-v1"
+    EMBEDDING_PROVIDER_MODE: str = "cloud"
+    
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_API_KEY: str = ""
-    OPENROUTER_MODEL: str = "openai/gpt-4o-mini"
+    OPENROUTER_MODEL: str = "google/gemma-3-27b-it"
     OPENROUTER_EMBEDDING_MODEL: str = "text-embedding-3-small"
-    LLM_PROVIDER_MODE: str = "deterministic"
+    
+    JINA_BASE_URL: str = "https://api.jina.ai/v1"
+    JINA_API_KEY: str = ""
+    JINA_EMBEDDING_MODEL: str = "jina-embeddings-v3"
+    
+    COHERE_BASE_URL: str = "https://api.cohere.com/v2"
+    COHERE_API_KEY: str = ""
+    COHERE_EMBEDDING_MODEL: str = "embed-english-v3.0"
+    
+    LLM_PROVIDER_MODE: str = "cloud"
     RAG_TOP_K: int = 5
     LLM_TIMEOUT_SECONDS: float = 15.0
     EMBEDDING_TIMEOUT_SECONDS: float = 15.0

@@ -37,24 +37,39 @@ class RoadmapGenerator:
             raise RoadmapGenerationError("Retrieved context is required for roadmap generation.")
 
         citations = build_citation_payload(retrieved_chunks)
-        if (
-            self.settings.LLM_PROVIDER_MODE.lower() == "cloud"
-            and self.settings.OPENROUTER_API_KEY
-        ):
-            try:
-                content = self._generate_with_provider(
-                    remediation_input=remediation_input,
-                    retrieved_chunks=retrieved_chunks,
-                    hndl_timeline=hndl_timeline,
-                    patch=patch,
-                )
-                return RoadmapResult(
-                    content=content,
-                    citations=citations,
-                    used_deterministic_fallback=False,
-                )
-            except (httpx.HTTPError, httpx.TimeoutException, ValueError):
-                pass
+        if self.settings.LLM_PROVIDER_MODE.lower() == "cloud":
+            providers = []
+            if getattr(self.settings, "GROQ_API_KEY", None):
+                providers.append((
+                    self.settings.GROQ_BASE_URL,
+                    self.settings.GROQ_API_KEY,
+                    self.settings.GROQ_MODEL
+                ))
+            if getattr(self.settings, "OPENROUTER_API_KEY", None):
+                providers.append((
+                    self.settings.OPENROUTER_BASE_URL,
+                    self.settings.OPENROUTER_API_KEY,
+                    self.settings.OPENROUTER_MODEL
+                ))
+
+            for base_url, api_key, model in providers:
+                try:
+                    content = self._generate_with_provider(
+                        remediation_input=remediation_input,
+                        retrieved_chunks=retrieved_chunks,
+                        hndl_timeline=hndl_timeline,
+                        patch=patch,
+                        base_url=base_url,
+                        api_key=api_key,
+                        model=model,
+                    )
+                    return RoadmapResult(
+                        content=content,
+                        citations=citations,
+                        used_deterministic_fallback=False,
+                    )
+                except (httpx.HTTPError, httpx.TimeoutException, ValueError):
+                    continue
 
         return RoadmapResult(
             content=self._build_deterministic_stub(
@@ -74,6 +89,9 @@ class RoadmapGenerator:
         retrieved_chunks: Sequence[RetrievedChunk],
         hndl_timeline: HndlTimelineResult,
         patch: PatchArtifact,
+        base_url: str,
+        api_key: str,
+        model: str,
     ) -> str:
         documents = build_langchain_documents(retrieved_chunks)
         context = "\n\n".join(
@@ -86,13 +104,13 @@ class RoadmapGenerator:
             raise ValueError("No retrieval context could be constructed for the provider call.")
 
         response = httpx.post(
-            f"{self.settings.OPENROUTER_BASE_URL.rstrip('/')}/chat/completions",
+            f"{base_url.rstrip('/')}/chat/completions",
             headers={
-                "Authorization": f"Bearer {self.settings.OPENROUTER_API_KEY}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": self.settings.OPENROUTER_MODEL,
+                "model": model,
                 "messages": [
                     {
                         "role": "system",
