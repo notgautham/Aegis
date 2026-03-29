@@ -36,6 +36,7 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+.ruff_cache/
 
 # ── Node (frontend is in frontend/.gitignore) ─────────
 node_modules/
