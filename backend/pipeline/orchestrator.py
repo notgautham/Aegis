@@ -39,6 +39,11 @@ from backend.discovery import (
     TLSProbeResult,
     TLSScanTarget,
     ValidatedHostname,
+    VPNProbe,
+    VPNProbeResult,
+    APIInspector,
+    APIInspectionResult,
+    URLProbeTarget,
     aggregate_assets,
 )
 from backend.discovery.dns_enumerator import DNSEnumerationError
@@ -230,13 +235,15 @@ class PipelineOrchestrator:
         rag_orchestrator: RagOrchestrator | None = None,
         certificate_signer: CertificateSigner | None = None,
     ) -> None:
-        settings = get_settings()
+        self.settings = get_settings()
         self.session_factory = session_factory or async_session_factory
         self.runtime_store = runtime_store
         self.enumerator = enumerator or AmassEnumerator()
         self.dns_validator = dns_validator or DNSxValidator()
         self.port_scanner = port_scanner or PortScanner()
         self.tls_probe = tls_probe or TLSProbe()
+        self.vpn_probe = VPNProbe()
+        self.api_inspector = APIInspector()
         self.certificate_extractor = certificate_extractor or CertificateExtractor()
         self.certificate_analyzer = certificate_analyzer or CertificateAnalyzer()
         self.rules_engine = rules_engine or RulesEngine()
@@ -244,10 +251,10 @@ class PipelineOrchestrator:
         self.certificate_signer = certificate_signer or CertificateSigner()
         self.rag_orchestrator = rag_orchestrator or RagOrchestrator(
             retrieval_service=RetrievalService(
-                client=QdrantClient(url=settings.QDRANT_URL),
-                collection_name=settings.QDRANT_COLLECTION_NAME,
-                embedding_provider=create_embedding_provider(settings),
-                default_top_k=settings.RAG_TOP_K,
+                client=QdrantClient(url=self.settings.QDRANT_URL),
+                collection_name=self.settings.QDRANT_COLLECTION_NAME,
+                embedding_provider=create_embedding_provider(self.settings),
+                default_top_k=self.settings.RAG_TOP_K,
             )
         )
 
@@ -438,11 +445,28 @@ class PipelineOrchestrator:
             port_findings=port_findings,
             scan_id=scan_id,
         )
+        
+        # Call optional probes for VPN and API metadata
+        vpn_results = []
+        for pf in port_findings:
+            if pf.service_type == ServiceType.VPN:
+                vpn_results.append(self.vpn_probe.probe(pf.ip_address, pf.port, pf.protocol))
+        
+        api_results = []
+        # Check all discovered web-like ports for JWT/mTLS
+        for pf in port_findings:
+            if pf.port in {80, 443, 8080, 8443}:
+                scheme = "https" if pf.port in {443, 8443} else "http"
+                target_url = f"{scheme}://{pf.ip_address}:{pf.port}"
+                api_results.append(await self.api_inspector.inspect(URLProbeTarget(url=target_url)))
+
         aggregated_assets = aggregate_assets(
             target,
             validated_hostnames,
             port_findings,
             tls_results,
+            vpn_results,
+            api_results,
         )
         self._add_runtime_event(
             scan_id,
@@ -474,40 +498,48 @@ class PipelineOrchestrator:
             return []
 
         hostnames = {scope.domain}
-        self._set_runtime_stage(
-            scan_id,
-            stage="enumerating_domains",
-            detail=target,
-            message=f"Enumerating hostnames for {target}.",
-        )
-        try:
-            enumerated = await self.enumerator.enumerate(target)
-            hostnames.update(record.hostname for record in enumerated)
+        if self.settings.SKIP_ENUMERATION:
             self._add_runtime_event(
                 scan_id,
-                f"Enumeration completed with {len(hostnames)} hostname candidate(s).",
-                kind="success",
+                f"Domain enumeration skipped via configuration; using root target only: {target}",
+                kind="info",
                 stage="enumerating_domains",
             )
-        except DNSEnumerationError as exc:
-            logger.warning(
-                "Domain enumeration unavailable for %s; continuing with root target only. Reason: %s",
-                target,
-                exc,
-            )
-            self._add_degraded_mode(
+        else:
+            self._set_runtime_stage(
                 scan_id,
-                f"Domain enumeration unavailable for {target}; continued with the root target only.",
+                stage="enumerating_domains",
+                detail=target,
+                message=f"Enumerating hostnames for {target}.",
             )
-        except Exception:
-            logger.exception(
-                "Domain enumeration failed for %s; continuing with root target only.",
-                target,
-            )
-            self._add_degraded_mode(
-                scan_id,
-                f"Domain enumeration failed for {target}; continued with the root target only.",
-            )
+            try:
+                enumerated = await self.enumerator.enumerate(target)
+                hostnames.update(record.hostname for record in enumerated)
+                self._add_runtime_event(
+                    scan_id,
+                    f"Enumeration completed with {len(hostnames)} hostname candidate(s).",
+                    kind="success",
+                    stage="enumerating_domains",
+                )
+            except DNSEnumerationError as exc:
+                logger.warning(
+                    "Domain enumeration unavailable for %s; continuing with root target only. Reason: %s",
+                    target,
+                    exc,
+                )
+                self._add_degraded_mode(
+                    scan_id,
+                    f"Domain enumeration unavailable for {target}; continued with the root target only.",
+                )
+            except Exception:
+                logger.exception(
+                    "Domain enumeration failed for %s; continuing with root target only.",
+                    target,
+                )
+                self._add_degraded_mode(
+                    scan_id,
+                    f"Domain enumeration failed for {target}; continued with the root target only.",
+                )
 
         self._set_runtime_stage(
             scan_id,
@@ -821,6 +853,18 @@ class PipelineOrchestrator:
                             kind="success",
                             stage="generating_remediation",
                         )
+                        # Enrich CBOM with HNDL info
+                        hndl = remediation_bundle.hndl_timeline
+                        if hndl:
+                            urgency = hndl.get("urgency")
+                            entries = hndl.get("entries", [])
+                            break_year = min((e["breakYear"] for e in entries), default=None)
+                            
+                            updated_json = dict(cbom_document.cbom_json)
+                            updated_json["quantumRiskSummary"]["hndlUrgency"] = urgency
+                            updated_json["quantumRiskSummary"]["estimatedBreakYear"] = break_year
+                            
+                            await cbom_repository.update(cbom_document.id, cbom_json=updated_json)
                 except Exception:
                     logger.exception(
                         "Remediation generation failed for asset %s (%s:%s).",
@@ -879,7 +923,26 @@ class PipelineOrchestrator:
         analyzed_certificates: Sequence[Any],
     ) -> _AssessmentInputs:
         if not tls_result.cipher_suite:
-            raise ValueError("TLS result is missing a cipher suite.")
+            # HANDSHAKE FAILURE CASE: Return max risk 100.0
+            risk = calculate_risk_score(
+                kex_vulnerability=1.0,
+                sig_vulnerability=1.0,
+                sym_vulnerability=1.0,
+                tls_vulnerability=1.0,
+            )
+            return _AssessmentInputs(
+                tls_version="Handshake Failed",
+                cipher_suite="BROKEN",
+                kex_algorithm="UNKNOWN",
+                auth_algorithm="UNKNOWN",
+                enc_algorithm="UNKNOWN",
+                mac_algorithm="UNKNOWN",
+                kex_vulnerability=1.0,
+                sig_vulnerability=1.0,
+                sym_vulnerability=1.0,
+                tls_vulnerability=1.0,
+                risk_score=100.0,
+            )
 
         tls_version = tls_result.tls_version
         if tls_version and "1.3" in tls_version:
@@ -941,7 +1004,9 @@ class PipelineOrchestrator:
                 or getattr(leaf_certificate, "signature_algorithm", None),
             )
             group_name = (
-                metadata.get("group_name")
+                metadata.get("kex_algorithm")
+                or metadata.get("negotiated_group")
+                or metadata.get("group_name")
                 or metadata.get("key_exchange")
                 or metadata.get("curve_name")
                 or "X25519"

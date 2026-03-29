@@ -4,12 +4,11 @@ This guide provides step-by-step instructions to set up the **Aegis Post-Quantum
 
 ## 📋 Prerequisites
 
-Before starting, ensure you have the following installed on your machine:
+Before starting, ensure you have the following installed:
 
 *   **Docker & Docker Compose**: [Install Docker Desktop](https://www.docker.com/products/docker-desktop/)
 *   **Git**: [Install Git](https://git-scm.com/downloads)
-*   **Python 3.11+** (Optional, for local scripting/testing)
-*   **Node.js 20+** (Optional, for local frontend development)
+*   **Python 3.11+**: For running the terminal simulation script.
 
 ---
 
@@ -26,13 +25,7 @@ cd Aegis
 
 ## 🔑 2. Environment Configuration
 
-Aegis relies on several cloud providers for its Intelligence (RAG) and Remediation layers.
-
-1.  Create a `.env` file in the root directory:
-    ```bash
-    touch .env
-    ```
-2.  Copy and paste the following configuration, ensuring your API keys are correct:
+Aegis uses high-performance cloud providers for its Intelligence layer. Create a `.env` file in the root directory:
 
 ```ini
 # ── Database & Infrastructure ──────────────────────────
@@ -45,6 +38,7 @@ DOCS_SOURCE_DIR=docs/nist
 SECRET_KEY=change-me-in-production
 PROJECT_NAME=Aegis
 API_V1_STR=/api/v1
+SKIP_ENUMERATION=true
 
 # ── Intelligence Layer (Cloud-Only) ───────────────────
 EMBEDDING_PROVIDER_MODE=cloud
@@ -71,70 +65,59 @@ COHERE_EMBEDDING_MODEL=embed-english-v3.0
 
 ## 🏗️ 3. Infrastructure Deployment (Docker)
 
-Aegis uses a specialized Docker environment that includes a custom build of **OpenSSL patched for Open-Quantum-Safe (OQS)**.
+Aegis runs on a specialized **Alpine Linux** environment with a custom **OQS-patched OpenSSL** build for byte-level PQC detection.
 
 1.  **Start the services**:
     ```bash
     docker compose up -d --build
     ```
-    *Note: The first build will take 3-5 minutes as it compiles `liboqs` and the `oqs-provider` from source.*
+    *Note: The build compiles `liboqs` and the `oqs-provider` from source. It takes ~3-5 minutes.*
 
-2.  **Verify the containers are running**:
+2.  **Verify the PQC Engine**:
     ```bash
-    docker compose ps
+    docker exec aegis-backend openssl-oqs list -providers
     ```
-    You should see `aegis-backend`, `aegis-postgres`, and `aegis-qdrant` in a `Running` or `Up` state.
+    You should see `oqsprovider` in the active status list.
 
 ---
 
-## 🗄️ 4. Database & Intelligence Initialization
+## 🗄️ 4. Initialization
 
-Once the containers are up, you must initialize the schema and the search index.
+Initialize the database schema and the vector search index:
 
-1.  **Run Database Migrations**:
+1.  **Run Migrations**:
     ```bash
     docker exec aegis-backend alembic upgrade head
     ```
 
 2.  **Ingest NIST Intelligence Corpus**:
-    This step embeds the NIST post-quantum standard documents into the Qdrant vector database using Jina AI.
     ```bash
     docker exec aegis-backend python scripts/ingest_nist_docs.py
     ```
 
 ---
 
-## 🌐 5. Accessing the Platform
+## 🌐 5. Running Scans
 
-*   **Backend API Documentation (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
-*   **Frontend Dashboard**: [http://localhost:3000](http://localhost:3000)
-*   **Qdrant Dashboard**: [http://localhost:6333/dashboard](http://localhost:6333/dashboard)
+### via Frontend Dashboard
+1.  Start the frontend: `cd frontend && npm install && npm run dev`
+2.  Access [http://localhost:3000](http://localhost:3000)
+3.  Enter a target (e.g., `discord.com`) and click **Launch Scan**.
 
----
-
-## 🧪 6. Running an Initial Scan
-
-To verify everything is working, you can trigger a test scan via the API:
-
+### via Terminal Simulation
+Aegis includes a robust terminal simulation tool for automated benchmarking:
 ```bash
-curl -X 'POST' \
-  'http://localhost:8000/api/v1/scan/jobs' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "target": "google.com",
-  "scan_type": "discovery"
-}'
-```
+# Set up a local venv
+python3 -m venv .venv
+source .venv/bin/activate
+pip install httpx
 
-Check the logs to see the pipeline in action:
-```bash
-docker compose logs -f backend
+# Run the simulation
+python simulate_aegis.py
 ```
 
 ---
 
-## 🛠️ Troubleshooting
-
-*   **Docker Daemon Error**: Ensure Docker Desktop is running.
-*   **404 Model Not Found**: Verify that your `GROQ_MODEL` and `OPENROUTER_MODEL` names match the current provider availability.
-*   **Connection Refused**: If the backend fails to start, check logs (`docker compose logs backend`) for `ImportError` or configuration issues.
+## 📊 Access Points
+*   **Backend API (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
+*   **Vector DB Dashboard**: [http://localhost:6333/dashboard](http://localhost:6333/dashboard)

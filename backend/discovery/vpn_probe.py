@@ -19,9 +19,11 @@ class VPNProbe:
         if protocol.lower() == "udp" and port in {500, 4500}:
             detected_protocol = "ikev2"
             details["phase"] = "SA_INIT candidate"
+            details["analysis_scope"] = "partial"
         elif port == 1194:
             detected_protocol = "openvpn"
             details["transport"] = protocol.lower()
+            details["analysis_scope"] = "partial"
 
         return VPNProbeResult(
             ip_address=ip_address,

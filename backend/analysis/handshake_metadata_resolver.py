@@ -49,6 +49,7 @@ def resolve_tls13_handshake_metadata(metadata: Mapping[str, object]) -> Resolved
 def _resolve_kex(metadata: Mapping[str, object]) -> tuple[str | None, str]:
     """Resolve the TLS 1.3 key exchange/group from nested metadata."""
     candidates = (
+        ("tmp_key", metadata),
         ("kex_algorithm", metadata),
         ("key_exchange", metadata),
         ("group_name", metadata),
@@ -69,6 +70,8 @@ def _resolve_kex(metadata: Mapping[str, object]) -> tuple[str | None, str]:
             "key_exchange",
             "group_name",
             "curve_name",
+            "negotiated_group",
+            "tmp_key",
         )
         if value:
             return canonicalize_algorithm("kex", str(value)), source

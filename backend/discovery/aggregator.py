@@ -14,7 +14,14 @@ from dataclasses import dataclass
 from typing import Iterable
 from urllib.parse import urlsplit
 
-from backend.discovery.types import AggregatedAsset, PortFinding, TLSProbeResult, ValidatedHostname
+from backend.discovery.types import (
+    APIInspectionResult,
+    AggregatedAsset,
+    PortFinding,
+    TLSProbeResult,
+    VPNProbeResult,
+    ValidatedHostname,
+)
 from backend.models.enums import ServiceType
 
 
@@ -152,6 +159,8 @@ def aggregate_assets(
     validated_hostnames: Iterable[ValidatedHostname],
     port_findings: Iterable[PortFinding],
     tls_probe_results: Iterable[TLSProbeResult] = (),
+    vpn_probe_results: Iterable[VPNProbeResult] = (),
+    api_inspection_results: Iterable[APIInspectionResult] = (),
 ) -> list[AggregatedAsset]:
     """
     Build a deduplicated list of in-scope cryptographic surfaces.
@@ -242,7 +251,39 @@ def aggregate_assets(
                     tls_result.certificate_chain_pem
                     or (existing.certificate_chain_pem if existing else ())
                 ),
+                metadata=dict(tls_result.metadata),
             )
+
+    for vpn_result in vpn_probe_results:
+        normalized_ip = _normalize_ip(vpn_result.ip_address)
+        if normalized_ip is None:
+            continue
+        key = _asset_key(None, normalized_ip, vpn_result.port, vpn_result.protocol, ServiceType.VPN)
+        existing = assets.get(key)
+        assets[key] = AggregatedAsset(
+            hostname=existing.hostname if existing else None,
+            ip_address=normalized_ip,
+            port=vpn_result.port,
+            protocol=vpn_result.protocol,
+            service_type=ServiceType.VPN,
+            metadata=dict(vpn_result.details),
+        )
+
+    for api_result in api_inspection_results:
+        # API results are often tied to web ports (80/443)
+        # We try to find a matching asset based on URL components
+        parsed = urlsplit(api_result.url)
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        host = parsed.hostname
+        if not host:
+            continue
+        
+        # This is a heuristic match
+        for key, asset in assets.items():
+            if asset.port == port and (asset.hostname == host or asset.ip_address == host):
+                asset.metadata.update(api_result.metadata)
+                asset.metadata["jwt_algorithms"] = api_result.jwt_algorithms
+                asset.metadata["mtls_required"] = api_result.mtls_required
 
     return sorted(
         assets.values(),

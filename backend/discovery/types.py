@@ -99,6 +99,7 @@ class AggregatedAsset:
     tls_version: str | None = None
     cipher_suite: str | None = None
     certificate_chain_pem: tuple[str, ...] = ()
+    metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +120,7 @@ class APIInspectionResult:
     status_code: int | None
     reachable: bool
     headers: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

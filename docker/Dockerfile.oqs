@@ -1,56 +1,45 @@
 # ─────────────────────────────────────────────────────────
-# Aegis – OQS-Patched OpenSSL Docker Image
-# Multi-stage build: compile liboqs + oqs-provider, then
-# copy into a slim Python 3.11 runtime image.
+# Aegis – PQC-Enabled Infrastructure (Alpine)
 # ─────────────────────────────────────────────────────────
 
-# ── Stage 1: Build liboqs and oqs-provider ──────────────
-FROM python:3.11-slim AS builder
+# ── Stage 1: OQS-OpenSSL Base ─────────────────────────
+FROM openquantumsafe/openssl3:latest AS oqs
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git cmake gcc g++ make ninja-build \
-    libssl-dev wget autoconf libtool \
-    && rm -rf /var/lib/apt/lists/*
+# ── Stage 2: Final Backend Image ──────────────────────
+FROM python:3.11-alpine
 
-WORKDIR /tmp
+# Install build dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    nmap \
+    wget \
+    sed \
+    libssl3 \
+    libffi-dev \
+    gcc \
+    musl-dev \
+    python3-dev \
+    git \
+    linux-headers
 
-# Build liboqs from source
-RUN git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git && \
-    cd liboqs && mkdir build && cd build && \
-    cmake -GNinja -DBUILD_SHARED_LIBS=ON .. && \
-    ninja && ninja install
-
-# Build OQS provider for OpenSSL 3.x
-RUN git clone --depth 1 --branch main https://github.com/open-quantum-safe/oqs-provider.git && \
-    cd oqs-provider && mkdir build && cd build && \
-    cmake -GNinja -Dliboqs_DIR=/usr/local .. && \
-    ninja && ninja install
-
-RUN ldconfig
-
-
-# ── Stage 2: Runtime image ──────────────────────────────
-FROM python:3.11-slim
-
+# Install Amass (Discovery tool) - Do this BEFORE PQC config
 ARG AMASS_VERSION=5.0.1
-
-# Install runtime dependencies (for sslyze, nmap, etc.)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates libssl3 nmap wget && \
-    wget -O /tmp/amass.tar.gz "https://github.com/owasp-amass/amass/releases/download/v${AMASS_VERSION}/amass_linux_amd64.tar.gz" && \
+RUN wget -O /tmp/amass.tar.gz "https://github.com/owasp-amass/amass/releases/download/v${AMASS_VERSION}/amass_linux_amd64.tar.gz" && \
     mkdir -p /tmp/amass && \
     tar -xzf /tmp/amass.tar.gz -C /tmp/amass && \
     install "$(find /tmp/amass -type f -name amass | head -n 1)" /usr/local/bin/amass && \
-    chmod +x /usr/local/bin/amass && \
-    rm -rf /tmp/amass /tmp/amass.tar.gz && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /tmp/amass /tmp/amass.tar.gz
 
-# Copy built OQS libraries from builder
-COPY --from=builder /usr/local/lib/ /usr/local/lib/
-COPY --from=builder /usr/local/include/ /usr/local/include/
-RUN ldconfig
+# Copy OQS-OpenSSL binary and libraries
+COPY --from=oqs /opt/openssl /opt/openssl
+COPY --from=oqs /usr/local/lib /usr/local/lib
 
-# Set working directory
+# Link the OQS binary
+RUN ln -sf /opt/openssl/bin/openssl /usr/local/bin/openssl-oqs
+
+# Set up library paths
+RUN ldconfig /opt/openssl/lib || true
+
 WORKDIR /app
 
 # Install Python dependencies
@@ -58,11 +47,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir liboqs-python
 
-# Copy application code
 COPY . .
 
-# Expose FastAPI port
-EXPOSE 8000
+# CRITICAL: Set OQS configuration only at runtime
+ENV LD_LIBRARY_PATH=/opt/openssl/lib:/usr/local/lib
+ENV OPENSSL_CONF=/opt/openssl/ssl/openssl.cnf
 
-# Run with uvicorn
+EXPOSE 8000
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

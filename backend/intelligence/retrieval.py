@@ -9,6 +9,8 @@ import math
 import re
 import unicodedata
 import uuid
+import contextlib
+import os
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -19,8 +21,8 @@ import httpx
 from qdrant_client import QdrantClient, models
 
 from backend.core.config import Settings, get_settings
-
 from .types import CorpusChunk, IngestionSummary, RetrievedChunk
+from .cloud_utils import call_cloud_api
 
 try:
     from langchain_core.documents import Document as LangChainDocument
@@ -51,6 +53,24 @@ class _LoadedDocument:
     section: str | None = None
 
 
+@contextlib.contextmanager
+def _clean_openssl_env():
+    """Temporarily remove PQC OpenSSL environment variables."""
+    old_conf = os.environ.get("OPENSSL_CONF")
+    old_ld = os.environ.get("LD_LIBRARY_PATH")
+    try:
+        if "OPENSSL_CONF" in os.environ:
+            del os.environ["OPENSSL_CONF"]
+        if "LD_LIBRARY_PATH" in os.environ:
+            del os.environ["LD_LIBRARY_PATH"]
+        yield
+    finally:
+        if old_conf is not None:
+            os.environ["OPENSSL_CONF"] = old_conf
+        if old_ld is not None:
+            os.environ["LD_LIBRARY_PATH"] = old_ld
+
+
 class OpenRouterEmbeddingProvider:
     """OpenAI-compatible embedding client pointed at an OpenRouter-style endpoint."""
 
@@ -68,18 +88,15 @@ class OpenRouterEmbeddingProvider:
         self.timeout_seconds = timeout_seconds
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        response = httpx.post(
-            f"{self.base_url}/embeddings",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={"model": self.model, "input": list(texts)},
-            timeout=self.timeout_seconds,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        embeddings = [item["embedding"] for item in payload["data"]]
+        url = f"{self.base_url}/embeddings"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {"model": self.model, "input": list(texts)}
+        
+        response_json = call_cloud_api(url, headers, payload)
+        embeddings = [item["embedding"] for item in response_json["data"]]
         if not embeddings:
             raise RetrievalError("Embedding provider returned no vectors.")
         return embeddings
@@ -102,24 +119,19 @@ class JinaEmbeddingProvider:
         self.timeout_seconds = timeout_seconds
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        # For simplicity in this architecture, we use a generic task or no task
-        # Jina v3 performs well without explicit task, or we could default to retrieval.passage
-        response = httpx.post(
-            f"{self.base_url}/embeddings",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.model,
-                "input": list(texts),
-                "task": "retrieval.passage" # Default to passage for generic use
-            },
-            timeout=self.timeout_seconds,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        embeddings = [item["embedding"] for item in payload["data"]]
+        url = f"{self.base_url}/embeddings"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "input": list(texts),
+            "task": "retrieval.passage"
+        }
+        
+        response_json = call_cloud_api(url, headers, payload)
+        embeddings = [item["embedding"] for item in response_json["data"]]
         if not embeddings:
             raise RetrievalError("Jina AI returned no vectors.")
         return embeddings
@@ -142,23 +154,20 @@ class CohereEmbeddingProvider:
         self.timeout_seconds = timeout_seconds
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        response = httpx.post(
-            f"{self.base_url}/embed",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.model,
-                "texts": list(texts),
-                "input_type": "search_document",
-                "embedding_types": ["float"],
-            },
-            timeout=self.timeout_seconds,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        embeddings = payload["embeddings"]["float"]
+        url = f"{self.base_url}/embed"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "texts": list(texts),
+            "input_type": "search_document",
+            "embedding_types": ["float"],
+        }
+        
+        response_json = call_cloud_api(url, headers, payload)
+        embeddings = response_json["embeddings"]["float"]
         if not embeddings:
             raise RetrievalError("Cohere returned no vectors.")
         return embeddings
@@ -178,7 +187,7 @@ class FallbackEmbeddingProvider:
         for provider in self.providers:
             try:
                 return provider.embed(texts)
-            except (httpx.HTTPError, httpx.TimeoutException, RetrievalError) as e:
+            except Exception as e:
                 last_error = e
                 continue
         raise RetrievalError(f"All embedding providers failed. Last error: {last_error}")

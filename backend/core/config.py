@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Aegis"
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str = "change-me-in-production"
+    SKIP_ENUMERATION: bool = False
 
     # ── Database ────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://aegis:aegis@postgres:5432/aegis"

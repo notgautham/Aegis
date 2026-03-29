@@ -15,18 +15,17 @@ VULNERABILITY_MAP: dict[str, dict[str, float]] = {
         "DHE": 1.00,
         "DH": 1.00,
         "X25519_MLKEM768": 0.30,
-        "MLKEM512": 0.00,
+        "X25519MLKEM768": 0.30,
+        "KYBER768": 0.30,
         "MLKEM768": 0.00,
-        "MLKEM1024": 0.00,
+        "UNKNOWN": 1.00,
     },
     "sig": {
         "RSA": 1.00,
         "ECDSA": 1.00,
         "DSA": 1.00,
-        "MLDSA44": 0.00,
         "MLDSA65": 0.00,
-        "MLDSA87": 0.00,
-        "SLHDSA": 0.00,
+        "UNKNOWN": 1.00,
     },
     "sym": {
         "AES128": 0.50,
@@ -42,10 +41,10 @@ VULNERABILITY_MAP: dict[str, dict[str, float]] = {
 }
 
 TLS_VULNERABILITY_MAP: dict[str, float] = {
-    "1.0": 1.00,
+    "1.0": 0.80,
     "1.1": 0.80,
     "1.2": 0.40,
-    "1.3": 0.00,
+    "1.3": 0.10,
 }
 
 WEIGHTS: dict[str, float] = {
@@ -59,11 +58,18 @@ WEIGHTS: dict[str, float] = {
 _ALGORITHM_ALIASES: dict[str, dict[str, str]] = {
     "kex": {
         "X25519MLKEM768": "X25519_MLKEM768",
+        "X25519_MLKEM768": "X25519_MLKEM768",
+        "4588": "X25519MLKEM768",
+        "0X11EC": "X25519MLKEM768",
         "X25519_ML_KEM_768": "X25519_MLKEM768",
+        "P256MLKEM768": "X25519_MLKEM768", # Fallback for other hybrid pairs
         "KYBER768": "MLKEM768",
         "ML-KEM-768": "MLKEM768",
+        "MLKEM768": "MLKEM768",
         "ML-KEM-512": "MLKEM512",
+        "MLKEM512": "MLKEM512",
         "ML-KEM-1024": "MLKEM1024",
+        "MLKEM1024": "MLKEM1024",
     },
     "sig": {
         "RSA2048": "RSA",
@@ -73,9 +79,13 @@ _ALGORITHM_ALIASES: dict[str, dict[str, str]] = {
         "ECDSAP256": "ECDSA",
         "ECDSAP384": "ECDSA",
         "ML-DSA-44": "MLDSA44",
+        "MLDSA44": "MLDSA44",
         "ML-DSA-65": "MLDSA65",
+        "MLDSA65": "MLDSA65",
         "ML-DSA-87": "MLDSA87",
+        "MLDSA87": "MLDSA87",
         "SLH-DSA": "SLHDSA",
+        "SLHDSA": "SLHDSA",
     },
     "sym": {
         "AES_128": "AES128",

@@ -18,7 +18,7 @@ class DNSEnumerationError(RuntimeError):
 class AmassEnumerator:
     """Thin async wrapper around Amass passive enumeration."""
 
-    def __init__(self, binary: str = "amass", timeout_seconds: int = 300) -> None:
+    def __init__(self, binary: str = "amass", timeout_seconds: int = 30) -> None:
         self.binary = binary
         self.timeout_seconds = timeout_seconds
 

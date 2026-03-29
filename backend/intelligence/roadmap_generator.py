@@ -10,8 +10,9 @@ import httpx
 
 from backend.core.config import Settings, get_settings
 
-from .retrieval import build_citation_payload, build_langchain_documents
+from .retrieval import build_citation_payload, build_langchain_documents, _clean_openssl_env
 from .types import HndlTimelineResult, PatchArtifact, RemediationInput, RetrievedChunk, RoadmapResult
+from .cloud_utils import call_cloud_api
 
 
 class RoadmapGenerationError(RuntimeError):
@@ -68,7 +69,9 @@ class RoadmapGenerator:
                         citations=citations,
                         used_deterministic_fallback=False,
                     )
-                except (httpx.HTTPError, httpx.TimeoutException, ValueError):
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("LLM provider %s failed: %s", base_url, e)
                     continue
 
         return RoadmapResult(
@@ -103,42 +106,40 @@ class RoadmapGenerator:
         if not context:
             raise ValueError("No retrieval context could be constructed for the provider call.")
 
-        response = httpx.post(
-            f"{base_url.rstrip('/')}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are generating a post-quantum migration roadmap. "
-                            "Use only the supplied sources. Return plain text with the headings "
-                            "'Preparation / Prerequisites', 'Hybrid Deployment', and "
-                            "'Full PQC Replacement'. Cite the supplied source titles inline."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Asset: {remediation_input.asset.hostname or remediation_input.asset.ip_address}\n"
-                            f"Tier: {remediation_input.compliance_tier.value}\n"
-                            f"Server Type: {patch.server_type}\n"
-                            f"HNDL Urgency: {hndl_timeline.urgency}\n"
-                            f"Patch:\n{patch.patch}\n\n"
-                            f"Retrieved Context:\n{context}"
-                        ),
-                    },
-                ],
-            },
-            timeout=self.settings.LLM_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        content = payload["choices"][0]["message"]["content"].strip()
+        url = f"{base_url.rstrip('/')}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are generating a post-quantum migration roadmap. "
+                        "Use only the supplied sources. Return plain text with the headings "
+                        "'Preparation / Prerequisites', 'Hybrid Deployment', and "
+                        "'Full PQC Replacement'. Cite the supplied source titles inline."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Asset: {remediation_input.asset.hostname or remediation_input.asset.ip_address}\n"
+                        f"Tier: {remediation_input.compliance_tier.value}\n"
+                        f"Server Type: {patch.server_type}\n"
+                        f"HNDL Urgency: {hndl_timeline.urgency}\n"
+                        f"Current Config:\n{patch.config}\n\n"
+                        f"Standards Context:\n{context}"
+                    ),
+                },
+            ],
+            "temperature": 0.2,
+        }
+        
+        response_json = call_cloud_api(url, headers, payload)
+        content = response_json["choices"][0]["message"]["content"].strip()
         if not content:
             raise ValueError("Provider returned an empty roadmap.")
         return content

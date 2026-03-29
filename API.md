@@ -280,7 +280,7 @@ Returns the latest persisted CBOM for the asset.
 ```json
 {
   "id": "uuid",
-  "serial_number": "urn:aegis:scan:20260329:api.example.com:443:asset-uuid",
+  "serial_number": "urn:uuid:aegis-scan-20260329-api.example.com-443-asset-uuid",
   "created_at": "2026-03-29T12:02:00Z",
   "cbom_json": {
     "bomFormat": "CycloneDX",

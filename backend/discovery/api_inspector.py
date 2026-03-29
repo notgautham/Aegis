@@ -46,6 +46,7 @@ class APIInspector:
                     status_code=response.status_code,
                     reachable=True,
                     headers=headers,
+                    metadata={"module_status": "optional"}
                 )
             except httpx.HTTPError:
                 return APIInspectionResult(
@@ -55,6 +56,7 @@ class APIInspector:
                     status_code=None,
                     reachable=False,
                     headers={},
+                    metadata={"module_status": "optional"}
                 )
 
     @staticmethod

@@ -120,21 +120,19 @@ class CycloneDxMapper:
         *,
         timestamp: datetime | None = None,
     ) -> str:
-        """Build a deterministic scan-scoped Aegis URN for one persisted asset."""
+        """Build a unique scan-scoped Aegis URN for one persisted asset."""
         effective_timestamp = timestamp or datetime.now(UTC)
         asset_identifier = self._serial_asset_identifier(asset)
-        if asset.id is None:
-            return f"urn:aegis:scan:{effective_timestamp:%Y%m%d}:{asset_identifier}:{asset.port}"
-        return (
-            f"urn:aegis:scan:{effective_timestamp:%Y%m%d}:"
-            f"{asset_identifier}:{asset.port}:{asset.id}"
-        )
+        # Include port and unique ID to ensure DB uniqueness
+        return f"urn:uuid:aegis-scan-{effective_timestamp:%Y%m%d}-{asset_identifier}-{asset.port}-{asset.id or 'new'}"
 
     def map_asset_bundle(
         self,
         bundle: AssetCbomBundle,
         *,
         timestamp: datetime | None = None,
+        hndl_urgency: str | None = None,
+        estimated_break_year: int | None = None,
     ) -> dict[str, Any]:
         """Map one asset bundle into a CycloneDX 1.6-compatible CBOM document."""
         effective_timestamp = timestamp or datetime.now(UTC)
@@ -187,8 +185,8 @@ class CycloneDxMapper:
             "quantumRiskSummary": {
                 "overallScore": bundle.assessment.risk_score,
                 "tier": bundle.compliance.tier.value,
-                "hndlUrgency": None,
-                "estimatedBreakYear": None,
+                "hndlUrgency": hndl_urgency,
+                "estimatedBreakYear": estimated_break_year,
                 "priorityActions": list(self._build_priority_actions(bundle.compliance)),
             },
         }
