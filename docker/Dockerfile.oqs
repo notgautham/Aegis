@@ -1,14 +1,10 @@
 # ─────────────────────────────────────────────────────────
-# Aegis – PQC-Enabled Infrastructure (Alpine)
+# Aegis – PQC-Enabled Infrastructure (Alpine Native Build)
 # ─────────────────────────────────────────────────────────
 
-# ── Stage 1: OQS-OpenSSL Base ─────────────────────────
-FROM openquantumsafe/openssl3:latest AS oqs
-
-# ── Stage 2: Final Backend Image ──────────────────────
 FROM python:3.11-alpine
 
-# Install build dependencies
+# Install build and runtime dependencies
 RUN apk add --no-cache \
     ca-certificates \
     nmap \
@@ -17,28 +13,44 @@ RUN apk add --no-cache \
     libssl3 \
     libffi-dev \
     gcc \
+    g++ \
+    make \
+    ninja-build \
+    cmake \
+    git \
     musl-dev \
     python3-dev \
-    git \
-    linux-headers
+    linux-headers \
+    autoconf \
+    libtool
 
-# Install Amass (Discovery tool) - Do this BEFORE PQC config
+WORKDIR /tmp
+
+# Build liboqs from source inside the final image to ensure linking compatibility
+RUN git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git && \
+    cd liboqs && mkdir build && cd build && \
+    cmake -GNinja -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    ninja && ninja install
+
+# Build OQS provider for OpenSSL 3.x
+RUN git clone --depth 1 --branch main https://github.com/open-quantum-safe/oqs-provider.git && \
+    cd oqs-provider && mkdir build && cd build && \
+    cmake -GNinja -Dliboqs_DIR=/usr/local -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    ninja && ninja install
+
+# Ensure the system uses the OQS-patched OpenSSL
+RUN ln -sf /usr/local/bin/openssl /usr/local/bin/openssl-oqs
+
+# Set up library paths
+RUN ldconfig /usr/local/lib || true
+
+# Install Amass
 ARG AMASS_VERSION=5.0.1
 RUN wget -O /tmp/amass.tar.gz "https://github.com/owasp-amass/amass/releases/download/v${AMASS_VERSION}/amass_linux_amd64.tar.gz" && \
     mkdir -p /tmp/amass && \
     tar -xzf /tmp/amass.tar.gz -C /tmp/amass && \
     install "$(find /tmp/amass -type f -name amass | head -n 1)" /usr/local/bin/amass && \
     rm -rf /tmp/amass /tmp/amass.tar.gz
-
-# Copy OQS-OpenSSL binary and libraries
-COPY --from=oqs /opt/openssl /opt/openssl
-COPY --from=oqs /usr/local/lib /usr/local/lib
-
-# Link the OQS binary
-RUN ln -sf /opt/openssl/bin/openssl /usr/local/bin/openssl-oqs
-
-# Set up library paths
-RUN ldconfig /opt/openssl/lib || true
 
 WORKDIR /app
 
@@ -49,9 +61,9 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 
 COPY . .
 
-# CRITICAL: Set OQS configuration only at runtime
-ENV LD_LIBRARY_PATH=/opt/openssl/lib:/usr/local/lib
-ENV OPENSSL_CONF=/opt/openssl/ssl/openssl.cnf
+# Set OQS configuration at runtime
+ENV LD_LIBRARY_PATH=/usr/local/lib
+ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
 
 EXPOSE 8000
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

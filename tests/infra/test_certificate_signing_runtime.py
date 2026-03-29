@@ -27,12 +27,11 @@ def test_runtime_signing_emits_parseable_certificate(tmp_path) -> None:
     cert_path.write_text(issued.certificate_pem, encoding="utf-8")
 
     result = subprocess.run(
-        ["openssl", "x509", "-text", "-noout", "-in", str(cert_path)],
+        ["openssl-oqs", "x509", "-text", "-noout", "-in", str(cert_path)],
         check=True,
         capture_output=True,
         text=True,
     )
-
     assert issued.signing_algorithm in {"ECDSA", "ML-DSA-65"}
     assert certificate.not_valid_after_utc > certificate.not_valid_before_utc
     assert "Aegis Compliance CA" in result.stdout

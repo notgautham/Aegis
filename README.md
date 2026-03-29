@@ -12,12 +12,16 @@
   <img src="https://img.shields.io/badge/Status-In_Development-yellow?style=for-the-badge" alt="Status" />
   <img src="https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/TypeScript-Next.js-blue?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
-  <a href="https://github.com/notgautham/Aegis/actions">
-    
-  <br>
-  
-  <img src="https://github.com/notgautham/Aegis/actions/workflows/backend-ci.yml/badge.svg" alt="CI/CD Status" />
-  </a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/PQC_Engine-OQS--OpenSSL-orange?style=flat-square" alt="PQC Engine" />
+  <img src="https://img.shields.io/badge/Runtime-Alpine_Linux-blue?style=flat-square&logo=alpine-linux&logoColor=white" alt="Alpine" />
+  <img src="https://img.shields.io/badge/Backend-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/UI-Tailwind_CSS-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="Tailwind" />
+  <img src="https://img.shields.io/badge/Database-PostgreSQL-336791?style=flat-square&logo=postgresql&logoColor=white" alt="Postgres" />
+  <img src="https://img.shields.io/badge/Vector_DB-Qdrant-red?style=flat-square" alt="Qdrant" />
+  <img src="https://img.shields.io/badge/Linter-Ruff-black?style=flat-square" alt="Ruff" />
 </p>
 
 ---
