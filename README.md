@@ -85,9 +85,9 @@ docker exec aegis-backend python scripts/ingest_nist_docs.py
 ```
 
 ### 3. Run Your First Scan
-Access the Dashboard at [http://localhost:3000](http://localhost:3000) or run the terminal simulation:
+Access the Dashboard at [http://localhost:3000](http://localhost:3000) or run the terminal simulation to persist evidence:
 ```bash
-python simulate_aegis.py
+python simulation/run.py
 ```
 
 ## 📖 Documentation
@@ -95,7 +95,7 @@ python simulate_aegis.py
 - [**SETUP.md**](./SETUP.md) — Step-by-step installation guide.
 - [**API.md**](./API.md) — Full backend endpoint documentation.
 - [**DATABASE.md**](./DATABASE.md) — Detailed schema and data models.
-- [**IMPLEMENTATION.md**](./IMPLEMENTATION.md) — Technical architecture deep-dive.
+- [**SOLUTION.md**](./SOLUTION.md) — Product framing and problem context.
 
 ---
 

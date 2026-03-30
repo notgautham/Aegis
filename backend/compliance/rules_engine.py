@@ -210,12 +210,27 @@ class RulesEngine:
         sig: DimensionEvaluation,
         sym: DimensionEvaluation,
     ) -> ComplianceTier:
-        statuses = (kex.status, sig.status, sym.status)
-        if DimensionStatus.FAIL in statuses:
-            return ComplianceTier.QUANTUM_VULNERABLE
-        if statuses == (DimensionStatus.PASS, DimensionStatus.PASS, DimensionStatus.OK):
+        # 1. FULLY_QUANTUM_SAFE: Pure PQC on both major dimensions + OK symmetric
+        if (
+            kex.status == DimensionStatus.PASS
+            and sig.status == DimensionStatus.PASS
+            and sym.status == DimensionStatus.OK
+        ):
             return ComplianceTier.FULLY_QUANTUM_SAFE
-        return ComplianceTier.PQC_TRANSITIONING
+
+        # 2. PQC_TRANSITIONING: At least one PQC component (HYBRID or PASS) detected in KEX or SIG.
+        # This rewards partial migration (like Discord's hybrid KEX).
+        if (
+            kex.status in {DimensionStatus.HYBRID, DimensionStatus.PASS}
+            or sig.status in {DimensionStatus.HYBRID, DimensionStatus.PASS}
+        ):
+            # We still drop to VULNERABLE if the symmetric cipher is a hard FAIL (e.g. RC4)
+            if sym.status == DimensionStatus.FAIL:
+                return ComplianceTier.QUANTUM_VULNERABLE
+            return ComplianceTier.PQC_TRANSITIONING
+
+        # 3. QUANTUM_VULNERABLE: No PQC components detected, or hard failures present.
+        return ComplianceTier.QUANTUM_VULNERABLE
 
     @staticmethod
     def _collect_algorithms(

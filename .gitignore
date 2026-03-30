@@ -41,5 +41,8 @@ htmlcov/
 # ── Node (frontend is in frontend/.gitignore) ─────────
 node_modules/
 
+# ── Simulation Results ────────────────────────────────
+simulation/results/*
+!simulation/results/.gitkeep
 
 .aegis-runtime/

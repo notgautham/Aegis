@@ -522,5 +522,4 @@ docker compose exec backend python -m pytest tests/integration/test_phase8_api.p
 
 - [README.md](./README.md)
 - [DATABASE.md](./DATABASE.md)
-- [IMPLEMENTATION.md](./IMPLEMENTATION.md)
-- [MEMORY.md](./MEMORY.md)
+- [SOLUTION.md](./SOLUTION.md)

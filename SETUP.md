@@ -92,7 +92,7 @@ Once the containers are running, initialize the database and the vector index.
 *   **Backend API (Swagger):** `http://localhost:8000/docs`
 
 ### Terminal Simulation
-Aegis includes a terminal-based benchmark tool to verify the entire pipeline instantly:
+Aegis includes a terminal-based benchmark tool to verify the entire pipeline and save evidence to disk:
 ```bash
 # Setup venv
 python3 -m venv .venv
@@ -100,8 +100,10 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # Run simulation
-python simulate_aegis.py
+python simulation/run.py
 ```
+
+Results will be stored in `simulation/results/`.
 
 ---
 
