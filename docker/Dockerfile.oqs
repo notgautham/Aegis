@@ -12,17 +12,18 @@ RUN apk add --no-cache \
     sed \
     libssl3 \
     libffi-dev \
-    gcc \
-    g++ \
-    make \
-    ninja-build \
+    build-base \
+    samurai \
     cmake \
     git \
-    musl-dev \
     python3-dev \
     linux-headers \
     autoconf \
-    libtool
+    libtool \
+    pkgconf
+
+# samurai provides samu, we symlink it to ninja for CMake compatibility
+RUN ln -sf /usr/bin/samu /usr/local/bin/ninja
 
 WORKDIR /tmp
 
@@ -36,10 +37,29 @@ RUN git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git && \
 RUN git clone --depth 1 --branch main https://github.com/open-quantum-safe/oqs-provider.git && \
     cd oqs-provider && mkdir build && cd build && \
     cmake -GNinja -Dliboqs_DIR=/usr/local -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
-    ninja && ninja install
+    ninja && ninja install && \
+    ln -sf $(find /usr/local -name oqsprovider.so) /usr/local/lib/oqsprovider.so
 
 # Ensure the system uses the OQS-patched OpenSSL
 RUN ln -sf /usr/local/bin/openssl /usr/local/bin/openssl-oqs
+
+# Create a clean OpenSSL config that activates both default and oqs providers
+RUN mkdir -p /usr/local/ssl && \
+    echo "openssl_conf = openssl_init" > /usr/local/ssl/openssl.cnf && \
+    echo "" >> /usr/local/ssl/openssl.cnf && \
+    echo "[openssl_init]" >> /usr/local/ssl/openssl.cnf && \
+    echo "providers = provider_sect" >> /usr/local/ssl/openssl.cnf && \
+    echo "" >> /usr/local/ssl/openssl.cnf && \
+    echo "[provider_sect]" >> /usr/local/ssl/openssl.cnf && \
+    echo "default = default_sect" >> /usr/local/ssl/openssl.cnf && \
+    echo "oqs = oqs_sect" >> /usr/local/ssl/openssl.cnf && \
+    echo "" >> /usr/local/ssl/openssl.cnf && \
+    echo "[default_sect]" >> /usr/local/ssl/openssl.cnf && \
+    echo "activate = 1" >> /usr/local/ssl/openssl.cnf && \
+    echo "" >> /usr/local/ssl/openssl.cnf && \
+    echo "[oqs_sect]" >> /usr/local/ssl/openssl.cnf && \
+    echo "module = /usr/local/lib/oqsprovider.so" >> /usr/local/ssl/openssl.cnf && \
+    echo "activate = 1" >> /usr/local/ssl/openssl.cnf
 
 # Set up library paths
 RUN ldconfig /usr/local/lib || true
