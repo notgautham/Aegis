@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useRef, useCallback, ReactNode } from 'react';
+import { api } from '@/lib/api';
 
 export interface QueueItem {
   target: string;
@@ -31,6 +32,24 @@ interface ScanQueueContextType {
 
 const phases = ['Discovery', 'TLS Probing', 'PQC Classification', 'CBOM Generation', 'Certification'];
 
+// Map backend stage strings to frontend phase names
+function mapStageToPhase(stage: string | undefined): string {
+  if (!stage) return phases[0];
+  const s = stage.toLowerCase();
+  if (s.includes('discover') || s.includes('enumerat')) return 'Discovery';
+  if (s.includes('tls') || s.includes('probe') || s.includes('handshake')) return 'TLS Probing';
+  if (s.includes('pqc') || s.includes('classif') || s.includes('quantum')) return 'PQC Classification';
+  if (s.includes('cbom') || s.includes('bill') || s.includes('generat')) return 'CBOM Generation';
+  if (s.includes('cert') || s.includes('final') || s.includes('complet')) return 'Certification';
+  return phases[0];
+}
+
+function phaseProgress(phase: string): number {
+  const idx = phases.indexOf(phase);
+  if (idx < 0) return 0;
+  return Math.round(((idx + 1) / phases.length) * 100);
+}
+
 const ScanQueueContext = createContext<ScanQueueContextType | undefined>(undefined);
 
 export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
@@ -41,23 +60,120 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
   const [notifications, setNotifications] = useState<ScanNotification[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [queueComplete, setQueueComplete] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cancelledRef = useRef(false);
+  const runningRef = useRef(false);
 
   const addLog = useCallback((msg: string) => {
     setLogs(prev => [...prev.slice(-7), `[${new Date().toLocaleTimeString()}] ${msg}`]);
   }, []);
 
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+  const processQueue = useCallback(async (items: QueueItem[]) => {
+    for (let i = 0; i < items.length; i++) {
+      if (cancelledRef.current) break;
+
+      // Mark current item as scanning
+      setQueue(prev => {
+        const next = [...prev];
+        next[i] = { ...next[i], status: 'scanning', currentPhase: phases[0], progress: 0 };
+        return next;
+      });
+      addLog(`Starting scan: ${items[i].target}`);
+
+      let scanId = items[i].scanId;
+
+      try {
+        // 1. Create scan
+        const { scan_id } = await api.createScan(items[i].target);
+        scanId = scan_id;
+        setQueue(prev => {
+          const next = [...prev];
+          next[i] = { ...next[i], scanId: scan_id };
+          return next;
+        });
+        addLog(`Scan created: ${scanId}`);
+
+        // 2. Poll until completed or failed
+        let done = false;
+        while (!done && !cancelledRef.current) {
+          await sleep(3000);
+          if (cancelledRef.current) break;
+
+          try {
+            const status = await api.getScanStatus(scanId);
+            const phase = mapStageToPhase((status as any).stage ?? (status as any).current_stage);
+            const prog = phaseProgress(phase);
+
+            setQueue(prev => {
+              const next = [...prev];
+              next[i] = { ...next[i], currentPhase: phase, progress: prog };
+              return next;
+            });
+            addLog(`${phase}: ${items[i].target}`);
+
+            if (status.status === 'completed') {
+              done = true;
+              setQueue(prev => {
+                const next = [...prev];
+                next[i] = { ...next[i], status: 'done', progress: 100, currentPhase: 'Complete' };
+                return next;
+              });
+              addLog(`✓ Scan complete: ${items[i].target}`);
+
+              const assetsFound = status.progress?.assets_discovered ?? 0;
+              setNotifications(prev => [...prev, {
+                id: scanId,
+                message: `Scan complete: ${items[i].target} · ${assetsFound} assets found`,
+                link: `/dashboard/scans/${scanId}`,
+                timestamp: new Date(),
+              }]);
+            } else if (status.status === 'failed') {
+              done = true;
+              setQueue(prev => {
+                const next = [...prev];
+                next[i] = { ...next[i], status: 'failed', currentPhase: 'Failed' };
+                return next;
+              });
+              addLog(`✗ Scan failed: ${items[i].target}`);
+            }
+          } catch (pollErr) {
+            addLog(`⚠ Poll error for ${items[i].target}: ${pollErr}`);
+            // Continue polling — transient errors shouldn't kill the queue
+          }
+        }
+      } catch (err) {
+        // createScan failed
+        setQueue(prev => {
+          const next = [...prev];
+          next[i] = { ...next[i], status: 'failed', currentPhase: 'Failed' };
+          return next;
+        });
+        addLog(`✗ Failed to start scan for ${items[i].target}: ${err}`);
+      }
+    }
+
+    // All done
+    if (!cancelledRef.current) {
+      setQueueComplete(true);
+      addLog('✓ All scans complete');
+      setTimeout(() => setQueueComplete(false), 4000);
+    }
+    setIsRunning(false);
+    runningRef.current = false;
+  }, [addLog]);
+
   const startQueue = useCallback((targets: string[], profile: string) => {
-    if (isRunning) return;
+    if (runningRef.current) return;
     cancelledRef.current = false;
+    runningRef.current = true;
     setScanProfile(profile);
     setQueueComplete(false);
 
     const items: QueueItem[] = targets.map((t, i) => ({
       target: t,
-      status: i === 0 ? 'scanning' : 'queued',
-      scanId: `SCN-${String(8 + i).padStart(3, '0')}`,
+      status: i === 0 ? 'scanning' as const : 'queued' as const,
+      scanId: `pending-${i}`,
       progress: 0,
       currentPhase: i === 0 ? phases[0] : '',
     }));
@@ -67,75 +183,13 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
     setLogs([]);
     addLog(`Scan queue started with ${targets.length} targets (${profile})`);
 
-    let currentIdx = 0;
-    let phaseIdx = 0;
-
-    intervalRef.current = setInterval(() => {
-      if (cancelledRef.current) {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        return;
-      }
-
-      phaseIdx++;
-      if (phaseIdx >= phases.length) {
-        // Current target done
-        setQueue(prev => {
-          const next = [...prev];
-          next[currentIdx] = { ...next[currentIdx], status: 'done', progress: 100, currentPhase: 'Complete' };
-          return next;
-        });
-
-        const target = items[currentIdx].target;
-        const scanId = items[currentIdx].scanId;
-        addLog(`✓ Scan complete: ${target}`);
-
-        setNotifications(prev => [...prev, {
-          id: scanId,
-          message: `Scan complete: ${target} · ${Math.floor(Math.random() * 10 + 5)} assets found · Q-Score ${Math.floor(Math.random() * 400 + 200)}`,
-          link: `/dashboard/scans/${scanId}`,
-          timestamp: new Date(),
-        }]);
-
-        currentIdx++;
-        phaseIdx = 0;
-
-        if (currentIdx >= items.length) {
-          // All done
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          setIsRunning(false);
-          setQueueComplete(true);
-          addLog('✓ All scans complete');
-          setTimeout(() => setQueueComplete(false), 4000);
-          return;
-        }
-
-        // Start next
-        setQueue(prev => {
-          const next = [...prev];
-          next[currentIdx] = { ...next[currentIdx], status: 'scanning', currentPhase: phases[0], progress: 0 };
-          return next;
-        });
-        addLog(`Starting scan: ${items[currentIdx].target}`);
-      } else {
-        // Update progress
-        setQueue(prev => {
-          const next = [...prev];
-          next[currentIdx] = {
-            ...next[currentIdx],
-            currentPhase: phases[phaseIdx],
-            progress: Math.round(((phaseIdx + 1) / phases.length) * 100),
-          };
-          return next;
-        });
-        addLog(`${phases[phaseIdx]}: ${items[currentIdx].target}`);
-      }
-    }, 5000);
-  }, [isRunning, addLog]);
+    processQueue(items);
+  }, [addLog, processQueue]);
 
   const cancelQueue = useCallback(() => {
     cancelledRef.current = true;
-    if (intervalRef.current) clearInterval(intervalRef.current);
     setIsRunning(false);
+    runningRef.current = false;
     setQueue(prev => prev.map(q => q.status === 'queued' || q.status === 'scanning' ? { ...q, status: 'failed' } : q));
     addLog('✗ Queue cancelled');
   }, [addLog]);
