@@ -1,9 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { assets, getStatusColor, getTierFromAsset } from '@/data/demoData';
+import { getStatusColor, getTierFromAsset } from '@/data/demoData';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
 import { FileText, Lock, BarChart3 } from 'lucide-react';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
 const pqcTabs = [
   { id: 'compliance', label: 'Compliance', icon: FileText, route: '/dashboard/pqc/compliance' },
@@ -12,22 +13,6 @@ const pqcTabs = [
 ];
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { cn } from '@/lib/utils';
-
-const tierCounts = {
-  elite_pqc: assets.filter(a => a.tier === 'elite_pqc').length,
-  standard: assets.filter(a => a.tier === 'standard').length,
-  legacy: assets.filter(a => a.tier === 'legacy').length,
-  critical: assets.filter(a => a.tier === 'critical').length,
-};
-
-const classData = [
-  { name: 'Elite-PQC', count: tierCounts.elite_pqc, fill: 'hsl(var(--status-safe))' },
-  { name: 'Standard', count: tierCounts.standard, fill: 'hsl(210, 70%, 50%)' },
-  { name: 'Legacy', count: tierCounts.legacy, fill: 'hsl(var(--accent-amber))' },
-  { name: 'Critical', count: tierCounts.critical, fill: 'hsl(var(--status-critical))' },
-];
-
-const pieData = classData.filter(d => d.count > 0);
 
 const heatmapCells = [
   ['hsl(var(--status-safe))', 'hsl(var(--status-safe))', 'hsl(210, 70%, 50%)'],
@@ -51,27 +36,41 @@ const tierCriteria = [
 ];
 
 const PQCCompliance = () => {
-  const eliteCount = assets.filter(a => a.status === 'elite-pqc').length;
-  const critCount = assets.filter(a => a.tier === 'critical').length;
+  const { selectedAssets } = useSelectedScan();
+  const tierCounts = {
+    elite_pqc: selectedAssets.filter(a => a.tier === 'elite_pqc').length,
+    standard: selectedAssets.filter(a => a.tier === 'standard').length,
+    legacy: selectedAssets.filter(a => a.tier === 'legacy').length,
+    critical: selectedAssets.filter(a => a.tier === 'critical').length,
+  };
+  const classData = [
+    { name: 'Elite-PQC', count: tierCounts.elite_pqc, fill: 'hsl(var(--status-safe))' },
+    { name: 'Standard', count: tierCounts.standard, fill: 'hsl(210, 70%, 50%)' },
+    { name: 'Legacy', count: tierCounts.legacy, fill: 'hsl(var(--accent-amber))' },
+    { name: 'Critical', count: tierCounts.critical, fill: 'hsl(var(--status-critical))' },
+  ];
+  const pieData = classData.filter(d => d.count > 0);
+  const eliteCount = selectedAssets.filter(a => a.status === 'elite-pqc').length;
+  const critCount = selectedAssets.filter(a => a.tier === 'critical').length;
   return (
   <div className="space-y-5">
     <DataContextBadge />
     <h1 className="font-display text-2xl italic text-brand-primary">PQC Compliance Dashboard</h1>
     <SectionTabBar tabs={pqcTabs} />
     <p className="text-xs font-body text-muted-foreground italic">
-      PQC readiness across {assets.length} assets: {eliteCount} Elite-PQC, {critCount} Critical. {critCount > 0 ? `${critCount} assets require immediate remediation.` : 'No critical assets detected.'}
+      PQC readiness across {selectedAssets.length} assets: {eliteCount} Elite-PQC, {critCount} Critical. {critCount > 0 ? `${critCount} assets require immediate remediation.` : 'No critical assets detected.'}
     </p>
 
     {/* Top bar */}
     <div className="flex gap-3">
-      {classData.map(d => (
-        <Card key={d.name} className="flex-1 shadow-sm">
-          <CardContent className="p-3 text-center">
-            <p className="text-[10px] font-body text-muted-foreground uppercase">{d.name}</p>
-            <p className="text-xl font-mono font-bold mt-1" style={{ color: d.fill }}>{Math.round((d.count / assets.length) * 100)}%</p>
-            <p className="text-[10px] text-muted-foreground">{d.count} assets</p>
-          </CardContent>
-        </Card>
+        {classData.map(d => (
+          <Card key={d.name} className="flex-1 shadow-sm">
+            <CardContent className="p-3 text-center">
+              <p className="text-[10px] font-body text-muted-foreground uppercase">{d.name}</p>
+              <p className="text-xl font-mono font-bold mt-1" style={{ color: d.fill }}>{Math.round((d.count / Math.max(selectedAssets.length, 1)) * 100)}%</p>
+              <p className="text-[10px] text-muted-foreground">{d.count} assets</p>
+            </CardContent>
+          </Card>
       ))}
     </div>
 

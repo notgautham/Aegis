@@ -1,15 +1,46 @@
+import { useMemo } from 'react';
 import { RefreshCw, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { scanHistory } from '@/data/demoData';
+import { useQuery } from '@tanstack/react-query';
+import * as demoData from '@/data/demoData';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
+import { api } from '@/lib/api';
+import { adaptScanHistory } from '@/lib/adapters';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 
 const DataContextBadge = () => {
   const navigate = useNavigate();
-  const { selectedScanId, setSelectedScanId, selectedScan, isHistorical } = useSelectedScan();
-  if (!selectedScan) return null;
+  const { selectedScanId, setSelectedScanId, selectedScan: selectedScanFromContext } = useSelectedScan();
+  const { data: liveHistory } = useQuery({
+    queryKey: ['scan-history-badge'],
+    queryFn: async () => {
+      const response = await api.getScanHistory();
+      const adapted = adaptScanHistory(response);
+      const latestRealScanId = [...response.items]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]?.scan_id ?? null;
+
+      return { adapted, latestRealScanId };
+    },
+  });
+
+  const scanHistory = useMemo(() => {
+    if (!liveHistory?.adapted?.length) return demoData.scanHistory;
+
+    const fallbackScans = demoData.scanHistory.filter(
+      (demoScan) => !liveHistory.adapted.some((realScan) => realScan.id === demoScan.id),
+    );
+
+    return [...liveHistory.adapted, ...fallbackScans];
+  }, [liveHistory]);
+
+  const latestScanId = liveHistory?.latestRealScanId ?? 'SCN-007';
+  const activeSelectedScan = scanHistory.find((scan) => scan.id === selectedScanId) ?? selectedScanFromContext;
+  const selectedScan = activeSelectedScan;
+  const isHistorical = selectedScanId !== latestScanId;
+
+  if (!activeSelectedScan) return null;
 
   return (
     <div className="space-y-0">
@@ -33,7 +64,7 @@ const DataContextBadge = () => {
                 <span className="font-mono text-xs font-semibold w-16">{s.id}</span>
                 <span className="font-mono text-xs text-muted-foreground flex-1 truncate">{s.target}</span>
                 <span className="text-[10px] text-muted-foreground">{s.started.split(',')[0]}</span>
-                {s.id === 'SCN-007' && <span className="text-[9px] text-[hsl(var(--accent-amber))] font-body">(current)</span>}
+                {s.id === latestScanId && <span className="text-[9px] text-[hsl(var(--accent-amber))] font-body">(current)</span>}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -52,7 +83,7 @@ const DataContextBadge = () => {
             Viewing historical scan {selectedScanId} · {selectedScan.started.split(',')[0]} — This is not current data.
           </span>
           <button
-            onClick={() => setSelectedScanId('SCN-007')}
+            onClick={() => setSelectedScanId(latestScanId)}
             className="text-[11px] font-body font-semibold text-[hsl(var(--accent-amber))] hover:underline ml-1"
           >
             Switch to Latest →

@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Shield, FileText, AlertTriangle, Wrench, CheckCircle2, FileBarChart } from 'lucide-react';
-import { assets, scanHistory, scanAssetMap, getStatusColor, getStatusLabel, getQScoreColor } from '@/data/demoData';
+import { getStatusColor, getStatusLabel, getQScoreColor } from '@/data/demoData';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 
@@ -37,10 +37,9 @@ const DashboardHome = () => {
 
   // Scan detail data
   const scanAssets = selectedAssets;
-  const prevScan = scanHistory.find(s => s.target === selectedScan?.target && scanHistory.indexOf(s) > scanHistory.indexOf(selectedScan!));
-  const prevAssetIds = prevScan ? (scanAssetMap[prevScan.id] || []) : [];
+  const prevScan = null;
   const allFindings = scanAssets.flatMap(a => a.remediation.map(r => ({ ...r, assetDomain: a.domain, assetId: a.id })));
-  const newAssets = scanAssets.filter(a => !prevAssetIds.includes(a.id));
+  const newAssets = [] as typeof scanAssets;
 
   const keyLengthData = scanAssets.reduce((acc, a) => {
     const label = a.certInfo.key_type === 'ML-DSA' ? 'ML-DSA-65' : a.certInfo.key_type === 'ECDSA' ? `EC-${a.certInfo.key_size}` : `RSA-${a.certInfo.key_size}`;
@@ -311,7 +310,7 @@ const DashboardHome = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {assets.map(a => (
+                  {selectedAssets.map(a => (
                     <tr key={a.id} className="border-b border-border/50">
                       <td className="px-3 py-2 font-mono">{a.domain}</td>
                       <td className="px-3 py-2">

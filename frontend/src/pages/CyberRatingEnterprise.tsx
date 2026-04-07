@@ -3,28 +3,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { assets, enterpriseScore, maxScore, getTierLabel } from '@/data/demoData';
+import { getTierLabel } from '@/data/demoData';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine } from 'recharts';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
 import { Star, FileText, HelpCircle, Shield, AlertTriangle, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
 const ratingTabs = [
   { id: 'enterprise', label: 'Enterprise Score', icon: Star, route: '/dashboard/rating/enterprise' },
   { id: 'per-asset', label: 'Per-Asset', icon: FileText, route: '/dashboard/rating/per-asset' },
 ];
-
-const avgDims = {
-  'TLS Version': Math.round(assets.reduce((s, a) => s + a.dimensionScores.tls_version, 0) / assets.length),
-  'Key Exchange': Math.round(assets.reduce((s, a) => s + a.dimensionScores.key_exchange, 0) / assets.length),
-  'Cipher Strength': Math.round(assets.reduce((s, a) => s + a.dimensionScores.cipher_strength, 0) / assets.length),
-  'Certificate': Math.round(assets.reduce((s, a) => s + a.dimensionScores.certificate_algo, 0) / assets.length),
-  'Forward Secrecy': Math.round(assets.reduce((s, a) => s + a.dimensionScores.forward_secrecy, 0) / assets.length),
-  'PQC Readiness': Math.round(assets.reduce((s, a) => s + a.dimensionScores.pqc_readiness, 0) / assets.length),
-};
-
-const radarData = Object.entries(avgDims).map(([k, v]) => ({ dimension: k, score: v, fullMark: 100 }));
 
 const scoreHistory = [
   { week: 'W1', score: 280 }, { week: 'W2', score: 290 }, { week: 'W3', score: 305 },
@@ -71,11 +61,22 @@ const tiers = [
   },
 ];
 
-const tierLabel = getTierLabel(enterpriseScore);
-const tierColor = enterpriseScore >= 700 ? 'hsl(var(--status-safe))' : enterpriseScore >= 400 ? 'hsl(var(--accent-amber))' : 'hsl(var(--status-critical))';
-
 const CyberRatingEnterprise = () => {
   const [tierSheetOpen, setTierSheetOpen] = useState(false);
+  const { selectedAssets } = useSelectedScan();
+  const enterpriseScore = Math.round(selectedAssets.reduce((sum, a) => sum + a.qScore, 0) / Math.max(selectedAssets.length, 1));
+  const maxScore = 100;
+  const avgDims = {
+    'TLS Version': Math.round(selectedAssets.reduce((s, a) => s + a.dimensionScores.tls_version, 0) / Math.max(selectedAssets.length, 1)),
+    'Key Exchange': Math.round(selectedAssets.reduce((s, a) => s + a.dimensionScores.key_exchange, 0) / Math.max(selectedAssets.length, 1)),
+    'Cipher Strength': Math.round(selectedAssets.reduce((s, a) => s + a.dimensionScores.cipher_strength, 0) / Math.max(selectedAssets.length, 1)),
+    'Certificate': Math.round(selectedAssets.reduce((s, a) => s + a.dimensionScores.certificate_algo, 0) / Math.max(selectedAssets.length, 1)),
+    'Forward Secrecy': Math.round(selectedAssets.reduce((s, a) => s + a.dimensionScores.forward_secrecy, 0) / Math.max(selectedAssets.length, 1)),
+    'PQC Readiness': Math.round(selectedAssets.reduce((s, a) => s + a.dimensionScores.pqc_readiness, 0) / Math.max(selectedAssets.length, 1)),
+  };
+  const radarData = Object.entries(avgDims).map(([k, v]) => ({ dimension: k, score: v, fullMark: 100 }));
+  const tierLabel = getTierLabel(enterpriseScore);
+  const tierColor = enterpriseScore >= 700 ? 'hsl(var(--status-safe))' : enterpriseScore >= 400 ? 'hsl(var(--accent-amber))' : 'hsl(var(--status-critical))';
 
   return (
     <div className="space-y-5">
@@ -93,7 +94,7 @@ const CyberRatingEnterprise = () => {
             <div className="space-y-4 mt-4">
               {tiers.map(t => {
                 const TierIcon = t.icon;
-                const tierAssets = assets.filter(a => a.tier === t.id);
+                const tierAssets = selectedAssets.filter(a => a.tier === t.id);
                 return (
                   <div key={t.id} className="p-4 rounded-lg border" style={{ borderLeftWidth: 4, borderLeftColor: t.color }}>
                     <div className="flex items-center gap-2 mb-2">

@@ -310,7 +310,7 @@ const ScanConsole = () => {
                 <LayoutDashboard className="w-5 h-5 text-brand-primary mb-2" />
                 <h4 className="font-body text-xs font-semibold">View Full Results</h4>
                 <p className="text-[10px] text-muted-foreground font-body mt-1">See everything this scan found in the dashboard.</p>
-                <Button size="sm" className="mt-3 text-xs h-7" onClick={() => navigate('/dashboard')}>Open in Dashboard →</Button>
+                <Button size="sm" className="mt-3 text-xs h-7" onClick={() => navigate('/dashboard', { state: { bypassPrompt: true } })}>Open in Dashboard →</Button>
               </div>
               <div className="p-4 rounded-lg border border-border hover:border-[hsl(var(--accent-amber)/0.3)] transition-colors">
                 <FileText className="w-5 h-5 text-brand-primary mb-2" />

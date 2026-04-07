@@ -67,7 +67,7 @@ const ScanReport = () => {
       {/* Interactive note */}
       <div className="flex items-center gap-2 p-3 rounded-lg bg-[hsl(var(--bg-sunken))] border border-border text-xs font-body text-muted-foreground">
         <Info className="w-4 h-4 text-brand-primary flex-shrink-0" />
-        <span>This is a formal scan report for download and regulatory reference. To interactively explore this scan, use the <button className="text-brand-primary underline cursor-pointer" onClick={() => { setSelectedScanId(scan.id); navigate('/dashboard'); }}>Dashboard scan selector</button>.</span>
+        <span>This is a formal scan report for download and regulatory reference. To interactively explore this scan, use the <button className="text-brand-primary underline cursor-pointer" onClick={() => { setSelectedScanId(scan.id); navigate('/dashboard', { state: { bypassPrompt: true } }); }}>Dashboard scan selector</button>.</span>
       </div>
 
       {/* Header */}

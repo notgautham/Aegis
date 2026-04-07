@@ -6,8 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Copy, Check, Terminal, Server, Globe, Shield, ClipboardList, Sparkles, Map as MapIcon, CheckCircle2 } from 'lucide-react';
 import { useScanContext } from '@/contexts/ScanContext';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
-import { assets } from '@/data/demoData';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
 const remediationTabs = [
   { id: 'action-plan', label: 'Action Plan', icon: ClipboardList, route: '/dashboard/remediation/action-plan' },
@@ -40,11 +40,29 @@ const patchTemplates: Record<string, { finding: string; label: string; code: str
 
 const RemediationAIPatch = () => {
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
-  const [selectedAsset, setSelectedAsset] = useState<string>(assets[0].id);
+  const { selectedAssets } = useSelectedScan();
+  const [selectedAsset, setSelectedAsset] = useState<string>(selectedAssets[0]?.id ?? '');
   const [selectedFinding, setSelectedFinding] = useState<string>('all');
   const [selectedServer, setSelectedServer] = useState<string>('nginx');
+  const asset = selectedAssets.find(a => a.id === selectedAsset) ?? selectedAssets[0];
 
-  const asset = assets.find(a => a.id === selectedAsset)!;
+  if (!asset) {
+    return (
+      <div className="space-y-5">
+        <DataContextBadge />
+        <div>
+          <h1 className="font-display text-2xl italic text-brand-primary">AI Patch Generator</h1>
+          <p className="font-body text-sm text-muted-foreground mt-1">Auto-generated configuration patches for PQC migration</p>
+        </div>
+        <SectionTabBar tabs={remediationTabs} />
+        <Card className="bg-surface border-border">
+          <CardContent className="py-8 text-center">
+            <p className="font-body text-sm text-muted-foreground">No assets available for the selected scan.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   const isPqcSafe = asset.status === 'elite-pqc';
 
   const assetFindings = useMemo(() => {
@@ -100,7 +118,7 @@ const RemediationAIPatch = () => {
               <label className="font-body text-[10px] text-muted-foreground uppercase">Asset</label>
               <Select value={selectedAsset} onValueChange={(v) => { setSelectedAsset(v); setSelectedFinding('all'); }}>
                 <SelectTrigger className="w-52 h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>{assets.map(a => <SelectItem key={a.id} value={a.id}>{a.domain}</SelectItem>)}</SelectContent>
+                <SelectContent>{selectedAssets.map(a => <SelectItem key={a.id} value={a.id}>{a.domain}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>

@@ -18,6 +18,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 
 const scanProfiles = ['Quick', 'Standard', 'Deep', 'PQC Focus'] as const;
 const exampleChips = ['pnb.co.in', 'vpn.pnb.co.in', 'netbanking.pnb.co.in', 'auth.pnb.co.in'];
+type DashboardLocationState = {
+  bypassPrompt?: boolean;
+} | null;
 
 const TargetChip = ({ value, onRemove }: { value: string; onRemove: () => void }) => (
   <span className="group inline-flex items-center gap-1 font-mono text-xs bg-[hsl(var(--bg-sunken))] text-foreground px-2.5 py-1.5 rounded-lg border border-[hsl(var(--border-default))] transition-colors">
@@ -42,6 +45,7 @@ const DashboardLayout = () => {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const pathname = location.pathname;
+  const shouldBypassPrompt = Boolean((location.state as DashboardLocationState)?.bypassPrompt);
   const getActiveNav = () => {
     if (pathname.includes('/discovery')) return 'discovery';
     if (pathname.includes('/inventory')) return 'inventory';
@@ -168,8 +172,14 @@ const DashboardLayout = () => {
     handleScan('pnb.co.in');
   };
 
+  useEffect(() => {
+    if (shouldBypassPrompt) {
+      setHasScanned(true);
+    }
+  }, [shouldBypassPrompt]);
+
   const isHome = pathname === '/dashboard';
-  const showPrompt = isHome && !hasScanned;
+  const showPrompt = isHome && !hasScanned && !shouldBypassPrompt;
 
   const doneCount = queue.filter(q => q.status === 'done').length;
   const scanningItem = queue.find(q => q.status === 'scanning');

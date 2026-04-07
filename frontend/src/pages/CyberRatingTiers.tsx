@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronRight, Shield, AlertTriangle, XCircle, Star, FileText } from 'lucide-react';
-import { assets, getTierFromAsset } from '@/data/demoData';
+import { getTierFromAsset } from '@/data/demoData';
 import { cn } from '@/lib/utils';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
 const ratingTabs = [
   { id: 'enterprise', label: 'Enterprise Score', icon: Star, route: '/dashboard/rating/enterprise' },
@@ -42,6 +43,7 @@ const tiers = [
 
 const CyberRatingTiers = () => {
   const [expanded, setExpanded] = useState<string[]>(['elite_pqc']);
+  const { selectedAssets } = useSelectedScan();
   const toggle = (id: string) => setExpanded(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   return (
@@ -52,7 +54,7 @@ const CyberRatingTiers = () => {
       <div className="space-y-3">
         {tiers.map(t => {
           const isOpen = expanded.includes(t.id);
-          const tierAssets = assets.filter(a => a.tier === t.id);
+          const tierAssets = selectedAssets.filter(a => a.tier === t.id);
 
           return (
             <Card key={t.id} className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)] overflow-hidden" style={{ borderLeftWidth: 4, borderLeftColor: t.color }}>

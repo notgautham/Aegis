@@ -1,23 +1,52 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { GitCompareArrows, Plus, LayoutDashboard } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from 'recharts';
-import { scanHistory } from '@/data/demoData';
+import * as demoData from '@/data/demoData';
 import { useScanContext } from '@/contexts/ScanContext';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
+import { api } from '@/lib/api';
+import { adaptScanHistory } from '@/lib/adapters';
 
 const ScanHistory = () => {
   const navigate = useNavigate();
   const { rootDomain } = useScanContext();
   const { setSelectedScanId } = useSelectedScan();
-  const [scanA, setScanA] = useState('SCN-007');
-  const [scanB, setScanB] = useState('SCN-006');
+  const [scanA, setScanA] = useState('');
+  const [scanB, setScanB] = useState('');
   const [showCompare, setShowCompare] = useState(false);
+
+  const { data: liveScanHistory, isLoading } = useQuery({
+    queryKey: ['scan-history'],
+    queryFn: async () => adaptScanHistory(await api.getScanHistory()),
+  });
+
+  const scanHistory = useMemo(() => {
+    if (liveScanHistory && liveScanHistory.length > 0) return liveScanHistory;
+    return demoData.scanHistory;
+  }, [liveScanHistory]);
+
+  useEffect(() => {
+    if (scanHistory.length === 0) {
+      setScanA('');
+      setScanB('');
+      return;
+    }
+
+    if (!scanHistory.some((scan) => scan.id === scanA)) {
+      setScanA(scanHistory[0]?.id ?? '');
+    }
+
+    if (!scanHistory.some((scan) => scan.id === scanB)) {
+      setScanB(scanHistory[1]?.id ?? scanHistory[0]?.id ?? '');
+    }
+  }, [scanA, scanB, scanHistory]);
 
   const trendData = [...scanHistory].reverse().map(s => ({
     date: s.started.split(',')[0],
@@ -29,8 +58,19 @@ const ScanHistory = () => {
 
   const openInDashboard = (scanId: string) => {
     setSelectedScanId(scanId);
-    navigate('/dashboard');
+    navigate('/dashboard', { state: { bypassPrompt: true } });
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h1 className="font-display text-2xl italic text-brand-primary">Scan History</h1>
+          <p className="font-body text-sm text-muted-foreground mt-1">Loading scan history...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">

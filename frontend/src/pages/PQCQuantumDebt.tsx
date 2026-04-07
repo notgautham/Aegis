@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { assets } from '@/data/demoData';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Cell } from 'recharts';
 import { Slider } from '@/components/ui/slider';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
 import { FileText, Lock, BarChart3 } from 'lucide-react';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
 const pqcTabs = [
   { id: 'compliance', label: 'Compliance', icon: FileText, route: '/dashboard/pqc/compliance' },
@@ -25,6 +25,7 @@ const debtByType = [
 
 const PQCQuantumDebt = () => {
   const [migrationPercent, setMigrationPercent] = useState([30]);
+  const { selectedAssets } = useSelectedScan();
 
   const reduction = Math.round(quantumDebtScore * (migrationPercent[0] / 100));
   const projectedDebt = quantumDebtScore - reduction;
@@ -35,8 +36,8 @@ const PQCQuantumDebt = () => {
     migrated: Math.max(0, (quantumDebtScore + (monthlyGrowth * i)) - (reduction * (i / 12))),
   }));
 
-  const migrated = assets.filter(a => a.status === 'elite-pqc').length;
-  const total = assets.length;
+  const migrated = selectedAssets.filter(a => a.status === 'elite-pqc').length;
+  const total = selectedAssets.length;
   const migrationProgress = Math.round((migrated / total) * 100);
 
   return (

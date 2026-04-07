@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip as ShadcnTooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { assets, getStatusColor, getStatusLabel, getTierFromAsset, getQScoreColor } from '@/data/demoData';
+import { getStatusColor, getStatusLabel, getTierFromAsset, getQScoreColor } from '@/data/demoData';
 import { ChevronRight, Scan, Check, X, Shield, AlertTriangle, Download } from 'lucide-react';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as RechartTooltip, ReferenceLine, CartesianGrid } from 'recharts';
 import PQCCertificateModal from '@/components/dashboard/PQCCertificateModal';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
 // Generate score history per asset
 const scoreHistories: Record<string, { scan: string; score: number; event?: string }[]> = {
@@ -46,9 +47,10 @@ const AssetDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [certModalOpen, setCertModalOpen] = useState(false);
-  const asset = assets.find(a => a.domain.replace(/\./g, '-') === id);
+  const { selectedAssets } = useSelectedScan();
+  const asset = selectedAssets.find(a => a.domain.replace(/\./g, '-') === id);
 
-  if (!asset) {
+  if (selectedAssets.length === 0 || !asset) {
     return <div className="p-10 text-center"><h1 className="font-display text-2xl italic text-brand-primary">Asset Not Found</h1><p className="text-muted-foreground mt-2 font-body text-sm">No asset matching "{id}"</p><Button variant="outline" className="mt-4" onClick={() => navigate('/dashboard/inventory')}>Back to Inventory</Button></div>;
   }
 

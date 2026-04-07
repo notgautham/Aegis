@@ -1,6 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { assets } from '@/data/demoData';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -15,16 +14,6 @@ const pqcTabs = [
   { id: 'hndl', label: 'HNDL Intel', icon: Lock, route: '/dashboard/pqc/hndl' },
   { id: 'quantum-debt', label: 'Quantum Debt', icon: BarChart3, route: '/dashboard/pqc/quantum-debt' },
 ];
-
-const hndlAssets = assets.filter(a => a.hndlBreakYear !== null).sort((a, b) => (a.hndlBreakYear || 0) - (b.hndlBreakYear || 0));
-
-const timelineData = Array.from({ length: 11 }, (_, i) => {
-  const year = 2026 + i;
-  return {
-    year: year.toString(),
-    decryptable: hndlAssets.filter(a => (a.hndlBreakYear || 9999) <= year).length,
-  };
-});
 
 const riskColors: Record<string, string> = {
   critical: 'hsl(var(--status-critical))', high: 'hsl(var(--status-vuln))', medium: 'hsl(var(--accent-amber))', low: 'hsl(var(--status-safe))',
@@ -52,6 +41,16 @@ const cellTooltip = (sensitivity: string, vulnerability: string, count: number) 
 
 const PQCHndl = () => {
   const { selectedAssets } = useSelectedScan();
+  const hndlAssets = selectedAssets
+    .filter(a => a.hndlBreakYear !== null)
+    .sort((a, b) => (a.hndlBreakYear || 0) - (b.hndlBreakYear || 0));
+  const timelineData = Array.from({ length: 11 }, (_, i) => {
+    const year = 2026 + i;
+    return {
+      year: year.toString(),
+      decryptable: hndlAssets.filter(a => (a.hndlBreakYear || 9999) <= year).length,
+    };
+  });
   return (
   <div className="space-y-5">
     <DataContextBadge />

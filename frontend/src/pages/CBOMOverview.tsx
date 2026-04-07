@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { assets, caDistribution, keyLengthDistribution, tlsVersionDistribution, getStatusColor, getStatusLabel } from '@/data/demoData';
+import { getStatusColor, getStatusLabel } from '@/data/demoData';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -16,14 +16,36 @@ const cbomTabs = [
   { id: 'export', label: 'Export Center', icon: Package, route: '/dashboard/cbom/export' },
 ];
 
-const keyLengthData = Object.entries(keyLengthDistribution).map(([k, v]) => ({ name: k, count: v, fill: k.startsWith('RSA-2048') ? 'hsl(var(--accent-amber))' : k.includes('ML-') ? 'hsl(var(--status-safe))' : k.startsWith('EC') ? 'hsl(210, 70%, 50%)' : 'hsl(var(--status-critical))' }));
-const caData = Object.entries(caDistribution).map(([k, v]) => ({ name: k, count: v }));
-const tlsData = Object.entries(tlsVersionDistribution).map(([k, v]) => ({ name: k.replace('TLS_', 'TLS ').replace('_', '.'), count: v, fill: k === 'TLS_1_3' ? 'hsl(var(--status-safe))' : k === 'TLS_1_2' ? 'hsl(var(--accent-amber))' : 'hsl(var(--status-critical))' }));
-
 const COLORS = ['hsl(var(--status-safe))', 'hsl(var(--accent-amber))', 'hsl(var(--status-critical))', 'hsl(210, 70%, 50%)'];
 
 const CBOMOverview = () => {
   const { selectedAssets } = useSelectedScan();
+  const keyLengthCounts = selectedAssets.reduce((acc, asset) => {
+    const label = String(asset.certInfo.key_size);
+    acc[label] = (acc[label] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const keyLengthData = Object.entries(keyLengthCounts).map(([k, v]) => ({
+    name: k,
+    count: v,
+    fill: Number(k) >= 3072 ? 'hsl(var(--status-safe))' : Number(k) >= 2048 ? 'hsl(var(--accent-amber))' : 'hsl(var(--status-critical))',
+  }));
+  const caCounts = selectedAssets.reduce((acc, asset) => {
+    const authority = asset.certInfo.certificate_authority || 'Unknown';
+    acc[authority] = (acc[authority] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const caData = Object.entries(caCounts).map(([k, v]) => ({ name: k, count: v }));
+  const tlsCounts = selectedAssets.reduce((acc, asset) => {
+    const version = asset.tls || 'Unknown';
+    acc[version] = (acc[version] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const tlsData = Object.entries(tlsCounts).map(([k, v]) => ({
+    name: k,
+    count: v,
+    fill: k.includes('1.3') ? 'hsl(var(--status-safe))' : k.includes('1.2') ? 'hsl(var(--accent-amber))' : 'hsl(var(--status-critical))',
+  }));
 
   const kpiCards = [
     { label: 'Applications Covered', value: selectedAssets.length, color: 'var(--brand-primary)' },
@@ -94,7 +116,7 @@ const CBOMOverview = () => {
           <CardHeader className="pb-2"><CardTitle className="text-sm font-body">Cipher Usage</CardTitle></CardHeader>
           <CardContent>
             {(() => {
-              const ciphers = assets.reduce((acc, a) => { if (a.cipher !== '--') acc[a.cipher] = (acc[a.cipher] || 0) + 1; return acc; }, {} as Record<string, number>);
+              const ciphers = selectedAssets.reduce((acc, a) => { if (a.cipher !== '--') acc[a.cipher] = (acc[a.cipher] || 0) + 1; return acc; }, {} as Record<string, number>);
               const data = Object.entries(ciphers).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ name: k.length > 28 ? k.substring(0, 28) + '…' : k, count: v }));
               return (
                 <ResponsiveContainer width="100%" height={200}>
