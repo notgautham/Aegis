@@ -14,6 +14,15 @@ from backend.models.certificate_chain import CertificateChain
 from backend.models.cbom_document import CbomDocument
 from backend.models.compliance_certificate import ComplianceCertificate
 from backend.models.remediation_bundle import RemediationBundle
+from backend.models.scan_event import ScanEvent
+from backend.models.dns_record import DNSRecord
+from backend.models.asset_fingerprint import AssetFingerprint
+from backend.models.remediation_action import (
+    RemediationAction,
+    RemediationEffort,
+    RemediationPriority,
+    RemediationStatus,
+)
 
 __all__ = [
     "Base",
@@ -28,4 +37,11 @@ __all__ = [
     "CbomDocument",
     "ComplianceCertificate",
     "RemediationBundle",
+    "ScanEvent",
+    "DNSRecord",
+    "AssetFingerprint",
+    "RemediationAction",
+    "RemediationPriority",
+    "RemediationStatus",
+    "RemediationEffort",
 ]

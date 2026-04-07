@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -56,13 +58,22 @@ from backend.intelligence import (
 from backend.models.crypto_assessment import CryptoAssessment
 from backend.models.discovered_asset import DiscoveredAsset
 from backend.models.enums import CertLevel, ComplianceTier, ScanStatus, ServiceType
+from backend.models.remediation_action import (
+    RemediationAction,
+    RemediationEffort,
+    RemediationPriority,
+    RemediationStatus,
+)
 from backend.repositories import (
+    AssetFingerprintRepository,
     CbomDocumentRepository,
     CertificateChainRepository,
     ComplianceCertificateRepository,
     CryptoAssessmentRepository,
+    DNSRecordRepository,
     DiscoveredAssetRepository,
     RemediationBundleRepository,
+    ScanEventRepository,
     ScanJobRepository,
 )
 
@@ -85,6 +96,8 @@ class ScanAlreadyTerminalError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class _DiscoveryExecution:
     aggregated_assets: tuple[AggregatedAsset, ...]
+    port_findings: tuple[PortFinding, ...]
+    validated_hostnames: tuple[ValidatedHostname, ...]
     tls_results_by_key: dict[tuple[str | None, str, int, str, str], TLSProbeResult]
 
 
@@ -277,6 +290,8 @@ class PipelineOrchestrator:
             persisted_assets = await self._persist_discovered_assets(
                 scan_id=scan_id,
                 aggregated_assets=discovery.aggregated_assets,
+                port_findings=discovery.port_findings,
+                validated_hostnames=discovery.validated_hostnames,
             )
             if self.runtime_store is not None:
                 self.runtime_store.add_event(
@@ -349,6 +364,33 @@ class PipelineOrchestrator:
                     status=terminal_status,
                     completed_at=terminal_timestamp,
                 )
+                try:
+                    if self.runtime_store is not None:
+                        snapshot = self.runtime_store.get_snapshot(scan_id)
+                        if snapshot and snapshot.events:
+                            async with self.session_factory() as session:
+                                repo = ScanEventRepository(session)
+                                for event in snapshot.events:
+                                    try:
+                                        async with session.begin_nested():
+                                            await repo.create(
+                                                scan_id=scan_id,
+                                                timestamp=event.timestamp,
+                                                kind=event.kind,
+                                                stage=event.stage,
+                                                message=event.message,
+                                            )
+                                    except Exception:
+                                        logger.exception(
+                                            "Failed to persist scan event for scan %s.",
+                                            scan_id,
+                                        )
+                                await session.commit()
+                except Exception:
+                    logger.exception(
+                        "Failed to persist runtime events for scan %s.",
+                        scan_id,
+                    )
 
     def _set_runtime_stage(
         self,
@@ -476,6 +518,8 @@ class PipelineOrchestrator:
         )
         return _DiscoveryExecution(
             aggregated_assets=tuple(aggregated_assets),
+            port_findings=tuple(port_findings),
+            validated_hostnames=tuple(validated_hostnames),
             tls_results_by_key={
                 _artifact_key_from_tls_result(result): result for result in tls_results
             },
@@ -548,6 +592,33 @@ class PipelineOrchestrator:
             message="Validating DNS resolution for discovered hostnames.",
         )
         validated = await self.dns_validator.validate(hostnames)
+        if scan_id is not None and validated:
+            try:
+                async with self.session_factory() as session:
+                    dns_record_repository = DNSRecordRepository(session)
+                    for validated_hostname in validated:
+                        try:
+                            async with session.begin_nested():
+                                await dns_record_repository.create(
+                                    scan_id=scan_id,
+                                    hostname=validated_hostname.hostname,
+                                    resolved_ips=list(validated_hostname.ip_addresses),
+                                    cnames=list(validated_hostname.cnames),
+                                    discovery_source=validated_hostname.source,
+                                    is_in_scope=True,
+                                )
+                        except Exception:
+                            logger.exception(
+                                "Failed to persist DNS record for scan %s hostname %s.",
+                                scan_id,
+                                validated_hostname.hostname,
+                            )
+                    await session.commit()
+            except Exception:
+                logger.exception(
+                    "Failed to persist DNS records for scan %s.",
+                    scan_id,
+                )
         self._add_runtime_event(
             scan_id,
             f"DNS validation retained {len(validated)} hostname(s) in scope.",
@@ -713,6 +784,8 @@ class PipelineOrchestrator:
         *,
         scan_id: uuid.UUID,
         aggregated_assets: Sequence[AggregatedAsset],
+        port_findings: Sequence[PortFinding] = (),
+        validated_hostnames: Sequence[ValidatedHostname] = (),
     ) -> list[DiscoveredAsset]:
         self._set_runtime_stage(
             scan_id,
@@ -724,6 +797,19 @@ class PipelineOrchestrator:
             repository = DiscoveredAssetRepository(session)
             persisted_assets: list[DiscoveredAsset] = []
             for asset in aggregated_assets:
+                normalized_asset_hostname = (
+                    asset.hostname.strip().lower().rstrip(".") if asset.hostname else None
+                )
+                open_ports = [
+                    {
+                        "port": port_finding.port,
+                        "protocol": port_finding.protocol,
+                        "service_name": port_finding.service_name,
+                        "state": port_finding.state,
+                    }
+                    for port_finding in port_findings
+                    if port_finding.ip_address == asset.ip_address
+                ]
                 persisted_assets.append(
                     await repository.create(
                         scan_id=scan_id,
@@ -733,6 +819,19 @@ class PipelineOrchestrator:
                         protocol=asset.protocol,
                         service_type=asset.service_type,
                         server_software=asset.server_software,
+                        open_ports=open_ports,
+                        asset_metadata=dict(asset.metadata) if asset.metadata else None,
+                        discovery_source=(
+                            "dnsx"
+                            if normalized_asset_hostname is not None
+                            and any(
+                                validated_hostname.hostname.strip().lower().rstrip(".")
+                                == normalized_asset_hostname
+                                for validated_hostname in validated_hostnames
+                            )
+                            else "nmap"
+                        ),
+                        is_shadow_it=False,
                     )
                 )
             await session.commit()
@@ -752,6 +851,7 @@ class PipelineOrchestrator:
             cbom_repository = CbomDocumentRepository(session)
             remediation_repository = RemediationBundleRepository(session)
             certificate_store = ComplianceCertificateRepository(session)
+            fingerprint_repo = AssetFingerprintRepository(session)
 
             asset = await asset_repository.get_by_id(asset_id)
             if asset is None:
@@ -764,6 +864,11 @@ class PipelineOrchestrator:
                 message=f"Analyzing TLS posture for {asset_label}.",
             )
 
+            tls_result = await self._ensure_certificate_chain(
+                asset_label=asset_label,
+                tls_result=tls_result,
+                scan_id=scan_id,
+            )
             extracted_certificates = self.certificate_extractor.extract(tls_result)
             analyzed_certificates = self.certificate_analyzer.analyze(extracted_certificates)
             persisted_certificates = []
@@ -816,6 +921,45 @@ class PipelineOrchestrator:
                 tls_vulnerability=assessment_inputs.tls_vulnerability,
                 risk_score=assessment_inputs.risk_score,
             )
+            try:
+                async with session.begin_nested():
+                    canonical_key = f"{asset.hostname or asset.ip_address}:{asset.port}/{asset.protocol}"
+                    q_score = round(100 - (assessment_inputs.risk_score or 50))
+                    now = datetime.now(UTC)
+                    score_snapshot = {
+                        "scan_id": str(scan_id),
+                        "q_score": q_score,
+                        "scanned_at": now.isoformat(),
+                    }
+                    existing = await fingerprint_repo.get_by_canonical_key(canonical_key)
+                    if existing:
+                        new_history = list(existing.q_score_history or []) + [score_snapshot]
+                        await fingerprint_repo.update(
+                            existing.id,
+                            last_seen_scan_id=scan_id,
+                            last_seen_at=now,
+                            appearance_count=existing.appearance_count + 1,
+                            q_score_history=new_history,
+                            latest_q_score=q_score,
+                            latest_compliance_tier=evaluation.tier,
+                        )
+                    else:
+                        await fingerprint_repo.create(
+                            canonical_key=canonical_key,
+                            first_seen_scan_id=scan_id,
+                            last_seen_scan_id=scan_id,
+                            first_seen_at=now,
+                            last_seen_at=now,
+                            appearance_count=1,
+                            q_score_history=[score_snapshot],
+                            latest_q_score=q_score,
+                            latest_compliance_tier=evaluation.tier,
+                        )
+            except Exception:
+                logger.exception(
+                    "Failed to persist asset fingerprint for asset %s.",
+                    asset.id,
+                )
 
             cbom_document = await self.cbom_mapper.persist_cbom(
                 bundle=AssetCbomBundle(
@@ -847,6 +991,88 @@ class PipelineOrchestrator:
                         certificates=persisted_certificates,
                     )
                     if remediation_bundle is not None:
+                        remediation_actions: list[dict[str, Any]] = []
+                        if (
+                            assessment_inputs.kex_vulnerability is not None
+                            and assessment_inputs.kex_vulnerability >= 1.0
+                        ):
+                            remediation_actions.append(
+                                {
+                                    "priority": RemediationPriority.P1,
+                                    "finding": (
+                                        "Quantum-vulnerable key exchange: "
+                                        f"{assessment_inputs.kex_algorithm}"
+                                    ),
+                                    "action": "Replace with X25519MLKEM768 hybrid or pure ML-KEM-768",
+                                    "effort": RemediationEffort.HIGH,
+                                    "category": "key_exchange",
+                                }
+                            )
+                        if (
+                            assessment_inputs.sig_vulnerability is not None
+                            and assessment_inputs.sig_vulnerability >= 1.0
+                        ):
+                            remediation_actions.append(
+                                {
+                                    "priority": RemediationPriority.P1,
+                                    "finding": (
+                                        "Quantum-vulnerable signature algorithm: "
+                                        f"{assessment_inputs.auth_algorithm}"
+                                    ),
+                                    "action": "Migrate certificate to ML-DSA-65",
+                                    "effort": RemediationEffort.HIGH,
+                                    "category": "certificate",
+                                }
+                            )
+                        if (
+                            assessment_inputs.tls_vulnerability is not None
+                            and assessment_inputs.tls_vulnerability >= 0.4
+                            and assessment_inputs.tls_version is not None
+                            and "1.3" not in assessment_inputs.tls_version
+                        ):
+                            remediation_actions.append(
+                                {
+                                    "priority": RemediationPriority.P2,
+                                    "finding": f"Legacy TLS version: {assessment_inputs.tls_version}",
+                                    "action": "Enforce TLS 1.3 only",
+                                    "effort": RemediationEffort.LOW,
+                                    "category": "tls_version",
+                                }
+                            )
+                        if (
+                            assessment_inputs.sym_vulnerability is not None
+                            and assessment_inputs.sym_vulnerability >= 0.5
+                        ):
+                            remediation_actions.append(
+                                {
+                                    "priority": RemediationPriority.P3,
+                                    "finding": "Symmetric cipher has reduced post-quantum security",
+                                    "action": "Prefer AES-256-GCM or ChaCha20-Poly1305",
+                                    "effort": RemediationEffort.LOW,
+                                    "category": "cipher_strength",
+                                }
+                            )
+                        for remediation_action in remediation_actions:
+                            try:
+                                async with session.begin_nested():
+                                    session.add(
+                                        RemediationAction(
+                                            asset_id=asset.id,
+                                            remediation_bundle_id=remediation_bundle.id,
+                                            priority=remediation_action["priority"].value,
+                                            finding=remediation_action["finding"],
+                                            action=remediation_action["action"],
+                                            effort=remediation_action["effort"].value,
+                                            status=RemediationStatus.NOT_STARTED.value,
+                                            category=remediation_action["category"],
+                                        )
+                                    )
+                                    await session.flush()
+                            except Exception:
+                                logger.exception(
+                                    "Failed to persist remediation action for asset %s.",
+                                    asset.id,
+                                )
                         self._add_runtime_event(
                             scan_id,
                             f"Generated remediation artifacts for {asset_label}.",
@@ -915,6 +1141,89 @@ class PipelineOrchestrator:
             )
 
             await session.commit()
+
+    async def _ensure_certificate_chain(
+        self,
+        *,
+        asset_label: str,
+        tls_result: TLSProbeResult,
+        scan_id: uuid.UUID | None = None,
+    ) -> TLSProbeResult:
+        """Recover a PEM certificate chain when the initial probe returned none."""
+        if tls_result.certificate_chain_pem:
+            return tls_result
+
+        recovered_chain = await self._recover_certificate_chain_with_showcerts(tls_result)
+        if not recovered_chain:
+            self._add_degraded_mode(
+                scan_id,
+                f"No certificate chain could be recovered for {asset_label}; certificate-chain persistence was skipped.",
+            )
+            return tls_result
+
+        self._add_runtime_event(
+            scan_id,
+            f"Recovered {len(recovered_chain)} certificate(s) for {asset_label} using showcerts fallback.",
+            kind="success",
+            stage="assessing_tls_assets",
+        )
+        return TLSProbeResult(
+            hostname=tls_result.hostname,
+            ip_address=tls_result.ip_address,
+            port=tls_result.port,
+            protocol=tls_result.protocol,
+            tls_version=tls_result.tls_version,
+            cipher_suite=tls_result.cipher_suite,
+            certificate_chain_pem=recovered_chain,
+            server_software=tls_result.server_software,
+            metadata=dict(tls_result.metadata),
+        )
+
+    async def _recover_certificate_chain_with_showcerts(
+        self,
+        tls_result: TLSProbeResult,
+    ) -> tuple[str, ...]:
+        """Use openssl s_client -showcerts as a fallback chain source."""
+        command = [
+            "/usr/local/bin/openssl-oqs",
+            "s_client",
+            "-connect",
+            f"{tls_result.ip_address}:{tls_result.port}",
+            "-showcerts",
+        ]
+        if tls_result.hostname:
+            command.extend(["-servername", tls_result.hostname])
+
+        env = os.environ.copy()
+        env["OPENSSL_CONF"] = "/opt/openssl/ssl/openssl.cnf"
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+            )
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(input=b"\n"),
+                timeout=self.tls_probe.timeout_seconds,
+            )
+        except Exception:
+            logger.exception(
+                "Certificate-chain fallback probe failed for %s:%s.",
+                tls_result.hostname or tls_result.ip_address,
+                tls_result.port,
+            )
+            return ()
+
+        output = b"".join((stdout or b"", stderr or b"")).decode("utf-8", errors="ignore")
+        pem_blocks = re.findall(
+            r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
+            output,
+            flags=re.DOTALL,
+        )
+        return tuple(f"{block.strip()}\n" for block in pem_blocks)
 
     def _build_assessment_inputs(
         self,

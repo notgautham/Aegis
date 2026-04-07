@@ -130,7 +130,7 @@ class RoadmapGenerator:
                         f"Tier: {remediation_input.compliance_tier.value}\n"
                         f"Server Type: {patch.server_type}\n"
                         f"HNDL Urgency: {hndl_timeline.urgency}\n"
-                        f"Current Config:\n{patch.config}\n\n"
+                        f"Current Config:\n{patch.patch}\n\n"
                         f"Standards Context:\n{context}"
                     ),
                 },

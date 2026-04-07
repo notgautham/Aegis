@@ -7,8 +7,8 @@ See IMPLEMENTATION.md Section 5.1 — discovered_assets table.
 
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, Enum, ForeignKey, Integer, String, Text, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.base import Base
@@ -38,6 +38,15 @@ class DiscoveredAsset(Base):
         nullable=True,
     )
     server_software: Mapped[str | None] = mapped_column(Text, nullable=True)
+    open_ports: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    asset_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    is_shadow_it: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    discovery_source: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ── Relationships ───────────────────────────────────
     scan_job = relationship("ScanJob", back_populates="discovered_assets")
@@ -56,9 +65,15 @@ class DiscoveredAsset(Base):
     remediation_bundles = relationship(
         "RemediationBundle", back_populates="asset", cascade="all, delete-orphan"
     )
+    remediation_actions = relationship(
+        "RemediationAction", back_populates="asset", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return (
             f"<DiscoveredAsset id={self.id} "
             f"host={self.hostname}:{self.port}/{self.protocol}>"
         )
+
+
+from backend.models.remediation_action import RemediationAction  # noqa: E402,F401

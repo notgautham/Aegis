@@ -376,6 +376,14 @@ class RetrievalService:
             except Exception:
                 pass
 
+        if self.client.collection_exists(self.collection_name):
+            existing_size = self._get_collection_vector_size()
+            if existing_size is not None and existing_size != vector_size:
+                raise RetrievalError(
+                    f"Qdrant collection '{self.collection_name}' vector size mismatch: "
+                    f"expected {vector_size}, found {existing_size}."
+                )
+
         if not self.client.collection_exists(self.collection_name):
             self.client.create_collection(
                 collection_name=self.collection_name,
@@ -384,6 +392,24 @@ class RetrievalService:
                     distance=models.Distance.COSINE,
                 ),
             )
+
+    def _get_collection_vector_size(self) -> int | None:
+        """Return the configured vector size for the active collection when available."""
+        try:
+            collection_info = self.client.get_collection(self.collection_name)
+        except Exception:
+            return None
+
+        vectors = getattr(getattr(collection_info.config, "params", None), "vectors", None)
+        if isinstance(vectors, models.VectorParams):
+            return int(vectors.size)
+        if isinstance(vectors, dict):
+            first_vector = next(iter(vectors.values()), None)
+            if first_vector is not None and getattr(first_vector, "size", None) is not None:
+                return int(first_vector.size)
+        if getattr(vectors, "size", None) is not None:
+            return int(vectors.size)
+        return None
 
     def _load_single_document(self, path: Path) -> list[_LoadedDocument]:
         title = path.stem.replace("_", " ").replace("-", " ").strip().title()

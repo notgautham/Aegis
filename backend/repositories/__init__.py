@@ -8,6 +8,9 @@ from backend.repositories.certificate_chain_repo import CertificateChainReposito
 from backend.repositories.cbom_repo import CbomDocumentRepository
 from backend.repositories.compliance_cert_repo import ComplianceCertificateRepository
 from backend.repositories.remediation_repo import RemediationBundleRepository
+from backend.repositories.scan_event_repo import ScanEventRepository
+from backend.repositories.dns_record_repo import DNSRecordRepository
+from backend.repositories.asset_fingerprint_repo import AssetFingerprintRepository
 
 __all__ = [
     "BaseRepository",
@@ -18,4 +21,7 @@ __all__ = [
     "CbomDocumentRepository",
     "ComplianceCertificateRepository",
     "RemediationBundleRepository",
+    "ScanEventRepository",
+    "DNSRecordRepository",
+    "AssetFingerprintRepository",
 ]

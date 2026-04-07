@@ -37,6 +37,8 @@ class ScanJob(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    scan_profile: Mapped[str | None] = mapped_column(Text, nullable=True)
+    initiated_by: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ── Relationships ───────────────────────────────────
     discovered_assets = relationship(
@@ -45,6 +47,17 @@ class ScanJob(Base):
     cbom_documents = relationship(
         "CbomDocument", back_populates="scan_job", cascade="all, delete-orphan"
     )
+    dns_records = relationship(
+        "DNSRecord", back_populates="scan_job", cascade="all, delete-orphan"
+    )
+    scan_events = relationship(
+        "ScanEvent", back_populates="scan_job", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<ScanJob id={self.id} target={self.target!r} status={self.status.value}>"
+
+
+from backend.models.asset_fingerprint import AssetFingerprint  # noqa: E402,F401
+from backend.models.dns_record import DNSRecord  # noqa: E402,F401
+from backend.models.scan_event import ScanEvent  # noqa: E402,F401
