@@ -24,9 +24,14 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 // ========== Response Interfaces ==========
 
 export interface HndlTimeline {
-  break_year: number;
-  years_remaining: number;
-  risk_level: 'critical' | 'high' | 'medium' | 'low';
+  entries: Array<{
+    breakYear: number;
+    algorithm: string;
+    logicalQubits: number;
+    projectedGrowthRate: number;
+  }>;
+  urgency: string;
+  mostUrgentAlgorithm: string | null;
 }
 
 export interface AssessmentResponse {
@@ -42,7 +47,7 @@ export interface AssessmentResponse {
 }
 
 export interface RemediationResponse {
-  hndl_timeline: HndlTimeline;
+  hndl_timeline: HndlTimeline | null;
   [key: string]: unknown;
 }
 
@@ -64,6 +69,28 @@ export interface CertificateResponse {
   sha256_fingerprint: string;
 }
 
+export interface LeafCertificate {
+  subject_cn: string | null;
+  issuer: string | null;
+  public_key_algorithm: string | null;
+  key_size_bits: number | null;
+  signature_algorithm: string | null;
+  quantum_safe: boolean | null;
+  not_before: string | null;
+  not_after: string | null;
+  days_remaining: number | null;
+}
+
+export interface RemediationActionItem {
+  priority: string;
+  finding: string;
+  action: string;
+  effort: string | null;
+  status: string | null;
+  category: string | null;
+  nist_reference: string | null;
+}
+
 export interface AssetResultResponse {
   asset_id: string;
   hostname: string | null;
@@ -75,6 +102,8 @@ export interface AssetResultResponse {
   remediation: RemediationResponse | null;
   cbom: CbomResponse | null;
   certificate: CertificateResponse | null;
+  leaf_certificate: LeafCertificate | null;
+  remediation_actions: RemediationActionItem[];
 }
 
 export interface ScanProgress {

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.certificate_chain import CertificateChain
+from backend.models.enums import CertLevel
 from backend.repositories.base import BaseRepository
 
 
@@ -25,3 +26,12 @@ class CertificateChainRepository(BaseRepository[CertificateChain]):
         stmt = select(CertificateChain).where(CertificateChain.asset_id == asset_id)
         result = await self.session.execute(stmt)
         return result.scalars().all()
+
+    async def get_leaf_by_asset_id(self, asset_id: uuid.UUID) -> CertificateChain | None:
+        """Retrieve the leaf certificate for a given asset when present."""
+        stmt = select(CertificateChain).where(
+            CertificateChain.asset_id == asset_id,
+            CertificateChain.cert_level == CertLevel.LEAF,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()

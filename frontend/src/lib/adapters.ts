@@ -53,17 +53,35 @@ function buildDimensionScores(raw: AssetResultResponse): DimensionScores {
 
 function buildCertInfo(raw: AssetResultResponse): CertificateInfo {
   const c = raw.certificate;
+  const leaf = raw.leaf_certificate;
+  const publicKeyAlgorithm = leaf?.public_key_algorithm?.toUpperCase() ?? '';
+  let keyType: CertificateInfo['key_type'] = (c?.key_type as CertificateInfo['key_type']) ?? 'RSA';
+
+  if (leaf?.public_key_algorithm) {
+    if (publicKeyAlgorithm.includes('ML-DSA')) {
+      keyType = 'ML-DSA';
+    } else if (publicKeyAlgorithm.includes('SLH-DSA')) {
+      keyType = 'SLH-DSA';
+    } else if (publicKeyAlgorithm === 'ECDSA') {
+      keyType = 'ECDSA';
+    } else if (publicKeyAlgorithm === 'RSA') {
+      keyType = 'RSA';
+    } else {
+      keyType = 'RSA';
+    }
+  }
+
   return {
-    subject_cn: c?.subject_cn ?? raw.hostname ?? 'unknown',
+    subject_cn: leaf?.subject_cn ?? c?.subject_cn ?? raw.hostname ?? 'unknown',
     subject_alt_names: c?.subject_alt_names ?? [],
-    issuer: c?.issuer ?? 'Unknown CA',
+    issuer: leaf?.issuer ?? c?.issuer ?? 'Unknown CA',
     certificate_authority: c?.certificate_authority ?? 'Unknown',
-    signature_algorithm: c?.signature_algorithm ?? 'sha256WithRSAEncryption',
-    key_type: (c?.key_type as CertificateInfo['key_type']) ?? 'RSA',
-    key_size: c?.key_size ?? 2048,
+    signature_algorithm: leaf?.signature_algorithm ?? c?.signature_algorithm ?? 'sha256WithRSAEncryption',
+    key_type: keyType,
+    key_size: leaf?.key_size_bits ?? c?.key_size ?? 2048,
     valid_from: c?.valid_from ?? '',
-    valid_until: c?.valid_until ?? '',
-    days_remaining: c?.days_remaining ?? 0,
+    valid_until: leaf?.not_after ?? c?.valid_until ?? '',
+    days_remaining: leaf?.days_remaining ?? c?.days_remaining ?? 0,
     sha256_fingerprint: c?.sha256_fingerprint ?? '',
   };
 }
@@ -84,6 +102,22 @@ export function adaptAsset(raw: AssetResultResponse): Asset {
   const domain = raw.hostname ?? raw.ip_address ?? 'unknown';
   const qScore = Math.round(100 - (raw.assessment?.risk_score ?? 50));
   const hndl = raw.remediation?.hndl_timeline;
+  const currentYear = new Date().getFullYear();
+  const hndlBreakYear = hndl?.entries.length ? Math.min(...hndl.entries.map((entry) => entry.breakYear)) : null;
+  const hndlYears = hndlBreakYear === null ? null : hndlBreakYear - currentYear;
+  const hndlRiskLevel = (() => {
+    switch (hndl?.urgency?.toUpperCase()) {
+      case 'CRITICAL':
+        return 'critical';
+      case 'HIGH':
+        return 'high';
+      case 'LOW':
+        return 'low';
+      case 'MEDIUM':
+      default:
+        return 'medium';
+    }
+  })();
 
   return {
     id: raw.asset_id,
@@ -102,9 +136,9 @@ export function adaptAsset(raw: AssetResultResponse): Asset {
     tier: mapTier(raw),
     ip: raw.ip_address ?? '',
     ipv6: '',
-    hndlYears: hndl?.years_remaining ?? null,
-    hndlBreakYear: hndl?.break_year ?? null,
-    hndlRiskLevel: hndl?.risk_level ?? 'medium',
+    hndlYears,
+    hndlBreakYear,
+    hndlRiskLevel,
     dimensionScores: buildDimensionScores(raw),
     forwardSecrecy: hasForwardSecrecy(raw.assessment?.kex_algorithm),
     hstsEnabled: false,
@@ -112,7 +146,13 @@ export function adaptAsset(raw: AssetResultResponse): Asset {
     businessCriticality: 'internal',
     lastScanned: new Date().toISOString(),
     software: buildSoftware(raw),
-    remediation: [] as RemediationAction[],
+    remediation: (raw.remediation_actions ?? []).map((item) => ({
+      priority: item.priority as RemediationAction['priority'],
+      finding: item.finding,
+      action: item.action,
+      effort: (item.effort as RemediationAction['effort']) ?? 'medium',
+      status: (item.status as RemediationAction['status']) ?? 'not_started',
+    })),
     cryptoAgilityScore: qScore,
   };
 }

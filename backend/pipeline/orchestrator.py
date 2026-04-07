@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from typing import Any, Callable, Sequence
 
 from qdrant_client import QdrantClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.analysis import (
@@ -58,6 +59,7 @@ from backend.intelligence import (
 from backend.models.crypto_assessment import CryptoAssessment
 from backend.models.discovered_asset import DiscoveredAsset
 from backend.models.enums import CertLevel, ComplianceTier, ScanStatus, ServiceType
+from backend.models.certificate_chain import CertificateChain
 from backend.models.remediation_action import (
     RemediationAction,
     RemediationEffort,
@@ -1412,6 +1414,13 @@ class ScanReadService:
                         bundle["certificates"].get(asset.id),
                         include_pem=False,
                     ),
+                    "leaf_certificate": serialize_leaf_certificate(
+                        bundle["leaf_certificates"].get(asset.id)
+                    ),
+                    "remediation_actions": [
+                        serialize_remediation_action(action)
+                        for action in bundle["remediation_actions"].get(asset.id, [])
+                    ],
                 }
             )
 
@@ -1553,6 +1562,31 @@ class ScanReadService:
         cboms: dict[uuid.UUID, Any] = {}
         remediations: dict[uuid.UUID, Any] = {}
         certificates: dict[uuid.UUID, Any] = {}
+        leaf_certificates: dict[uuid.UUID, CertificateChain] = {}
+        remediation_actions: dict[uuid.UUID, list[RemediationAction]] = {}
+
+        asset_ids = [asset.id for asset in assets]
+        if asset_ids:
+            leaf_certificate_rows = (
+                await session.execute(
+                    select(CertificateChain).where(
+                        CertificateChain.asset_id.in_(asset_ids),
+                        CertificateChain.cert_level == CertLevel.LEAF,
+                    )
+                )
+            ).scalars().all()
+            for certificate_chain in leaf_certificate_rows:
+                leaf_certificates[certificate_chain.asset_id] = certificate_chain
+
+            remediation_action_rows = (
+                await session.execute(
+                    select(RemediationAction).where(RemediationAction.asset_id.in_(asset_ids))
+                )
+            ).scalars().all()
+            for remediation_action in remediation_action_rows:
+                remediation_actions.setdefault(remediation_action.asset_id, []).append(
+                    remediation_action
+                )
 
         for asset in assets:
             assessment_rows = await assessment_repository.get_by_asset_id(asset.id)
@@ -1598,6 +1632,8 @@ class ScanReadService:
             "cboms": cboms,
             "remediations": remediations,
             "certificates": certificates,
+            "leaf_certificates": leaf_certificates,
+            "remediation_actions": remediation_actions,
             "progress": {
                 "assets_discovered": len(assets),
                 "assessments_created": len(assessments),
@@ -1821,6 +1857,36 @@ def serialize_certificate(
     return payload
 
 
+def serialize_leaf_certificate(certificate_chain: CertificateChain | None) -> dict[str, Any] | None:
+    if certificate_chain is None:
+        return None
+    now = datetime.now(UTC)
+    not_after = certificate_chain.not_after
+    return {
+        "subject_cn": extract_subject_cn(certificate_chain.subject),
+        "issuer": certificate_chain.issuer,
+        "public_key_algorithm": certificate_chain.public_key_algorithm,
+        "key_size_bits": certificate_chain.key_size_bits,
+        "signature_algorithm": certificate_chain.signature_algorithm,
+        "quantum_safe": certificate_chain.quantum_safe,
+        "not_before": certificate_chain.not_before,
+        "not_after": not_after,
+        "days_remaining": (not_after - now).days if not_after is not None else None,
+    }
+
+
+def serialize_remediation_action(remediation_action: RemediationAction) -> dict[str, Any]:
+    return {
+        "priority": remediation_action.priority.value,
+        "finding": remediation_action.finding,
+        "action": remediation_action.action,
+        "effort": remediation_action.effort.value,
+        "status": remediation_action.status.value,
+        "category": remediation_action.category,
+        "nist_reference": remediation_action.nist_reference,
+    }
+
+
 def serialize_runtime_event(event: ScanRuntimeEvent) -> dict[str, Any]:
     return {
         "timestamp": event.timestamp,
@@ -1857,3 +1923,12 @@ def _normalize_hostname(hostname: str | None) -> str | None:
         return None
     normalized = hostname.strip().lower().rstrip(".")
     return normalized or None
+
+
+def extract_subject_cn(subject: str | None) -> str | None:
+    if not subject:
+        return None
+    match = re.search(r"(?:^|,)CN=([^,]+)", subject)
+    if match is None:
+        return None
+    return match.group(1).strip() or None

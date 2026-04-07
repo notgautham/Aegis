@@ -133,6 +133,32 @@ class RemediationResponse(BaseModel):
     source_citations: dict[str, Any] | None
 
 
+class LeafCertificateResponse(BaseModel):
+    """Leaf certificate summary included in compiled asset results."""
+
+    subject_cn: str | None
+    issuer: str | None
+    public_key_algorithm: str | None
+    key_size_bits: int | None
+    signature_algorithm: str | None
+    quantum_safe: bool | None
+    not_before: datetime | None
+    not_after: datetime | None
+    days_remaining: int | None
+
+
+class RemediationActionResponse(BaseModel):
+    """Structured remediation action included in compiled asset results."""
+
+    priority: str
+    finding: str
+    action: str
+    effort: str
+    status: str
+    category: str | None
+    nist_reference: str | None
+
+
 class AssetResultResponse(BaseModel):
     """Compiled per-asset scan result."""
 
@@ -147,6 +173,8 @@ class AssetResultResponse(BaseModel):
     cbom: CbomResponse | None
     remediation: RemediationResponse | None
     certificate: CertificateResponse | None
+    leaf_certificate: LeafCertificateResponse | None = None
+    remediation_actions: list[RemediationActionResponse] = Field(default_factory=list)
 
 
 class ScanResultsResponse(BaseModel):
