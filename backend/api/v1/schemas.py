@@ -159,6 +159,17 @@ class RemediationActionResponse(BaseModel):
     nist_reference: str | None
 
 
+class DNSRecordResponse(BaseModel):
+    """Persisted DNS validation row included in compiled scan results."""
+
+    hostname: str
+    resolved_ips: list[str] = Field(default_factory=list)
+    cnames: list[str] = Field(default_factory=list)
+    discovery_source: str
+    is_in_scope: bool
+    discovered_at: datetime | None
+
+
 class AssetResultResponse(BaseModel):
     """Compiled per-asset scan result."""
 
@@ -169,6 +180,10 @@ class AssetResultResponse(BaseModel):
     protocol: str
     service_type: ServiceType | None
     server_software: str | None
+    open_ports: list[dict[str, Any]] | None = None
+    asset_metadata: dict[str, Any] | None = None
+    is_shadow_it: bool = False
+    discovery_source: str | None = None
     assessment: AssessmentResponse | None
     cbom: CbomResponse | None
     remediation: RemediationResponse | None
@@ -193,6 +208,7 @@ class ScanResultsResponse(BaseModel):
     elapsed_seconds: float | None = None
     events: list[ScanRuntimeEventResponse] = Field(default_factory=list)
     degraded_modes: list[str] = Field(default_factory=list)
+    dns_records: list[DNSRecordResponse] = Field(default_factory=list)
     assets: list[AssetResultResponse]
 
 

@@ -58,8 +58,10 @@ from backend.intelligence import (
 )
 from backend.models.crypto_assessment import CryptoAssessment
 from backend.models.discovered_asset import DiscoveredAsset
-from backend.models.enums import CertLevel, ComplianceTier, ScanStatus, ServiceType
 from backend.models.certificate_chain import CertificateChain
+from backend.models.dns_record import DNSRecord
+from backend.models.enums import CertLevel, ComplianceTier, ScanStatus, ServiceType
+from backend.models.scan_event import ScanEvent
 from backend.models.remediation_action import (
     RemediationAction,
     RemediationEffort,
@@ -1407,6 +1409,10 @@ class ScanReadService:
                     "protocol": asset.protocol,
                     "service_type": asset.service_type,
                     "server_software": asset.server_software,
+                    "open_ports": asset.open_ports,
+                    "asset_metadata": asset.asset_metadata,
+                    "is_shadow_it": asset.is_shadow_it,
+                    "discovery_source": asset.discovery_source,
                     "assessment": serialize_assessment(bundle["assessments"].get(asset.id)),
                     "cbom": serialize_cbom(bundle["cboms"].get(asset.id)),
                     "remediation": serialize_remediation(bundle["remediations"].get(asset.id)),
@@ -1432,6 +1438,9 @@ class ScanReadService:
             "completed_at": bundle["scan"].completed_at,
             "progress": bundle["progress"],
             "summary": bundle["summary"],
+            "dns_records": [
+                serialize_dns_record(record) for record in bundle["dns_records"]
+            ],
             "assets": assets_payload,
         }
         payload.update(self._build_runtime_payload(bundle))
@@ -1552,12 +1561,16 @@ class ScanReadService:
         cbom_repository = CbomDocumentRepository(session)
         remediation_repository = RemediationBundleRepository(session)
         certificate_repository = ComplianceCertificateRepository(session)
+        dns_record_repository = DNSRecordRepository(session)
+        scan_event_repository = ScanEventRepository(session)
 
         scan = await scan_repository.get_by_id(scan_id)
         if scan is None:
             raise ScanNotFoundError(f"Scan {scan_id} does not exist.")
 
         assets = list(await asset_repository.get_by_scan_id(scan_id))
+        dns_records = list(await dns_record_repository.get_by_scan_id(scan_id))
+        scan_events = list(await scan_event_repository.get_by_scan_id(scan_id))
         assessments: dict[uuid.UUID, CryptoAssessment] = {}
         cboms: dict[uuid.UUID, Any] = {}
         remediations: dict[uuid.UUID, Any] = {}
@@ -1628,6 +1641,8 @@ class ScanReadService:
         bundle = {
             "scan": scan,
             "assets": assets,
+            "dns_records": dns_records,
+            "scan_events": scan_events,
             "assessments": assessments,
             "cboms": cboms,
             "remediations": remediations,
@@ -1737,16 +1752,41 @@ class ScanReadService:
                 else bundle["scan"].status.value
             )
 
+        persisted_events = [
+            serialize_persisted_scan_event(event)
+            for event in sorted(
+                bundle.get("scan_events", []),
+                key=lambda event: (
+                    getattr(event, "timestamp", None) or datetime.min.replace(tzinfo=UTC),
+                    str(getattr(event, "id", "")),
+                ),
+            )
+        ]
+        runtime_events = (
+            [
+                serialize_runtime_event(event)
+                for event in runtime_snapshot.events
+            ]
+            if runtime_snapshot is not None
+            else persisted_events
+        )
+        degraded_modes = (
+            list(runtime_snapshot.degraded_modes)
+            if runtime_snapshot is not None
+            else [
+                event["message"]
+                for event in persisted_events
+                if event["kind"] == "degraded"
+            ]
+        )
+
         return {
             "stage": stage,
             "stage_detail": runtime_snapshot.stage_detail if runtime_snapshot is not None else None,
             "stage_started_at": runtime_snapshot.stage_started_at if runtime_snapshot is not None else None,
             "elapsed_seconds": elapsed_seconds,
-            "events": [
-                serialize_runtime_event(event)
-                for event in (runtime_snapshot.events if runtime_snapshot is not None else [])
-            ],
-            "degraded_modes": list(runtime_snapshot.degraded_modes) if runtime_snapshot is not None else [],
+            "events": runtime_events,
+            "degraded_modes": degraded_modes,
         }
 
 
@@ -1887,7 +1927,27 @@ def serialize_remediation_action(remediation_action: RemediationAction) -> dict[
     }
 
 
+def serialize_dns_record(dns_record: DNSRecord) -> dict[str, Any]:
+    return {
+        "hostname": dns_record.hostname,
+        "resolved_ips": list(dns_record.resolved_ips or []),
+        "cnames": list(dns_record.cnames or []),
+        "discovery_source": dns_record.discovery_source,
+        "is_in_scope": dns_record.is_in_scope,
+        "discovered_at": dns_record.discovered_at,
+    }
+
+
 def serialize_runtime_event(event: ScanRuntimeEvent) -> dict[str, Any]:
+    return {
+        "timestamp": event.timestamp,
+        "kind": event.kind,
+        "message": event.message,
+        "stage": event.stage,
+    }
+
+
+def serialize_persisted_scan_event(event: ScanEvent) -> dict[str, Any]:
     return {
         "timestamp": event.timestamp,
         "kind": event.kind,

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { scanHistory, scanAssetMap, assets, Asset } from '@/data/demoData';
-import { api } from '@/lib/api';
+import { api, type AssetResultResponse, type DNSRecordResponse, type ScanResultsResponse } from '@/lib/api';
 import { adaptScanResults } from '@/lib/adapters';
 
 interface ScanSnapshot {
@@ -27,6 +27,9 @@ interface SelectedScanContextType {
   setSelectedScanId: (id: string) => void;
   selectedScan: typeof scanHistory[0] | undefined;
   selectedAssets: Asset[];
+  selectedScanResults: ScanResultsResponse | null;
+  selectedAssetResults: AssetResultResponse[];
+  selectedDnsRecords: DNSRecordResponse[];
   isHistorical: boolean;
   isLoading: boolean;
   scanError: string | null;
@@ -36,16 +39,16 @@ const SelectedScanContext = createContext<SelectedScanContextType | undefined>(u
 
 export const SelectedScanProvider = ({ children }: { children: ReactNode }) => {
   const [selectedScanId, setSelectedScanId] = useState('SCN-007');
-  const [liveAssets, setLiveAssets] = useState<Asset[] | null>(null);
-  const [liveAssetsScanId, setLiveAssetsScanId] = useState<string | null>(null);
+  const [liveScanResults, setLiveScanResults] = useState<ScanResultsResponse | null>(null);
+  const [liveScanResultsScanId, setLiveScanResultsScanId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
 
   // Fetch live data when selectedScanId is a UUID
   useEffect(() => {
     if (!isUUID(selectedScanId)) {
-      setLiveAssets(null);
-      setLiveAssetsScanId(null);
+      setLiveScanResults(null);
+      setLiveScanResultsScanId(null);
       setScanError(null);
       setIsLoading(false);
       return;
@@ -53,24 +56,23 @@ export const SelectedScanProvider = ({ children }: { children: ReactNode }) => {
 
     let cancelled = false;
     const requestScanId = selectedScanId;
-    setLiveAssets(null);
-    setLiveAssetsScanId(null);
+    setLiveScanResults(null);
+    setLiveScanResultsScanId(null);
     setIsLoading(true);
     setScanError(null);
 
     api.getScanResults(requestScanId)
       .then((response) => {
         if (cancelled) return;
-        const adapted = adaptScanResults(response);
-        setLiveAssets(adapted);
-        setLiveAssetsScanId(requestScanId);
+        setLiveScanResults(response);
+        setLiveScanResultsScanId(requestScanId);
       })
       .catch((err) => {
         if (cancelled) return;
         console.error('Failed to fetch scan results:', err);
         setScanError(err instanceof Error ? err.message : 'Failed to fetch scan results');
-        setLiveAssets(null);
-        setLiveAssetsScanId(null);
+        setLiveScanResults(null);
+        setLiveScanResultsScanId(null);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -81,10 +83,16 @@ export const SelectedScanProvider = ({ children }: { children: ReactNode }) => {
 
   const selectedScan = useMemo(() => scanHistory.find(s => s.id === selectedScanId), [selectedScanId]);
 
+  const selectedScanResults = useMemo(() => {
+    if (!isUUID(selectedScanId)) return null;
+    if (liveScanResultsScanId !== selectedScanId) return null;
+    return liveScanResults;
+  }, [selectedScanId, liveScanResults, liveScanResultsScanId]);
+
   const selectedAssets = useMemo(() => {
     // If we have live data from a UUID scan, use it
     if (isUUID(selectedScanId)) {
-      if (liveAssetsScanId === selectedScanId && liveAssets) return liveAssets;
+      if (selectedScanResults) return adaptScanResults(selectedScanResults);
       return [];
     }
 
@@ -92,12 +100,33 @@ export const SelectedScanProvider = ({ children }: { children: ReactNode }) => {
     const snapshot = scanSnapshots[selectedScanId];
     if (!snapshot) return assets;
     return assets.filter(a => snapshot.assetIds.includes(a.id));
-  }, [selectedScanId, liveAssets, liveAssetsScanId]);
+  }, [selectedScanId, selectedScanResults]);
+
+  const selectedAssetResults = useMemo(
+    () => selectedScanResults?.assets ?? [],
+    [selectedScanResults],
+  );
+
+  const selectedDnsRecords = useMemo(
+    () => selectedScanResults?.dns_records ?? [],
+    [selectedScanResults],
+  );
 
   const isHistorical = selectedScanId !== 'SCN-007';
 
   return (
-    <SelectedScanContext.Provider value={{ selectedScanId, setSelectedScanId, selectedScan, selectedAssets, isHistorical, isLoading, scanError }}>
+    <SelectedScanContext.Provider value={{
+      selectedScanId,
+      setSelectedScanId,
+      selectedScan,
+      selectedAssets,
+      selectedScanResults,
+      selectedAssetResults,
+      selectedDnsRecords,
+      isHistorical,
+      isLoading,
+      scanError,
+    }}>
       {children}
     </SelectedScanContext.Provider>
   );

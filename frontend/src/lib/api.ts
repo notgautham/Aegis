@@ -91,6 +91,15 @@ export interface RemediationActionItem {
   nist_reference: string | null;
 }
 
+export interface DNSRecordResponse {
+  hostname: string;
+  resolved_ips: string[];
+  cnames: string[];
+  discovery_source: string;
+  is_in_scope: boolean;
+  discovered_at: string | null;
+}
+
 export interface AssetResultResponse {
   asset_id: string;
   hostname: string | null;
@@ -98,6 +107,10 @@ export interface AssetResultResponse {
   port: number;
   service_type: 'tls' | 'vpn' | 'api';
   server_software: string | null;
+  open_ports: Array<Record<string, unknown>> | null;
+  asset_metadata: Record<string, unknown> | null;
+  is_shadow_it: boolean;
+  discovery_source: string | null;
   assessment: AssessmentResponse | null;
   remediation: RemediationResponse | null;
   cbom: CbomResponse | null;
@@ -109,6 +122,13 @@ export interface AssetResultResponse {
 export interface ScanProgress {
   assets_discovered: number;
   [key: string]: unknown;
+}
+
+export interface ScanRuntimeEvent {
+  timestamp: string;
+  kind: string;
+  message: string;
+  stage: string | null;
 }
 
 export interface ScanSummary {
@@ -126,6 +146,7 @@ export interface ScanResultsResponse {
   completed_at: string | null;
   progress: ScanProgress;
   summary: ScanSummary;
+  dns_records: DNSRecordResponse[];
   assets: AssetResultResponse[];
 }
 
@@ -136,6 +157,13 @@ export interface ScanStatusResponse {
   created_at: string;
   completed_at: string | null;
   progress: ScanProgress;
+  summary: ScanSummary;
+  stage: string | null;
+  stage_detail: string | null;
+  stage_started_at: string | null;
+  elapsed_seconds: number | null;
+  events: ScanRuntimeEvent[];
+  degraded_modes: string[];
 }
 
 export interface ScanHistoryItem {
