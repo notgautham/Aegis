@@ -43,7 +43,7 @@ const DataContextBadge = () => {
   if (!activeSelectedScan) return null;
 
   return (
-    <div className="space-y-0">
+    <div className="flex flex-wrap items-start gap-2">
       <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[hsl(var(--bg-sunken))] border border-[hsl(var(--border-default))] w-fit">
         <span className="text-sm">📡</span>
         <DropdownMenu>
@@ -77,7 +77,7 @@ const DataContextBadge = () => {
         </button>
       </div>
       {isHistorical && (
-        <div className="flex items-center gap-2 px-3 py-1.5 mt-1 rounded-lg bg-[hsl(var(--accent-amber)/0.08)] border border-[hsl(var(--accent-amber)/0.2)] w-fit">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[hsl(var(--accent-amber)/0.08)] border border-[hsl(var(--accent-amber)/0.2)] w-fit">
           <AlertTriangle className="w-3 h-3 text-[hsl(var(--accent-amber))]" />
           <span className="text-[11px] font-body text-[hsl(var(--accent-amber))]">
             Viewing historical scan {selectedScanId} · {selectedScan.started.split(',')[0]} — This is not current data.

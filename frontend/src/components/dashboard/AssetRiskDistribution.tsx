@@ -1,14 +1,20 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 'recharts';
+import type { Asset } from '@/data/demoData';
 
-const data = [
-  { level: 'Critical', count: 3, color: 'hsl(var(--status-critical))' },
-  { level: 'High', count: 5, color: 'hsl(var(--status-vuln))' },
-  { level: 'Medium', count: 8, color: 'hsl(var(--accent-amber))' },
-  { level: 'Low', count: 5, color: 'hsl(var(--status-safe))' },
-];
+interface AssetRiskDistributionProps {
+  selectedAssets: Asset[];
+}
 
-const AssetRiskDistribution = () => (
+const AssetRiskDistribution = ({ selectedAssets }: AssetRiskDistributionProps) => {
+  const data = [
+    { level: 'Critical', count: selectedAssets.filter((asset) => asset.status === 'critical').length, color: 'hsl(var(--status-critical))' },
+    { level: 'High', count: selectedAssets.filter((asset) => asset.status === 'vulnerable').length, color: 'hsl(var(--status-vuln))' },
+    { level: 'Medium', count: selectedAssets.filter((asset) => asset.status === 'standard' || asset.status === 'safe').length, color: 'hsl(var(--accent-amber))' },
+    { level: 'Low', count: selectedAssets.filter((asset) => asset.status === 'elite-pqc').length, color: 'hsl(var(--status-safe))' },
+  ];
+
+  return (
   <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
     <CardHeader className="pb-2"><CardTitle className="text-sm font-body">Asset Risk Distribution</CardTitle></CardHeader>
     <CardContent>
@@ -24,6 +30,7 @@ const AssetRiskDistribution = () => (
       </ResponsiveContainer>
     </CardContent>
   </Card>
-);
+  );
+};
 
 export default AssetRiskDistribution;

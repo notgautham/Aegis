@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import type { Asset } from '@/data/demoData';
 
 interface CountUpProps {
   end: number;
@@ -14,6 +15,9 @@ const CountUp = ({ end, duration = 800, prefix = '', className = '' }: CountUpPr
   const started = useRef(false);
 
   useEffect(() => {
+    started.current = false;
+    setValue(0);
+
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting && !started.current) {
         started.current = true;
@@ -45,18 +49,19 @@ const execLabelMap: Record<string, string> = {
 
 interface KPIStripProps {
   execMode?: boolean;
+  selectedAssets: Asset[];
 }
 
-const KPIStrip = ({ execMode = false }: KPIStripProps) => {
+const KPIStrip = ({ execMode = false, selectedAssets }: KPIStripProps) => {
   const kpis = [
-    { label: 'Total Assets', value: 21, color: 'text-brand-primary', dotColor: '' },
-    { label: 'Fully Quantum Safe', value: 2, color: 'text-status-safe', dotColor: '' },
-    { label: 'PQC Transition', value: 4, color: 'text-blue-500', dotColor: '' },
-    { label: 'Quantum Vulnerable', value: 11, color: 'text-status-vuln', dotColor: '' },
-    { label: 'Critically Vulnerable', value: 3, color: 'text-status-critical', dotColor: 'animate-pulse-dot' },
-    { label: 'Unknown', value: 1, color: 'text-status-unknown', dotColor: '' },
-    { label: 'Expiring Certs (≤30d)', value: 2, color: 'text-accent-amber', dotColor: '', icon: 'warn' },
-    { label: 'High Risk Assets', value: 5, color: 'text-status-critical', dotColor: 'animate-pulse-dot', icon: 'risk' },
+    { label: 'Total Assets', value: selectedAssets.length, color: 'text-brand-primary', dotColor: '' },
+    { label: 'Fully Quantum Safe', value: selectedAssets.filter((asset) => asset.status === 'elite-pqc').length, color: 'text-status-safe', dotColor: '' },
+    { label: 'PQC Transition', value: selectedAssets.filter((asset) => asset.status === 'safe').length, color: 'text-blue-500', dotColor: '' },
+    { label: 'Quantum Vulnerable', value: selectedAssets.filter((asset) => asset.status === 'vulnerable' || asset.status === 'standard').length, color: 'text-status-vuln', dotColor: '' },
+    { label: 'Critically Vulnerable', value: selectedAssets.filter((asset) => asset.status === 'critical').length, color: 'text-status-critical', dotColor: 'animate-pulse-dot' },
+    { label: 'Unknown', value: selectedAssets.filter((asset) => asset.status === 'unknown').length, color: 'text-status-unknown', dotColor: '' },
+    { label: 'Expiring Certs (<=30d)', value: selectedAssets.filter((asset) => asset.certInfo.days_remaining <= 30).length, color: 'text-accent-amber', dotColor: '', icon: 'warn' },
+    { label: 'High Risk Assets', value: selectedAssets.filter((asset) => asset.qScore < 40).length, color: 'text-status-critical', dotColor: 'animate-pulse-dot', icon: 'risk' },
   ];
 
   const getLabel = (label: string) => execMode && execLabelMap[label] ? execLabelMap[label] : label;

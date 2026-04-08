@@ -1,18 +1,24 @@
-import { avgQScore } from '@/data/demoData';
+import type { Asset } from '@/data/demoData';
 
-const QScoreOverview = () => {
+interface QScoreOverviewProps {
+  selectedAssets: Asset[];
+}
+
+const QScoreOverview = ({ selectedAssets }: QScoreOverviewProps) => {
+  const avgQScore = Math.round(selectedAssets.reduce((sum, asset) => sum + asset.qScore, 0) / Math.max(selectedAssets.length, 1));
   const circumference = 2 * Math.PI * 50;
   const offset = circumference - (avgQScore / 100) * circumference;
+  const ringColor = avgQScore >= 70 ? 'hsl(var(--status-safe))' : avgQScore >= 40 ? 'hsl(var(--accent-amber))' : 'hsl(var(--status-critical))';
 
   const breakdown = [
-    { label: 'Quantum Safe', count: 2, color: 'bg-status-safe' },
-    { label: 'PQC Transition', count: 4, color: 'bg-blue-500' },
-    { label: 'Vulnerable', count: 11, color: 'bg-accent-amber' },
-    { label: 'Critical', count: 3, color: 'bg-status-critical' },
-    { label: 'Unknown', count: 1, color: 'bg-status-unknown' },
+    { label: 'Quantum Safe', count: selectedAssets.filter((asset) => asset.status === 'elite-pqc').length, color: 'bg-status-safe' },
+    { label: 'PQC Transition', count: selectedAssets.filter((asset) => asset.status === 'safe').length, color: 'bg-blue-500' },
+    { label: 'Vulnerable', count: selectedAssets.filter((asset) => asset.status === 'vulnerable' || asset.status === 'standard').length, color: 'bg-accent-amber' },
+    { label: 'Critical', count: selectedAssets.filter((asset) => asset.status === 'critical').length, color: 'bg-status-critical' },
+    { label: 'Unknown', count: selectedAssets.filter((asset) => asset.status === 'unknown').length, color: 'bg-status-unknown' },
   ];
 
-  const maxCount = Math.max(...breakdown.map(b => b.count));
+  const maxCount = Math.max(...breakdown.map(b => b.count), 1);
 
   return (
     <div className="bg-surface rounded-xl border border-[hsl(var(--border-default))] p-5 shadow-[0_18px_42px_-28px_hsl(var(--brand-primary)/0.45)]">
@@ -23,14 +29,14 @@ const QScoreOverview = () => {
           <circle cx="60" cy="60" r="50" fill="none" stroke="hsl(var(--border-default))" strokeWidth="8" />
           <circle
             cx="60" cy="60" r="50" fill="none"
-            stroke="hsl(var(--status-critical))"
+            stroke={ringColor}
             strokeWidth="8"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
             strokeLinecap="round"
             transform="rotate(-90 60 60)"
           />
-          <text x="60" y="56" textAnchor="middle" className="font-mono text-2xl font-bold" fill="hsl(var(--status-critical))">
+          <text x="60" y="56" textAnchor="middle" className="font-mono text-2xl font-bold" fill={ringColor}>
             {avgQScore}
           </text>
           <text x="60" y="72" textAnchor="middle" className="font-mono text-[10px]" fill="hsl(var(--text-muted))">

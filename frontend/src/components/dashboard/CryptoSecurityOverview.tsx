@@ -1,9 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { assets } from '@/data/demoData';
+import type { Asset } from '@/data/demoData';
 import { cn } from '@/lib/utils';
 
-const CryptoSecurityOverview = () => {
-  const rows = assets.slice(0, 5);
+interface CryptoSecurityOverviewProps {
+  selectedAssets: Asset[];
+}
+
+const CryptoSecurityOverview = ({ selectedAssets }: CryptoSecurityOverviewProps) => {
+  const rows = selectedAssets.slice(0, 5);
 
   return (
     <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">

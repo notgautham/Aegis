@@ -1,13 +1,17 @@
 import { useState } from 'react';
-import { assets, getStatusLabel, getQScoreColor } from '@/data/demoData';
+import { getStatusLabel, getQScoreColor } from '@/data/demoData';
 import AssetDetailPanel from '@/components/dashboard/AssetDetailPanel';
 import type { Asset } from '@/data/demoData';
 
-const AssetTable = () => {
+interface AssetTableProps {
+  selectedAssets: Asset[];
+}
+
+const AssetTable = ({ selectedAssets }: AssetTableProps) => {
   const [selected, setSelected] = useState<Asset | null>(null);
   const [search, setSearch] = useState('');
 
-  const filtered = assets.filter(a =>
+  const filtered = selectedAssets.filter(a =>
     a.domain.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -29,7 +33,7 @@ const AssetTable = () => {
           <div className="flex items-center gap-3">
             <h3 className="font-body font-bold text-sm text-foreground">Asset Inventory</h3>
             <span className="font-mono text-[10px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded">
-              {assets.length} ASSETS
+              {selectedAssets.length} ASSETS
             </span>
           </div>
           <input

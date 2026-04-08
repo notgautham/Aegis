@@ -1,23 +1,32 @@
 import { Link } from 'react-router-dom';
-import { scanHistory } from '@/data/demoData';
+import { useQuery } from '@tanstack/react-query';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
+import { api } from '@/lib/api';
+import { adaptScanHistory } from '@/lib/adapters';
 
 const SinceLastScanStrip = () => {
-  const current = scanHistory[0];
-  const prev = scanHistory[1];
-  if (!prev) return null;
+  const { selectedAssets } = useSelectedScan();
+  const { data: scanHistory } = useQuery({
+    queryKey: ['dashboard-since-last-scan'],
+    queryFn: async () => adaptScanHistory(await api.getScanHistory()),
+  });
+  const current = scanHistory?.[0];
+  const prev = scanHistory?.[1];
+  if (!current || !prev) return null;
 
   const assetDelta = current.assetsFound - prev.assetsFound;
   const scoreDelta = current.qScore - prev.qScore;
   const critDelta = current.criticalFindings - prev.criticalFindings;
+  const expiringSoon = selectedAssets.filter((asset) => asset.certInfo.days_remaining <= 7).length;
 
   const items = [
     assetDelta !== 0 ? { text: `${assetDelta > 0 ? '+' : ''}${assetDelta} new assets discovered`, link: '/dashboard/discovery' } : null,
     critDelta > 0 ? { text: `${critDelta} new critical finding${critDelta > 1 ? 's' : ''}`, link: '/dashboard/remediation/action-plan' } : null,
     scoreDelta !== 0 ? { text: `Q-Score ${scoreDelta > 0 ? 'improved' : 'decreased'} ${scoreDelta > 0 ? '+' : ''}${scoreDelta}`, link: '/dashboard/rating/enterprise' } : null,
-    { text: '1 certificate now expiring in <7 days', link: '/dashboard/inventory' },
+    expiringSoon > 0 ? { text: `${expiringSoon} certificate${expiringSoon > 1 ? 's' : ''} now expiring in <7 days`, link: '/dashboard/inventory' } : null,
   ].filter(Boolean);
 
-  const noChanges = assetDelta === 0 && scoreDelta === 0 && critDelta === 0;
+  const noChanges = assetDelta === 0 && scoreDelta === 0 && critDelta === 0 && expiringSoon === 0;
 
   return (
     <div className="px-4 py-2.5 rounded-lg bg-[hsl(var(--bg-sunken))] border border-[hsl(var(--border-default))] mb-5">

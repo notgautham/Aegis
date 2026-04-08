@@ -1,4 +1,4 @@
-import { enterpriseScore, maxScore, getTierLabel } from '@/data/demoData';
+import { getQScoreColor, type Asset } from '@/data/demoData';
 
 const execLabelMap: Record<string, string> = {
   'Elite-PQC': 'Fully Quantum-Safe',
@@ -11,24 +11,23 @@ const execLabelMap: Record<string, string> = {
 
 interface CyberRatingProps {
   execMode?: boolean;
+  selectedAssets: Asset[];
 }
 
-const CyberRating = ({ execMode = false }: CyberRatingProps) => {
-  const score = enterpriseScore;
-  const tier = getTierLabel(score);
+const CyberRating = ({ execMode = false, selectedAssets }: CyberRatingProps) => {
+  const score = Math.round(selectedAssets.reduce((sum, asset) => sum + asset.qScore, 0) / Math.max(selectedAssets.length, 1));
+  const maxScore = 100;
+  const tier = score >= 80 ? 'Elite-PQC' : score >= 60 ? 'Standard' : score >= 40 ? 'Legacy' : 'Critical';
   const pct = (score / maxScore) * 100;
   const circumference = 2 * Math.PI * 60;
   const offset = circumference - (pct / 100) * circumference;
 
   const el = (text: string) => execMode && execLabelMap[text] ? execLabelMap[text] : text;
 
-  const assetScores = [
-    { name: 'auth.pnb.co.in', score: 100, color: 'hsl(var(--status-safe))' },
-    { name: 'pqc-api.pnb.co.in', score: 100, color: 'hsl(var(--status-safe))' },
-    { name: 'swift.pnb.co.in', score: 71, color: 'hsl(var(--accent-amber))' },
-    { name: 'vpn.pnb.co.in', score: 24, color: 'hsl(var(--status-critical))' },
-    { name: 'reporting.pnb.co.in', score: 24, color: 'hsl(var(--status-critical))' },
-  ];
+  const assetScores = [...selectedAssets]
+    .sort((a, b) => b.qScore - a.qScore)
+    .slice(0, 5)
+    .map((asset) => ({ name: asset.domain, score: asset.qScore, color: getQScoreColor(asset.qScore) }));
 
   return (
     <div className="bg-surface rounded-xl border border-[hsl(var(--border-default))] p-5 shadow-[0_18px_42px_-28px_hsl(var(--brand-primary)/0.45)]">
@@ -71,10 +70,10 @@ const CyberRating = ({ execMode = false }: CyberRatingProps) => {
         <span className="font-mono text-[10px] text-muted-foreground uppercase block mb-2">Tier Reference</span>
         <div className="grid grid-cols-2 gap-1">
           {[
-            { label: 'Critical', range: '< 200', color: 'bg-status-critical' },
-            { label: 'Legacy', range: '200–400', color: 'bg-status-vuln' },
-            { label: 'Standard', range: '400–700', color: 'bg-accent-amber' },
-            { label: 'Elite-PQC', range: '> 700', color: 'bg-status-safe' },
+            { label: 'Critical', range: '< 40', color: 'bg-status-critical' },
+            { label: 'Legacy', range: '40-59', color: 'bg-status-vuln' },
+            { label: 'Standard', range: '60-79', color: 'bg-accent-amber' },
+            { label: 'Elite-PQC', range: '>= 80', color: 'bg-status-safe' },
           ].map(t => (
             <div key={t.label} className="flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${t.color}`} />

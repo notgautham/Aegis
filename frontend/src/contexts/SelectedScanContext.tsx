@@ -37,6 +37,7 @@ const SelectedScanContext = createContext<SelectedScanContextType | undefined>(u
 export const SelectedScanProvider = ({ children }: { children: ReactNode }) => {
   const [selectedScanId, setSelectedScanId] = useState('SCN-007');
   const [liveAssets, setLiveAssets] = useState<Asset[] | null>(null);
+  const [liveAssetsScanId, setLiveAssetsScanId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
 
@@ -44,26 +45,32 @@ export const SelectedScanProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!isUUID(selectedScanId)) {
       setLiveAssets(null);
+      setLiveAssetsScanId(null);
       setScanError(null);
       setIsLoading(false);
       return;
     }
 
     let cancelled = false;
+    const requestScanId = selectedScanId;
+    setLiveAssets(null);
+    setLiveAssetsScanId(null);
     setIsLoading(true);
     setScanError(null);
 
-    api.getScanResults(selectedScanId)
+    api.getScanResults(requestScanId)
       .then((response) => {
         if (cancelled) return;
         const adapted = adaptScanResults(response);
         setLiveAssets(adapted);
+        setLiveAssetsScanId(requestScanId);
       })
       .catch((err) => {
         if (cancelled) return;
         console.error('Failed to fetch scan results:', err);
         setScanError(err instanceof Error ? err.message : 'Failed to fetch scan results');
         setLiveAssets(null);
+        setLiveAssetsScanId(null);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -76,13 +83,16 @@ export const SelectedScanProvider = ({ children }: { children: ReactNode }) => {
 
   const selectedAssets = useMemo(() => {
     // If we have live data from a UUID scan, use it
-    if (isUUID(selectedScanId) && liveAssets) return liveAssets;
+    if (isUUID(selectedScanId)) {
+      if (liveAssetsScanId === selectedScanId && liveAssets) return liveAssets;
+      return [];
+    }
 
     // Otherwise fall back to demoData
     const snapshot = scanSnapshots[selectedScanId];
     if (!snapshot) return assets;
     return assets.filter(a => snapshot.assetIds.includes(a.id));
-  }, [selectedScanId, liveAssets]);
+  }, [selectedScanId, liveAssets, liveAssetsScanId]);
 
   const isHistorical = selectedScanId !== 'SCN-007';
 

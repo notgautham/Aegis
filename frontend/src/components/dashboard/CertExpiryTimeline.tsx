@@ -1,16 +1,20 @@
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 'recharts';
+import type { Asset } from '@/data/demoData';
 
-const data = [
-  { range: '0–30 days', count: 3, color: 'hsl(var(--status-critical))' },
-  { range: '30–60 days', count: 4, color: 'hsl(var(--accent-amber))' },
-  { range: '60–90 days', count: 2, color: 'hsl(35, 90%, 55%)' },
-  { range: '>90 days', count: 12, color: 'hsl(var(--status-safe))' },
-];
+interface CertExpiryTimelineProps {
+  selectedAssets: Asset[];
+}
 
-const CertExpiryTimeline = () => {
+const CertExpiryTimeline = ({ selectedAssets }: CertExpiryTimelineProps) => {
   const navigate = useNavigate();
+  const data = [
+    { range: '0-30 days', count: selectedAssets.filter((asset) => asset.certInfo.days_remaining <= 30).length, color: 'hsl(var(--status-critical))' },
+    { range: '30-60 days', count: selectedAssets.filter((asset) => asset.certInfo.days_remaining > 30 && asset.certInfo.days_remaining <= 60).length, color: 'hsl(var(--accent-amber))' },
+    { range: '60-90 days', count: selectedAssets.filter((asset) => asset.certInfo.days_remaining > 60 && asset.certInfo.days_remaining <= 90).length, color: 'hsl(35, 90%, 55%)' },
+    { range: '>90 days', count: selectedAssets.filter((asset) => asset.certInfo.days_remaining > 90).length, color: 'hsl(var(--status-safe))' },
+  ];
 
   return (
     <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">

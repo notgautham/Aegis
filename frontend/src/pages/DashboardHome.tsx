@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Shield, FileText, AlertTriangle, Wrench, CheckCircle2, FileBarChart } from 'lucide-react';
-import { getStatusColor, getStatusLabel, getQScoreColor } from '@/data/demoData';
+import { assets, getStatusColor, getStatusLabel, getQScoreColor } from '@/data/demoData';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 
@@ -59,28 +59,28 @@ const DashboardHome = () => {
         <ViewRoleToggle activeRole={activeRole} onRoleChange={setActiveRole} />
       </div>
 
-      <KPIStrip execMode={isExec} />
+      <KPIStrip execMode={isExec} selectedAssets={selectedAssets} />
       <SinceLastScanStrip />
 
       {activeRole === 'analyst' && (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-[55%_45%] gap-5 mb-5">
             <NetworkGraph />
-            <CyberRating />
+            <CyberRating selectedAssets={selectedAssets} />
           </div>
           <div className="mb-5">
-            <AssetTable />
+            <AssetTable selectedAssets={selectedAssets} />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-            <QScoreOverview />
-            <IntelligencePanel assets={selectedAssets} />
+            <QScoreOverview selectedAssets={selectedAssets} />
+            <IntelligencePanel assets={assets} />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-            <CertExpiryTimeline />
-            <AssetRiskDistribution />
+            <CertExpiryTimeline selectedAssets={selectedAssets} />
+            <AssetRiskDistribution selectedAssets={selectedAssets} />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-            <CryptoSecurityOverview />
+            <CryptoSecurityOverview selectedAssets={selectedAssets} />
             <RecentActivityFeed />
           </div>
 
@@ -289,8 +289,8 @@ const DashboardHome = () => {
       {activeRole === 'executive' && (
         <div data-role="executive">
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-5 mb-5">
-            <CyberRating execMode />
-            <CertExpiryTimeline />
+            <CyberRating execMode selectedAssets={selectedAssets} />
+            <CertExpiryTimeline selectedAssets={selectedAssets} />
           </div>
           <RecentActivityFeed execMode />
         </div>
