@@ -171,6 +171,8 @@ These exist in schema and models, but are not fully exposed through the frontend
   - No persisted executive/compliance/risk/CBOM report artifact list is available.
   - No on-demand report render/download endpoint exists for PDF, HTML, CSV, or JSON bundles.
   - No scheduled report CRUD/execution API exists for recipients, cadence, or run history.
+- Scan queue cancellation is still frontend-local.
+  - The UI can now cancel queued items and stop tracking an active item, but there is no backend per-scan cancel/abort endpoint yet for a true server-side stop.
 - A per-software CVE detail endpoint or expanded result payload is needed if `DiscoveryDetailPanel.tsx` should show real individual CVE rows instead of count-only messaging.
 - Remediation pages do not yet have persisted program-management state.
   - Assignees in `RemediationActionPlan.tsx` are still frontend-local.

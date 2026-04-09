@@ -20,9 +20,10 @@ const iconMap: Record<string, LucideIcon> = {
 interface GlassTabBarProps {
   hasScanned: boolean;
   onScan?: (domain: string) => void;
+  isLoading?: boolean;
 }
 
-const GlassTabBar = ({ hasScanned, onScan }: GlassTabBarProps) => {
+const GlassTabBar = ({ hasScanned, onScan, isLoading = false }: GlassTabBarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { pinnedPages, removePin } = usePinnedPages();
@@ -123,7 +124,7 @@ const GlassTabBar = ({ hasScanned, onScan }: GlassTabBarProps) => {
           <div className="mx-1 w-px h-5 rounded-full" style={{ background: "rgba(255,255,255,0.12)" }} />
         )}
 
-        <ScanPromptBox compact onScan={onScan} />
+        <ScanPromptBox compact onScan={onScan} isLoading={isLoading} />
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useScanContext } from '@/contexts/ScanContext';
 import { useScanQueue } from '@/contexts/ScanQueueContext';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import DashboardTopBar from '@/components/dashboard/DashboardTopBar';
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
 import GlassTabBar from '@/components/dashboard/GlassTabBar';
@@ -13,11 +14,12 @@ import RainingLetters from '@/components/ui/raining-letters';
 import { GradientText } from '@/components/ui/gradient-text';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { X, Maximize2, Minimize2, CheckCircle2, Loader2, Clock, XCircle, Upload } from 'lucide-react';
+import { X, Maximize2, Minimize2, CheckCircle2, Loader2, Clock, XCircle, Upload, StopCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 const scanProfiles = ['Quick', 'Standard', 'Deep', 'PQC Focus'] as const;
 const exampleChips = ['pnb.co.in', 'vpn.pnb.co.in', 'netbanking.pnb.co.in', 'auth.pnb.co.in'];
+
 type DashboardLocationState = {
   bypassPrompt?: boolean;
 } | null;
@@ -36,16 +38,19 @@ const DashboardLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { setScannedDomain } = useScanContext();
-  const { queue, isRunning, minimized, setMinimized, toggleMinimize, cancelQueue, startQueue, logs, queueComplete } = useScanQueue();
+  const { queue, isRunning, minimized, setMinimized, toggleMinimize, cancelQueue, removeQueueItem, startQueue, logs, queueComplete } = useScanQueue();
+  const { setSelectedScanId } = useSelectedScan();
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [targets, setTargets] = useState<string[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [scanProfile, setScanProfile] = useState<string>('Standard');
   const [fileMsg, setFileMsg] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const lastSyncedCompletedScanId = useRef<string | null>(null);
 
   const pathname = location.pathname;
   const shouldBypassPrompt = Boolean((location.state as DashboardLocationState)?.bypassPrompt);
+
   const getActiveNav = () => {
     if (pathname.includes('/discovery')) return 'discovery';
     if (pathname.includes('/inventory')) return 'inventory';
@@ -100,8 +105,11 @@ const DashboardLayout = () => {
   };
 
   const handleScan = (domain: string) => {
-    setScannedDomain(domain);
+    const trimmedDomain = domain.trim();
+    if (!trimmedDomain) return;
+    setScannedDomain(trimmedDomain);
     setHasScanned(true);
+    startQueue([trimmedDomain], scanProfile);
   };
 
   const handleDemoScan = () => {
@@ -112,12 +120,12 @@ const DashboardLayout = () => {
   const addChip = (domain: string) => {
     const d = domain.trim();
     if (d && !targets.includes(d)) {
-      setTargets(prev => [...prev, d]);
+      setTargets((prev) => [...prev, d]);
     }
   };
 
   const removeChip = (domain: string) => {
-    setTargets(prev => prev.filter(t => t !== domain));
+    setTargets((prev) => prev.filter((target) => target !== domain));
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -129,15 +137,15 @@ const DashboardLayout = () => {
         setInputValue('');
       }
     } else if (e.key === 'Backspace' && !inputValue && targets.length > 0) {
-      setTargets(prev => prev.slice(0, -1));
+      setTargets((prev) => prev.slice(0, -1));
     }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     if (val.includes(',')) {
-      const parts = val.split(',').map(s => s.trim()).filter(Boolean);
-      parts.forEach(p => addChip(p));
+      const parts = val.split(',').map((part) => part.trim()).filter(Boolean);
+      parts.forEach((part) => addChip(part));
       setInputValue('');
     } else {
       setInputValue(val);
@@ -150,8 +158,8 @@ const DashboardLayout = () => {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      const lines = text.split(/[\r\n,]+/).map(l => l.trim()).filter(Boolean);
-      setTargets(prev => [...new Set([...prev, ...lines])]);
+      const lines = text.split(/[\r\n,]+/).map((line) => line.trim()).filter(Boolean);
+      setTargets((prev) => [...new Set([...prev, ...lines])]);
       setFileMsg(`Loaded ${lines.length} targets from file`);
       setTimeout(() => setFileMsg(''), 3000);
     };
@@ -162,14 +170,16 @@ const DashboardLayout = () => {
   const handleStartQueue = () => {
     const parsed = [...new Set(targets)];
     if (parsed.length === 0) return;
+    setScannedDomain(parsed[0]);
+    setHasScanned(true);
     startQueue(parsed, scanProfile);
-    handleScan(parsed[0]);
   };
 
   const handleRunDemo = () => {
     setTargets(['pnb.co.in']);
+    setScannedDomain('pnb.co.in');
+    setHasScanned(true);
     startQueue(['pnb.co.in'], 'Standard');
-    handleScan('pnb.co.in');
   };
 
   useEffect(() => {
@@ -178,12 +188,21 @@ const DashboardLayout = () => {
     }
   }, [shouldBypassPrompt]);
 
+  useEffect(() => {
+    const latestCompletedScan = [...queue].reverse().find((item) => item.status === 'done' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.scanId));
+    if (!latestCompletedScan) return;
+    if (lastSyncedCompletedScanId.current === latestCompletedScan.scanId) return;
+
+    lastSyncedCompletedScanId.current = latestCompletedScan.scanId;
+    setSelectedScanId(latestCompletedScan.scanId);
+  }, [queue, setSelectedScanId]);
+
   const isHome = pathname === '/dashboard';
   const showPrompt = isHome && !hasScanned && !shouldBypassPrompt;
 
-  const doneCount = queue.filter(q => q.status === 'done').length;
-  const scanningItem = queue.find(q => q.status === 'scanning');
-  const overallProgress = queue.length > 0 ? Math.round((doneCount / queue.length) * 100) : 0;
+  const resolvedCount = queue.filter((item) => item.status === 'done' || item.status === 'failed' || item.status === 'cancelled').length;
+  const scanningItem = queue.find((item) => item.status === 'scanning');
+  const overallProgress = queue.length > 0 ? Math.round((resolvedCount / queue.length) * 100) : 0;
 
   const phases = ['Discovery', 'TLS Probing', 'PQC Classification', 'CBOM Generation', 'Certification'];
 
@@ -212,33 +231,30 @@ const DashboardLayout = () => {
               </motion.div>
 
               <div className="relative z-10 w-full max-w-2xl space-y-4">
-                {/* Chip input */}
                 <div className="w-full rounded-xl border border-[hsl(var(--border-default))] bg-background px-3 py-2.5 focus-within:ring-2 focus-within:ring-[hsl(var(--accent-amber))] transition-shadow">
                   <div className="flex flex-wrap gap-2 items-center">
-                    {targets.map(t => (
-                      <TargetChip key={t} value={t} onRemove={() => removeChip(t)} />
+                    {targets.map((target) => (
+                      <TargetChip key={target} value={target} onRemove={() => removeChip(target)} />
                     ))}
                     <input
                       value={inputValue}
                       onChange={handleInputChange}
                       onKeyDown={handleInputKeyDown}
-                      placeholder={targets.length === 0 ? "Enter targets separated by comma…" : "Add more…"}
+                      placeholder={targets.length === 0 ? 'Enter targets separated by comma...' : 'Add more...'}
                       className="flex-1 min-w-[160px] bg-transparent font-mono text-sm text-foreground placeholder:text-muted-foreground outline-none py-1"
                     />
                   </div>
                 </div>
 
-                {/* Example chips */}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[10px] font-body text-muted-foreground">Examples:</span>
-                  {exampleChips.map(d => (
-                    <button key={d} onClick={() => addChip(d)} className="font-mono text-xs text-muted-foreground px-3 py-1.5 rounded-lg border border-[hsl(var(--border-default))] hover:border-[hsl(var(--border-strong))] hover:text-foreground transition-colors">
-                      {d}
+                  {exampleChips.map((domain) => (
+                    <button key={domain} onClick={() => addChip(domain)} className="font-mono text-xs text-muted-foreground px-3 py-1.5 rounded-lg border border-[hsl(var(--border-default))] hover:border-[hsl(var(--border-strong))] hover:text-foreground transition-colors">
+                      {domain}
                     </button>
                   ))}
                 </div>
 
-                {/* Upload + Profile on same row */}
                 <div className="flex items-center gap-3 flex-wrap">
                   <input ref={fileRef} type="file" accept=".txt,.csv" className="hidden" onChange={handleFileUpload} />
                   <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => fileRef.current?.click()}>
@@ -248,19 +264,18 @@ const DashboardLayout = () => {
                   <div className="h-4 w-px bg-border mx-1" />
                   <span className="text-xs font-body text-muted-foreground">Profile:</span>
                   <div className="flex gap-1 p-1 rounded-xl bg-[hsl(var(--bg-sunken))]">
-                    {scanProfiles.map(p => (
+                    {scanProfiles.map((profile) => (
                       <button
-                        key={p}
-                        onClick={() => setScanProfile(p)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-body transition-all ${scanProfile === p ? 'bg-[hsl(var(--accent-amber))] text-white font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                        key={profile}
+                        onClick={() => setScanProfile(profile)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-body transition-all ${scanProfile === profile ? 'bg-[hsl(var(--accent-amber))] text-white font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                       >
-                        {p}
+                        {profile}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Action buttons */}
                 <div className="flex gap-3 pt-2">
                   <Button variant="outline" onClick={handleRunDemo} className="text-sm">
                     Run Demo Scan
@@ -279,35 +294,45 @@ const DashboardLayout = () => {
         </AnimatePresence>
       </div>
 
-      <GlassTabBar hasScanned={hasScanned || !isHome} onScan={handleScan} />
+      <GlassTabBar hasScanned={hasScanned || !isHome} onScan={handleScan} isLoading={false} />
 
-      {/* Full-screen scan progress overlay */}
       {isRunning && !minimized && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-sm flex flex-col items-center justify-center p-8">
           <div className="w-full max-w-2xl space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="font-body text-lg font-semibold">Scan Queue Running — {doneCount} of {queue.length} targets complete</h2>
+              <h2 className="font-body text-lg font-semibold">Scan Queue Running - {resolvedCount} of {queue.length} targets complete</h2>
               <Button variant="ghost" size="sm" onClick={toggleMinimize}><Minimize2 className="w-4 h-4" /></Button>
             </div>
             <div className="space-y-2">
-              {queue.map((q, i) => (
-                <div key={i} className={`p-3 rounded-lg border ${q.status === 'scanning' ? 'border-[hsl(var(--accent-amber))] bg-[hsl(var(--accent-amber)/0.05)]' : 'border-border'}`}>
+              {queue.map((item) => (
+                <div key={item.id} className={`p-3 rounded-lg border ${item.status === 'scanning' ? 'border-[hsl(var(--accent-amber))] bg-[hsl(var(--accent-amber)/0.05)]' : 'border-border'}`}>
                   <div className="flex items-center gap-3">
-                    {q.status === 'queued' && <Clock className="w-4 h-4 text-muted-foreground" />}
-                    {q.status === 'scanning' && <Loader2 className="w-4 h-4 text-[hsl(var(--accent-amber))] animate-spin" />}
-                    {q.status === 'done' && <CheckCircle2 className="w-4 h-4 text-[hsl(var(--status-safe))]" />}
-                    {q.status === 'failed' && <XCircle className="w-4 h-4 text-[hsl(var(--status-critical))]" />}
-                    <span className="font-mono text-sm flex-1">{q.target}</span>
-                    <span className="text-[10px] font-mono text-muted-foreground capitalize">{q.status}</span>
+                    {item.status === 'queued' && <Clock className="w-4 h-4 text-muted-foreground" />}
+                    {item.status === 'scanning' && <Loader2 className="w-4 h-4 text-[hsl(var(--accent-amber))] animate-spin" />}
+                    {item.status === 'done' && <CheckCircle2 className="w-4 h-4 text-[hsl(var(--status-safe))]" />}
+                    {item.status === 'failed' && <XCircle className="w-4 h-4 text-[hsl(var(--status-critical))]" />}
+                    {item.status === 'cancelled' && <StopCircle className="w-4 h-4 text-muted-foreground" />}
+                    <span className="font-mono text-sm flex-1">{item.target}</span>
+                    <span className="text-[10px] font-mono text-muted-foreground capitalize">{item.status}</span>
+                    {(item.status === 'queued' || item.status === 'scanning') && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-[10px] text-muted-foreground hover:text-[hsl(var(--status-critical))]"
+                        onClick={() => removeQueueItem(item.id)}
+                      >
+                        End
+                      </Button>
+                    )}
                   </div>
-                  {q.status === 'scanning' && (
+                  {item.status === 'scanning' && (
                     <div className="mt-3 space-y-2">
                       <div className="flex gap-1">
-                        {phases.map((p, pi) => (
-                          <div key={p} className={`flex-1 h-1.5 rounded-full ${phases.indexOf(q.currentPhase) >= pi ? 'bg-[hsl(var(--accent-amber))]' : 'bg-[hsl(var(--bg-sunken))]'}`} />
+                        {phases.map((phase, phaseIndex) => (
+                          <div key={phase} className={`flex-1 h-1.5 rounded-full ${phases.indexOf(item.currentPhase) >= phaseIndex ? 'bg-[hsl(var(--accent-amber))]' : 'bg-[hsl(var(--bg-sunken))]'}`} />
                         ))}
                       </div>
-                      <p className="text-[10px] font-mono text-muted-foreground">{q.currentPhase}</p>
+                      <p className="text-[10px] font-mono text-muted-foreground">{item.currentPhase}</p>
                     </div>
                   )}
                 </div>
@@ -315,8 +340,8 @@ const DashboardLayout = () => {
             </div>
             <div className="bg-[hsl(var(--bg-sunken))] rounded-lg p-3 max-h-48 overflow-y-auto">
               <p className="text-[10px] font-mono text-muted-foreground uppercase mb-2">Live Log</p>
-              {logs.map((l, i) => (
-                <p key={i} className="text-[10px] font-mono text-foreground/80">{l}</p>
+              {logs.map((line, index) => (
+                <p key={index} className="text-[10px] font-mono text-foreground/80">{line}</p>
               ))}
             </div>
           </div>
@@ -327,7 +352,7 @@ const DashboardLayout = () => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-24 right-6 z-[9999] bg-popover border border-border rounded-xl shadow-lg p-3 min-w-[280px]">
           <div className="flex items-center gap-2 mb-2">
             <Loader2 className="w-3.5 h-3.5 text-[hsl(var(--accent-amber))] animate-spin" />
-            <span className="text-xs font-body">Scanning {doneCount + 1}/{queue.length} · {scanningItem?.target} · {scanningItem?.currentPhase}…</span>
+            <span className="text-xs font-body">Scanning {Math.min(resolvedCount + 1, queue.length)}/{queue.length} - {scanningItem?.target} - {scanningItem?.currentPhase}...</span>
             <div className="flex-1" />
             <button onClick={toggleMinimize} className="p-0.5"><Maximize2 className="w-3 h-3 text-muted-foreground" /></button>
             <button onClick={() => setCancelConfirm(true)} className="p-0.5"><X className="w-3 h-3 text-muted-foreground" /></button>
@@ -340,7 +365,7 @@ const DashboardLayout = () => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-24 right-6 z-[90] bg-[hsl(var(--status-safe)/0.1)] border border-[hsl(var(--status-safe)/0.3)] rounded-xl p-3">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-[hsl(var(--status-safe))]" />
-            <span className="text-xs font-body font-semibold text-[hsl(var(--status-safe))]">Scan Queue Complete ✓</span>
+            <span className="text-xs font-body font-semibold text-[hsl(var(--status-safe))]">Scan Queue Complete</span>
           </div>
         </motion.div>
       )}
