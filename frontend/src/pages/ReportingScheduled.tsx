@@ -1,14 +1,13 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+﻿import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Clock, Mail, Calendar, Trash2, Plus, CheckCircle2, TrendingUp, PenTool } from 'lucide-react';
-import { useScanContext } from '@/contexts/ScanContext';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
+import DataContextBadge from '@/components/dashboard/DataContextBadge';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
 const reportingTabs = [
   { id: 'executive', label: 'Executive Reports', icon: TrendingUp, route: '/dashboard/reporting/executive' },
@@ -26,26 +25,28 @@ interface ScheduledReport {
   enabled: boolean;
 }
 
-function buildSchedules(domain: string): ScheduledReport[] {
-  const d = domain || 'target.com';
+function buildSchedules(target: string): ScheduledReport[] {
+  const normalized = target && target.includes('.') ? target : `${target || 'target'}.com`;
   return [
-    { id: 's1', name: 'Weekly Executive Summary', template: 'Executive Summary', frequency: 'Weekly', nextRun: '2026-04-07', recipients: [`ciso@${d}`, `cto@${d}`], enabled: true },
-    { id: 's2', name: 'Monthly NIST Compliance', template: 'NIST Compliance Report', frequency: 'Monthly', nextRun: '2026-04-30', recipients: [`compliance@${d}`], enabled: true },
-    { id: 's3', name: 'Daily Risk Alert', template: 'Quantum Risk Assessment', frequency: 'Daily', nextRun: '2026-04-01', recipients: [`soc@${d}`], enabled: false },
-    { id: 's4', name: 'Bi-Weekly CBOM Export', template: 'CBOM Inventory Report', frequency: 'Bi-Weekly', nextRun: '2026-04-14', recipients: [`audit@${d}`, `crypto-team@${d}`], enabled: true },
+    { id: 's1', name: 'Weekly Executive Summary', template: 'Executive Summary', frequency: 'Weekly', nextRun: '2026-04-14', recipients: [`ciso@${normalized}`, `cto@${normalized}`], enabled: true },
+    { id: 's2', name: 'Monthly NIST Compliance', template: 'NIST Compliance Report', frequency: 'Monthly', nextRun: '2026-04-30', recipients: [`compliance@${normalized}`], enabled: true },
+    { id: 's3', name: 'Daily Risk Alert', template: 'Quantum Risk Assessment', frequency: 'Daily', nextRun: '2026-04-10', recipients: [`soc@${normalized}`], enabled: false },
+    { id: 's4', name: 'Bi-Weekly CBOM Export', template: 'CBOM Inventory Report', frequency: 'Bi-Weekly', nextRun: '2026-04-22', recipients: [`audit@${normalized}`, `crypto-team@${normalized}`], enabled: true },
   ];
 }
 
 const ReportingScheduled = () => {
-  const { rootDomain } = useScanContext();
-  const [schedules, setSchedules] = useState(() => buildSchedules(rootDomain));
+  const { selectedScanResults, selectedAssets } = useSelectedScan();
+  const targetLabel = selectedScanResults?.target ?? selectedAssets[0]?.domain ?? 'target.com';
+  const [schedules, setSchedules] = useState(() => buildSchedules(targetLabel));
 
   const toggleSchedule = (id: string) => {
-    setSchedules(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s));
+    setSchedules((prev) => prev.map((schedule) => schedule.id === id ? { ...schedule, enabled: !schedule.enabled } : schedule));
   };
 
   return (
     <div className="space-y-5">
+      <DataContextBadge />
       <div>
         <h1 className="font-display text-2xl italic text-brand-primary">Scheduled Reports</h1>
         <p className="font-body text-sm text-muted-foreground mt-1">Configure automated report generation and delivery</p>
@@ -57,12 +58,11 @@ const ReportingScheduled = () => {
         </Button>
       </div>
 
-      {/* Summary */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Active Schedules', value: schedules.filter(s => s.enabled).length, icon: CheckCircle2, color: 'text-status-safe' },
-          { label: 'Next Report Due', value: 'Apr 1', icon: Calendar, color: 'text-accent-amber' },
-          { label: 'Total Recipients', value: new Set(schedules.flatMap(s => s.recipients)).size, icon: Mail, color: 'text-brand-accent' },
+          { label: 'Active Schedules', value: schedules.filter((schedule) => schedule.enabled).length, icon: CheckCircle2, color: 'text-status-safe' },
+          { label: 'Next Report Due', value: 'Apr 10', icon: Calendar, color: 'text-accent-amber' },
+          { label: 'Total Recipients', value: new Set(schedules.flatMap((schedule) => schedule.recipients)).size, icon: Mail, color: 'text-brand-accent' },
         ].map((kpi) => {
           const Icon = kpi.icon;
           return (
@@ -79,7 +79,6 @@ const ReportingScheduled = () => {
         })}
       </div>
 
-      {/* Schedule Table */}
       <Card className="bg-surface border-border">
         <CardHeader className="pb-3">
           <CardTitle className="font-body text-base">Configured Schedules</CardTitle>
@@ -112,8 +111,8 @@ const ReportingScheduled = () => {
                   <TableCell className="font-mono text-xs text-muted-foreground">{schedule.nextRun}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {schedule.recipients.map((r) => (
-                        <span key={r} className="font-mono text-[9px] bg-sunken px-1.5 py-0.5 rounded text-muted-foreground">{r}</span>
+                      {schedule.recipients.map((recipient) => (
+                        <span key={recipient} className="font-mono text-[9px] bg-sunken px-1.5 py-0.5 rounded text-muted-foreground">{recipient}</span>
                       ))}
                     </div>
                   </TableCell>

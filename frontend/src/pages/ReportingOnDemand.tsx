@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+﻿import { useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChevronRight, ChevronLeft, FileText, Download, CheckCircle2, TrendingUp, Clock, PenTool } from 'lucide-react';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
+import DataContextBadge from '@/components/dashboard/DataContextBadge';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
 const reportingTabs = [
   { id: 'executive', label: 'Executive Reports', icon: TrendingUp, route: '/dashboard/reporting/executive' },
@@ -42,9 +42,12 @@ const ReportingOnDemand = () => {
   const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set());
   const [format, setFormat] = useState('pdf');
   const [generated, setGenerated] = useState(false);
+  const { selectedAssets, selectedScanResults } = useSelectedScan();
+
+  const targetLabel = selectedScanResults?.target ?? selectedAssets[0]?.domain ?? 'selected target';
 
   const toggleSection = (id: string) => {
-    setSelectedSections(prev => {
+    setSelectedSections((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -60,13 +63,13 @@ const ReportingOnDemand = () => {
 
   return (
     <div className="space-y-5">
+      <DataContextBadge />
       <div>
         <h1 className="font-display text-2xl italic text-brand-primary">On-Demand Report Builder</h1>
         <p className="font-body text-sm text-muted-foreground mt-1">Create custom reports by selecting templates, sections, and output format</p>
       </div>
       <SectionTabBar tabs={reportingTabs} />
 
-      {/* Stepper */}
       <div className="flex items-center gap-2">
         {steps.map((step, i) => (
           <div key={step} className="flex items-center gap-2">
@@ -83,7 +86,6 @@ const ReportingOnDemand = () => {
         ))}
       </div>
 
-      {/* Step Content */}
       <Card className="bg-surface border-border min-h-[350px]">
         <CardContent className="pt-6">
           {currentStep === 0 && (
@@ -112,7 +114,7 @@ const ReportingOnDemand = () => {
                 <div key={category}>
                   <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{category}</p>
                   <div className="space-y-2">
-                    {sections.filter(s => s.category === category).map((section) => (
+                    {sections.filter((s) => s.category === category).map((section) => (
                       <label key={section.id} className="flex items-center gap-3 cursor-pointer">
                         <Checkbox
                           checked={selectedSections.has(section.id)}
@@ -146,9 +148,11 @@ const ReportingOnDemand = () => {
               <div>
                 <p className="font-mono text-[10px] uppercase text-muted-foreground mb-1.5">Report Summary</p>
                 <div className="bg-sunken rounded-lg p-3 space-y-1">
-                  <p className="font-body text-xs"><span className="text-muted-foreground">Template:</span> {templates.find(t => t.id === selectedTemplate)?.name}</p>
+                  <p className="font-body text-xs"><span className="text-muted-foreground">Template:</span> {templates.find((t) => t.id === selectedTemplate)?.name}</p>
                   <p className="font-body text-xs"><span className="text-muted-foreground">Sections:</span> {selectedSections.size} selected</p>
                   <p className="font-body text-xs"><span className="text-muted-foreground">Format:</span> {format.toUpperCase()}</p>
+                  <p className="font-body text-xs"><span className="text-muted-foreground">Target:</span> {targetLabel}</p>
+                  <p className="font-body text-xs"><span className="text-muted-foreground">Assets in scope:</span> {selectedAssets.length}</p>
                 </div>
               </div>
             </div>
@@ -185,11 +189,10 @@ const ReportingOnDemand = () => {
         </CardContent>
       </Card>
 
-      {/* Navigation */}
       <div className="flex justify-between">
         <Button
           variant="outline"
-          onClick={() => setCurrentStep(prev => prev - 1)}
+          onClick={() => setCurrentStep((prev) => prev - 1)}
           disabled={currentStep === 0}
           className="gap-1.5 text-xs"
         >
@@ -197,7 +200,7 @@ const ReportingOnDemand = () => {
         </Button>
         {currentStep < 3 && (
           <Button
-            onClick={() => setCurrentStep(prev => prev + 1)}
+            onClick={() => setCurrentStep((prev) => prev + 1)}
             disabled={!canProceed()}
             className="gap-1.5 text-xs bg-accent-amber text-brand-primary hover:brightness-105"
           >

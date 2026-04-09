@@ -1,11 +1,9 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronRight, Shield, AlertTriangle, XCircle, Star, FileText } from 'lucide-react';
-import { getTierFromAsset } from '@/data/demoData';
-import { cn } from '@/lib/utils';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
+import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
 const ratingTabs = [
@@ -48,6 +46,7 @@ const CyberRatingTiers = () => {
 
   return (
     <div className="space-y-5">
+      <DataContextBadge />
       <h1 className="font-display text-2xl italic text-brand-primary">Tier Classification</h1>
       <SectionTabBar tabs={ratingTabs} />
 

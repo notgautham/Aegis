@@ -1,11 +1,15 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { Slider } from '@/components/ui/slider';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
 import { FileText, Lock, BarChart3 } from 'lucide-react';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
+import { api } from '@/lib/api';
+import { adaptScanResults } from '@/lib/adapters';
+import type { Asset } from '@/data/demoData';
 
 const pqcTabs = [
   { id: 'compliance', label: 'Compliance', icon: FileText, route: '/dashboard/pqc/compliance' },
@@ -13,32 +17,84 @@ const pqcTabs = [
   { id: 'quantum-debt', label: 'Quantum Debt', icon: BarChart3, route: '/dashboard/pqc/quantum-debt' },
 ];
 
-const quantumDebtScore = 742;
-const monthlyGrowth = 42;
+const typeLabels: Record<Asset['type'], string> = {
+  web: 'Web Apps',
+  api: 'APIs',
+  vpn: 'VPNs',
+  mail: 'Mail',
+  iot: 'IoT',
+  server: 'Servers',
+  load_balancer: 'Load Balancers',
+};
 
-const debtByType = [
-  { type: 'Web Apps', current: 280, projected: 340 },
-  { type: 'APIs', current: 220, projected: 290 },
-  { type: 'VPNs', current: 180, projected: 240 },
-  { type: 'Mail', current: 62, projected: 85 },
-];
+function isUUID(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
+function assetDebtUnits(asset: Asset): number {
+  return Math.max(0, 100 - asset.qScore);
+}
+
+function deriveDebtScore(assets: Asset[]): number {
+  if (assets.length === 0) return 0;
+  const totalDebt = assets.reduce((sum, asset) => sum + assetDebtUnits(asset), 0);
+  return Math.round((totalDebt / assets.length) * 10);
+}
 
 const PQCQuantumDebt = () => {
   const [migrationPercent, setMigrationPercent] = useState([30]);
-  const { selectedAssets } = useSelectedScan();
+  const { selectedAssets, selectedScanId, selectedScanResults } = useSelectedScan();
+
+  const historyQuery = useQuery({
+    queryKey: ['scan-history-for-quantum-debt'],
+    queryFn: () => api.getScanHistory(),
+  });
+
+  const historyItems = [...(historyQuery.data?.items ?? [])].sort((a, b) => (
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  ));
+
+  const currentScanIndex = historyItems.findIndex((item) => item.scan_id === selectedScanId);
+  const previousScanId = isUUID(selectedScanId) && currentScanIndex >= 0 ? historyItems[currentScanIndex + 1]?.scan_id ?? null : null;
+
+  const previousScanQuery = useQuery({
+    queryKey: ['scan-results-for-quantum-debt', previousScanId],
+    queryFn: () => api.getScanResults(previousScanId!),
+    enabled: Boolean(previousScanId),
+  });
+
+  const quantumDebtScore = deriveDebtScore(selectedAssets);
+  const previousAssets = previousScanQuery.data ? adaptScanResults(previousScanQuery.data) : [];
+  const previousDebtScore = previousAssets.length > 0 ? deriveDebtScore(previousAssets) : quantumDebtScore;
+
+  const monthsBetween = selectedScanResults && previousScanQuery.data
+    ? Math.max(1 / 30, (new Date(selectedScanResults.created_at).getTime() - new Date(previousScanQuery.data.created_at).getTime()) / (1000 * 60 * 60 * 24 * 30.4375))
+    : 1;
+  const monthlyGrowth = previousScanQuery.data ? Math.max(0, Math.round((quantumDebtScore - previousDebtScore) / monthsBetween)) : 0;
+
+  const debtByType = Object.entries(selectedAssets.reduce((acc, asset) => {
+    const key = asset.type;
+    const current = assetDebtUnits(asset) * 10;
+    acc[key] = (acc[key] || 0) + current;
+    return acc;
+  }, {} as Record<Asset['type'], number>)).map(([type, current]) => ({
+    type: typeLabels[type as Asset['type']] ?? type,
+    current: Math.round(current),
+    projected: Math.max(0, Math.round(current * (1 - (migrationPercent[0] / 100)))),
+  })).sort((a, b) => b.current - a.current);
 
   const reduction = Math.round(quantumDebtScore * (migrationPercent[0] / 100));
-  const projectedDebt = quantumDebtScore - reduction;
+  const projectedDebt = Math.max(0, quantumDebtScore - reduction);
 
-  const projectionData = Array.from({ length: 13 }, (_, i) => ({
-    month: `M${i}`,
-    current: quantumDebtScore + (monthlyGrowth * i),
-    migrated: Math.max(0, (quantumDebtScore + (monthlyGrowth * i)) - (reduction * (i / 12))),
+  const projectionData = Array.from({ length: 13 }, (_, index) => ({
+    month: `M${index}`,
+    current: quantumDebtScore + (monthlyGrowth * index),
+    migrated: Math.max(0, (quantumDebtScore + (monthlyGrowth * index)) - (reduction * (index / 12))),
   }));
 
-  const migrated = selectedAssets.filter(a => a.status === 'elite-pqc').length;
+  const migrated = selectedAssets.filter((asset) => asset.status === 'elite-pqc').length;
   const total = selectedAssets.length;
-  const migrationProgress = Math.round((migrated / total) * 100);
+  const migrationProgress = total > 0 ? Math.round((migrated / total) * 100) : 0;
 
   return (
     <div className="space-y-5">
@@ -60,7 +116,7 @@ const PQCQuantumDebt = () => {
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-3 text-center font-body">
-              Growing by ~{monthlyGrowth} units/month as adversaries archive traffic
+              Growing by ~{monthlyGrowth} units/month based on recent scan-to-scan debt movement
             </p>
           </CardContent>
         </Card>
@@ -97,10 +153,10 @@ const PQCQuantumDebt = () => {
               <span>0% PQC</span><span>{migrationProgress}% migrated</span><span>100% PQC</span>
             </div>
             <div className="grid grid-cols-4 gap-1 mt-2">
-              {['Critical', 'Legacy', 'Standard', 'Elite-PQC'].map((t, i) => (
-                <div key={t} className="text-center">
-                  <div className="h-2 rounded" style={{ backgroundColor: ['hsl(var(--status-critical))', 'hsl(var(--accent-amber))', 'hsl(210, 70%, 50%)', 'hsl(var(--status-safe))'][i] }} />
-                  <span className="text-[9px] text-muted-foreground mt-0.5 block">{t}</span>
+              {['Critical', 'Legacy', 'Standard', 'Elite-PQC'].map((tier, index) => (
+                <div key={tier} className="text-center">
+                  <div className="h-2 rounded" style={{ backgroundColor: ['hsl(var(--status-critical))', 'hsl(var(--accent-amber))', 'hsl(210, 70%, 50%)', 'hsl(var(--status-safe))'][index] }} />
+                  <span className="text-[9px] text-muted-foreground mt-0.5 block">{tier}</span>
                 </div>
               ))}
             </div>
@@ -118,7 +174,7 @@ const PQCQuantumDebt = () => {
             <span className="text-xs font-body text-muted-foreground">of assets to PQC</span>
           </div>
           <p className="text-xs font-body">
-            Projected debt reduction: <span className="font-mono font-bold text-[hsl(var(--status-safe))]">-{Math.round((reduction / quantumDebtScore) * 100)}%</span> (from {quantumDebtScore} → {projectedDebt})
+            Projected debt reduction: <span className="font-mono font-bold text-[hsl(var(--status-safe))]">-{quantumDebtScore > 0 ? Math.round((reduction / quantumDebtScore) * 100) : 0}%</span> (from {quantumDebtScore} to {projectedDebt})
           </p>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={projectionData}>

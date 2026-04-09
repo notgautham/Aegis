@@ -48,6 +48,15 @@ export interface AssessmentResponse {
 
 export interface RemediationResponse {
   hndl_timeline: HndlTimeline | null;
+  patch_config?: string | null;
+  migration_roadmap?: string | null;
+  source_citations?: {
+    documents?: Array<{
+      title?: string | null;
+      path?: string | null;
+      section?: string | null;
+    }>;
+  } | null;
   [key: string]: unknown;
 }
 

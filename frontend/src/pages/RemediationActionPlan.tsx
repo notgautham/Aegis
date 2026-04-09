@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,10 +46,11 @@ const assigneeOptions = ['IT Security', 'DevOps', 'Infrastructure', 'Compliance'
 const RemediationActionPlan = () => {
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const { rootDomain } = useScanContext();
-  const { selectedAssets } = useSelectedScan();
+  const { selectedAssets, selectedScanResults } = useSelectedScan();
   const now = new Date();
+  const targetLabel = selectedScanResults?.target ?? rootDomain ?? selectedAssets[0]?.domain ?? 'target';
 
-  const allActions = selectedAssets.flatMap(asset =>
+  const allActions = useMemo(() => selectedAssets.flatMap(asset =>
     asset.remediation.map((r, i) => ({
       ...r,
       assetDomain: asset.domain,
@@ -59,13 +60,23 @@ const RemediationActionPlan = () => {
       deadline: addDays(now, priorityDays[r.priority]),
       assignee: defaultAssignee[r.priority],
     }))
-  );
+  ), [now, selectedAssets]);
 
   const [assignees, setAssignees] = useState<Record<string, string>>(() => {
     const map: Record<string, string> = {};
     allActions.forEach(a => { map[a.key] = a.assignee; });
     return map;
   });
+
+  useEffect(() => {
+    setAssignees((previous) => {
+      const next: Record<string, string> = {};
+      allActions.forEach((action) => {
+        next[action.key] = previous[action.key] ?? action.assignee;
+      });
+      return next;
+    });
+  }, [allActions]);
 
   const filtered = filterPriority === 'all' ? allActions : allActions.filter(a => a.priority === filterPriority);
 
@@ -79,7 +90,7 @@ const RemediationActionPlan = () => {
       <DataContextBadge />
       <div>
         <h1 className="font-display text-2xl italic text-brand-primary">Remediation Action Plan</h1>
-        <p className="font-body text-sm text-muted-foreground mt-1">Prioritized actions for {rootDomain || 'target'} quantum readiness</p>
+        <p className="font-body text-sm text-muted-foreground mt-1">Prioritized actions for {targetLabel} quantum readiness</p>
       </div>
       <SectionTabBar tabs={remediationTabs} />
       {(() => {

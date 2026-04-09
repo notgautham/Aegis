@@ -72,14 +72,20 @@ Update this file whenever a page is wired, a backend field is exposed, or a bloc
   - Uses selected scan assets.
 - `frontend/src/pages/PQCCompliance.tsx`
   - Uses selected scan assets.
+  - Compliance heatmap and improvement recommendations are now derived from live asset posture instead of embedded demo counts.
 - `frontend/src/pages/PQCHndl.tsx`
   - Uses selected scan assets.
+  - HNDL exposure matrix now derives from live asset HNDL posture and business criticality instead of static demo cells.
 - `frontend/src/pages/PQCQuantumDebt.tsx`
   - Uses selected scan assets.
+  - Quantum debt score, type breakdown, and simulator now derive from the selected scan asset set.
+  - Recent debt growth now uses the prior real scan when one is available.
 - `frontend/src/pages/RemediationActionPlan.tsx`
   - Uses selected scan assets.
+  - Uses selected scan target label instead of stale session-only scan context labels.
 - `frontend/src/pages/RemediationAIPatch.tsx`
-  - Uses selected scan assets.
+  - Uses selected scan assets plus raw remediation bundles/actions from the compiled scan results payload.
+  - Static canned patch templates were removed in favor of persisted `patch_config`, `migration_roadmap`, and remediation actions when available.
 - `frontend/src/pages/AssetDetail.tsx`
   - Uses selected scan assets.
 - `frontend/src/pages/AssetDiscovery.tsx`
@@ -97,6 +103,7 @@ Update this file whenever a page is wired, a backend field is exposed, or a bloc
 - `frontend/src/pages/ScanReport.tsx`
   - Uses live scan history and live per-scan results with demo fallback.
   - Delta comparison now uses logical asset identity instead of scan-row IDs, so repeated scans compare more accurately.
+  - Report actions and CBOM summary now show truthful backend-backed coverage states instead of fake generated artifacts.
 - `frontend/src/pages/ScanConsole.tsx`
   - Uses real backend scan status and event streams instead of scripted demo output.
   - Supports both active scans from the queue and historical selected UUID scans through persisted events.
@@ -104,6 +111,17 @@ Update this file whenever a page is wired, a backend field is exposed, or a bloc
   - Scan status/results runtime payload now falls back to persisted `scan_events` when in-memory runtime state is unavailable.
 - `frontend/src/lib/api.ts`
   - Scan status contract now includes real stage, timing, events, and degraded-mode fields used by Scan Console.
+- `frontend/src/pages/RemediationRoadmap.tsx`
+  - Roadmap phases, progress, effort-impact matrix, and estimator now derive from the selected scan remediation backlog and artifact coverage.
+  - Organizational phase status remains inferred from current-scan evidence, not from a persisted project-management backend model.
+- `frontend/src/pages/ReportingExecutive.tsx`
+  - Uses selected scan context and live scan history for truthful report-source coverage.
+  - Leaves file generation/download blank until backend reporting endpoints exist.
+- `frontend/src/pages/ReportingScheduled.tsx`
+  - Reflects the true system state with an empty scheduling view instead of fake schedules.
+- `frontend/src/pages/ReportingOnDemand.tsx`
+  - Uses selected scan context to show real section availability and report scope.
+  - Leaves final generation blank until backend render/download support exists.
 
 ### Still Demo Or Mixed
 
@@ -113,12 +131,6 @@ Update this file whenever a page is wired, a backend field is exposed, or a bloc
 
 ## Frontend Follow-Up Fixes
 
-- `frontend/src/pages/CyberRatingEnterprise.tsx`
-  - Scale cleanup needed.
-  - Current score is now 0-100, but some colors, copy, and benchmark visuals still reference old 0-1000 thresholds.
-  - Fix tier color thresholds to match 0-100.
-  - Fix benchmark cards and labels to use 0-100 consistently.
-  - Fix narrative text that still references old monthly point jumps and hardcoded dates.
 - `frontend/src/pages/AssetDiscovery.tsx`
   - Clean up stale comments that still mention old demo-only behavior.
   - If backend starts exposing richer discovery data, replace placeholder values instead of extending frontend inference logic.
@@ -153,7 +165,24 @@ These exist in schema and models, but are not fully exposed through the frontend
 ### Required API Additions
 
 - Scan history endpoint may need richer per-scan summary fields for cross-page comparison.
+- A target-specific cyber-rating history / projection endpoint would reduce frontend fan-out for enterprise score pages.
+  - The current enterprise score page builds truthful same-target history by querying scan history and then fetching matching scan results client-side.
+- Reporting pages do not yet have backend report-generation support.
+  - No persisted executive/compliance/risk/CBOM report artifact list is available.
+  - No on-demand report render/download endpoint exists for PDF, HTML, CSV, or JSON bundles.
+  - No scheduled report CRUD/execution API exists for recipients, cadence, or run history.
 - A per-software CVE detail endpoint or expanded result payload is needed if `DiscoveryDetailPanel.tsx` should show real individual CVE rows instead of count-only messaging.
+- Remediation pages do not yet have persisted program-management state.
+  - Assignees in `RemediationActionPlan.tsx` are still frontend-local.
+  - `RemediationRoadmap.tsx` phase status/progress is inferred from current remediation actions and artifacts, not from backend-owned roadmap entities.
+- Remediation bundles currently expose one generic `patch_config` block per asset, not server-specific or per-finding variants.
+  - `RemediationAIPatch.tsx` therefore keeps the server selector for operator context, but cannot yet switch to truly different backend-generated patch variants per runtime.
+- Remediation roadmap text is still delivered as one long-form `migration_roadmap` blob.
+  - `RemediationAIPatch.tsx` now renders this more cleanly in the frontend, but the long-term scalable fix is a structured backend roadmap payload with explicit phases, tasks, priorities, and citations.
+- PQC HNDL pages still do not have true data-retention / shelf-life inputs from the backend.
+  - The current HNDL heatmap is therefore derived from `businessCriticality` x `hndlRiskLevel`, not a persisted retention model.
+- PQC Quantum Debt does not have a backend-native debt metric or projection model yet.
+  - The current page uses a deterministic frontend derivation from live asset Q-scores plus prior scan comparison when available.
 - Scan-level CBOM export endpoints are still needed for schema-accurate multi-asset export formats:
   - CycloneDX XML
   - PDF executive report

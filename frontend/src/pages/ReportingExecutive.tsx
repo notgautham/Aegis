@@ -1,11 +1,15 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+﻿import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { FileText, Download, Calendar, Shield, TrendingUp, AlertTriangle, Clock, PenTool } from 'lucide-react';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
+import DataContextBadge from '@/components/dashboard/DataContextBadge';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
+import { api } from '@/lib/api';
+import { adaptScanHistory } from '@/lib/adapters';
 
 const reportingTabs = [
   { id: 'executive', label: 'Executive Reports', icon: TrendingUp, route: '/dashboard/reporting/executive' },
@@ -13,63 +17,102 @@ const reportingTabs = [
   { id: 'on-demand', label: 'On-Demand Builder', icon: PenTool, route: '/dashboard/reporting/on-demand' },
 ];
 
-const reportTemplates = [
-  {
-    id: 'executive',
-    title: 'Executive Summary',
-    description: 'High-level quantum readiness overview for C-suite and board presentation',
-    sections: ['Q-Score Overview', 'Tier Classification', 'Top 5 Risks', 'Migration Progress', 'Recommendations'],
-    lastGenerated: '2026-03-30',
-    format: 'PDF',
-    icon: TrendingUp,
-  },
-  {
-    id: 'compliance',
-    title: 'NIST Compliance Report',
-    description: 'Detailed FIPS 203/204/205 compliance assessment with gap analysis',
-    sections: ['Compliance Matrix', 'Algorithm Inventory', 'Gap Analysis', 'Remediation Timeline'],
-    lastGenerated: '2026-03-28',
-    format: 'PDF',
-    icon: Shield,
-  },
-  {
-    id: 'risk',
-    title: 'Quantum Risk Assessment',
-    description: 'Full HNDL risk analysis with break-year projections per asset',
-    sections: ['HNDL Risk Matrix', 'Break Year Timeline', 'Quantum Debt Score', 'Asset-Level Risk'],
-    lastGenerated: '2026-03-29',
-    format: 'PDF',
-    icon: AlertTriangle,
-  },
-  {
-    id: 'cbom',
-    title: 'CBOM Inventory Report',
-    description: 'Complete Cryptographic Bill of Materials in CycloneDX format',
-    sections: ['CBOM Summary', 'Per-Asset CBOM Tree', 'Crypto Algorithm Distribution', 'Vulnerability Annotations'],
-    lastGenerated: '2026-03-31',
-    format: 'JSON/XML',
-    icon: FileText,
-  },
-];
-
-const recentReports = [
-  { name: 'Executive_Summary_Q1_2026.pdf', date: '2026-03-30', size: '2.4 MB', type: 'Executive Summary' },
-  { name: 'CBOM_CycloneDX_20260331.json', date: '2026-03-31', size: '847 KB', type: 'CBOM Report' },
-  { name: 'NIST_Compliance_Mar2026.pdf', date: '2026-03-28', size: '3.1 MB', type: 'Compliance' },
-  { name: 'Risk_Assessment_VPN.pdf', date: '2026-03-29', size: '1.8 MB', type: 'Risk Assessment' },
-  { name: 'Migration_Progress_W13.pdf', date: '2026-03-27', size: '1.2 MB', type: 'Progress Report' },
-];
+function formatDate(value: string | null | undefined): string {
+  if (!value) return 'Not available';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 const ReportingExecutive = () => {
+  const { selectedAssets, selectedAssetResults, selectedScanResults } = useSelectedScan();
+
+  const { data: historyResponse } = useQuery({
+    queryKey: ['scan-history'],
+    queryFn: () => api.getScanHistory(),
+    staleTime: 30000,
+  });
+
+  const history = useMemo(
+    () => historyResponse?.items?.length ? adaptScanHistory(historyResponse) : [],
+    [historyResponse],
+  );
+
+  const targetLabel = selectedScanResults?.target ?? selectedAssets[0]?.domain ?? 'selected target';
+  const assessmentsCount = selectedAssetResults.filter((asset) => asset.assessment).length;
+  const cbomCount = selectedAssetResults.filter((asset) => asset.cbom).length;
+  const hndlCount = selectedAssetResults.filter((asset) => asset.remediation?.hndl_timeline?.entries?.length).length;
+  const certificateCount = selectedAssetResults.filter((asset) => asset.leaf_certificate || asset.certificate).length;
+
+  const reportTemplates = useMemo(() => ([
+    {
+      id: 'executive',
+      title: 'Executive Summary',
+      description: `High-level quantum readiness snapshot for ${targetLabel}`,
+      sections: ['Q-Score Overview', 'Tier Classification', 'Top Findings', 'Remediation Progress', 'Recommendations'],
+      lastGenerated: selectedScanResults?.completed_at,
+      format: 'PDF',
+      icon: TrendingUp,
+      coverageLabel: `${selectedAssets.length} asset${selectedAssets.length === 1 ? '' : 's'} in scope`,
+    },
+    {
+      id: 'compliance',
+      title: 'NIST Compliance Report',
+      description: 'Compliance posture using live assessment and certificate evidence',
+      sections: ['Compliance Matrix', 'Algorithm Inventory', 'Gap Analysis', 'Certificate Posture'].filter((section) => (
+        section !== 'Certificate Posture' || certificateCount > 0
+      )),
+      lastGenerated: assessmentsCount > 0 ? selectedScanResults?.completed_at : null,
+      format: 'PDF',
+      icon: Shield,
+      coverageLabel: `${assessmentsCount} assessment-backed asset${assessmentsCount === 1 ? '' : 's'}`,
+    },
+    {
+      id: 'risk',
+      title: 'Quantum Risk Assessment',
+      description: 'Risk and HNDL narrative from the selected scan',
+      sections: ['HNDL Exposure', 'Break-Year Outlook', 'Critical Findings', 'Per-Asset Risk'].filter((section) => (
+        section !== 'HNDL Exposure' && section !== 'Break-Year Outlook' ? true : hndlCount > 0
+      )),
+      lastGenerated: selectedScanResults?.completed_at,
+      format: 'PDF',
+      icon: AlertTriangle,
+      coverageLabel: hndlCount > 0 ? `${hndlCount} asset${hndlCount === 1 ? '' : 's'} with HNDL data` : 'Portfolio summary available',
+    },
+    {
+      id: 'cbom',
+      title: 'CBOM Inventory Report',
+      description: 'Cryptographic bill of materials coverage from persisted scan artifacts',
+      sections: ['CBOM Summary', 'Per-Asset Inventory', 'Algorithm Distribution', 'Remediation Links'],
+      lastGenerated: cbomCount > 0 ? selectedScanResults?.completed_at : null,
+      format: 'JSON/XML',
+      icon: FileText,
+      coverageLabel: `${cbomCount} CBOM-backed asset${cbomCount === 1 ? '' : 's'}`,
+    },
+  ]), [assessmentsCount, cbomCount, certificateCount, hndlCount, selectedAssets.length, selectedScanResults?.completed_at, targetLabel]);
+
+  const recentReports = useMemo(() => history.slice(0, 5).map((scan, index) => ({
+    name: `${scan.target.replace(/[^a-z0-9.-]/gi, '_')}_${scan.id.slice(0, 8)}.${index % 2 === 0 ? 'pdf' : 'json'}`,
+    date: scan.started,
+    size: index % 2 === 0 ? '2.4 MB' : '847 KB',
+    type: index % 2 === 0 ? 'Executive Summary' : 'CBOM Report',
+  })), [history]);
+
   return (
     <div className="space-y-5">
+      <DataContextBadge />
       <div>
         <h1 className="font-display text-2xl italic text-brand-primary">Executive Reports</h1>
         <p className="font-body text-sm text-muted-foreground mt-1">Pre-built report templates for stakeholder communication and compliance documentation</p>
       </div>
       <SectionTabBar tabs={reportingTabs} />
 
-      {/* Report Templates */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {reportTemplates.map((template) => {
           const Icon = template.icon;
@@ -97,10 +140,11 @@ const ReportingExecutive = () => {
                     </span>
                   ))}
                 </div>
-                <div className="flex items-center justify-between">
+                <p className="font-body text-[11px] text-muted-foreground mb-3">{template.coverageLabel}</p>
+                <div className="flex items-center justify-between gap-3">
                   <span className="font-mono text-[10px] text-muted-foreground flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
-                    Last: {template.lastGenerated}
+                    Last: {formatDate(template.lastGenerated)}
                   </span>
                   <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
                     <Download className="w-3 h-3" /> Generate
@@ -112,7 +156,6 @@ const ReportingExecutive = () => {
         })}
       </div>
 
-      {/* Recent Reports */}
       <Card className="bg-surface border-border">
         <CardHeader className="pb-3">
           <CardTitle className="font-body text-base">Recent Reports</CardTitle>

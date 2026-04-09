@@ -3,6 +3,8 @@ import { scanHistory, scanAssetMap, assets, Asset } from '@/data/demoData';
 import { api, type AssetResultResponse, type DNSRecordResponse, type ScanResultsResponse } from '@/lib/api';
 import { adaptScanResults } from '@/lib/adapters';
 
+const SELECTED_SCAN_STORAGE_KEY = 'aegis-selected-scan-id';
+
 interface ScanSnapshot {
   qScore: number;
   assetIds: string[];
@@ -38,14 +40,74 @@ interface SelectedScanContextType {
 const SelectedScanContext = createContext<SelectedScanContextType | undefined>(undefined);
 
 export const SelectedScanProvider = ({ children }: { children: ReactNode }) => {
-  const [selectedScanId, setSelectedScanId] = useState('SCN-007');
+  const [selectedScanId, setSelectedScanId] = useState(() => localStorage.getItem(SELECTED_SCAN_STORAGE_KEY) ?? '');
   const [liveScanResults, setLiveScanResults] = useState<ScanResultsResponse | null>(null);
   const [liveScanResultsScanId, setLiveScanResultsScanId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const initializeSelectedScan = async () => {
+      const savedSelection = localStorage.getItem(SELECTED_SCAN_STORAGE_KEY);
+
+      try {
+        const historyResponse = await api.getScanHistory();
+        if (cancelled) return;
+
+        const latestRealScanId = [...historyResponse.items]
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]?.scan_id ?? null;
+
+        const savedSelectionIsValid = savedSelection
+          ? isUUID(savedSelection)
+            ? historyResponse.items.some((item) => item.scan_id === savedSelection)
+            : scanHistory.some((item) => item.id === savedSelection)
+          : false;
+
+        if (savedSelectionIsValid) {
+          setSelectedScanId(savedSelection!);
+          return;
+        }
+
+        if (latestRealScanId) {
+          setSelectedScanId(latestRealScanId);
+          return;
+        }
+
+        setSelectedScanId('SCN-007');
+      } catch {
+        if (cancelled) return;
+        if (savedSelection && (isUUID(savedSelection) || scanHistory.some((item) => item.id === savedSelection))) {
+          setSelectedScanId(savedSelection);
+          return;
+        }
+        setSelectedScanId('SCN-007');
+      }
+    };
+
+    initializeSelectedScan();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedScanId) return;
+    localStorage.setItem(SELECTED_SCAN_STORAGE_KEY, selectedScanId);
+  }, [selectedScanId]);
+
   // Fetch live data when selectedScanId is a UUID
   useEffect(() => {
+    if (!selectedScanId) {
+      setLiveScanResults(null);
+      setLiveScanResultsScanId(null);
+      setScanError(null);
+      setIsLoading(false);
+      return;
+    }
+
     if (!isUUID(selectedScanId)) {
       setLiveScanResults(null);
       setLiveScanResultsScanId(null);
@@ -90,6 +152,8 @@ export const SelectedScanProvider = ({ children }: { children: ReactNode }) => {
   }, [selectedScanId, liveScanResults, liveScanResultsScanId]);
 
   const selectedAssets = useMemo(() => {
+    if (!selectedScanId) return [];
+
     // If we have live data from a UUID scan, use it
     if (isUUID(selectedScanId)) {
       if (selectedScanResults) return adaptScanResults(selectedScanResults);

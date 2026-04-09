@@ -1,4 +1,4 @@
-import { useParams, Link, useNavigate } from 'react-router-dom';
+ï»¿import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -124,6 +124,10 @@ const ScanReport = () => {
   }, {} as Record<string, number>);
 
   const newP1Findings = allFindings.filter((finding) => finding.priority === 'P1').slice(0, 2);
+  const rawCbomAssets = currentResultsResponse?.assets.filter((asset) => asset.cbom) ?? [];
+  const cbomCoverage = rawCbomAssets.length;
+  const certificateCoverage = currentResultsResponse?.assets.filter((asset) => asset.leaf_certificate || asset.certificate).length ?? 0;
+  const remediationCoverage = currentResultsResponse?.assets.filter((asset) => asset.remediation).length ?? 0;
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
@@ -151,8 +155,8 @@ const ScanReport = () => {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => navigate('/dashboard/history')}>Back to Scan History</Button>
-          <Button variant="outline" size="sm" className="text-xs gap-1.5"><Download className="w-3.5 h-3.5" /> Download Report</Button>
-          <Button variant="outline" size="sm" className="text-xs gap-1.5"><GitCompareArrows className="w-3.5 h-3.5" /> Compare</Button>
+          <Button variant="outline" size="sm" className="text-xs gap-1.5" disabled><Download className="w-3.5 h-3.5" /> Download Unavailable</Button>
+          <Button variant="outline" size="sm" className="text-xs gap-1.5" disabled><GitCompareArrows className="w-3.5 h-3.5" /> Compare Export Pending</Button>
         </div>
       </div>
 
@@ -292,15 +296,15 @@ const ScanReport = () => {
               <CardContent className="p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Shield className="w-5 h-5 text-[hsl(var(--status-safe))]" />
-                  <span className="font-body text-sm font-semibold text-[hsl(var(--status-safe))]">CBOM Attestation</span>
+                  <span className="font-body text-sm font-semibold text-[hsl(var(--status-safe))]">CBOM Coverage Summary</span>
                 </div>
-                <div className="space-y-2 text-xs font-mono text-muted-foreground">
-                  <p>CBOM Hash (SHA-256): <span className="text-foreground">a7f3b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1</span></p>
-                  <p>Signature: Ed25519 · Valid</p>
-                  <p>Timestamp: {scan.started}</p>
-                  <p className="text-[hsl(var(--status-safe))] font-semibold">AEGIS Scan {scan.id} · Attested ?</p>
+                <div className="space-y-2 text-xs font-body text-muted-foreground">
+                  <p><span className="text-foreground font-medium">{cbomCoverage}</span> asset{cbomCoverage === 1 ? '' : 's'} include persisted CBOM payloads in this scan.</p>
+                  <p><span className="text-foreground font-medium">{certificateCoverage}</span> asset{certificateCoverage === 1 ? '' : 's'} include certificate evidence for report rendering.</p>
+                  <p><span className="text-foreground font-medium">{remediationCoverage}</span> asset{remediationCoverage === 1 ? '' : 's'} include remediation bundle context.</p>
+                  <p className="font-mono text-[10px] text-[hsl(var(--status-safe))]">Source scan: {scan.id} - Completed {scan.started}</p>
                 </div>
-                <Button variant="outline" size="sm" className="mt-3 text-xs">Export CycloneDX JSON</Button>
+                <Button variant="outline" size="sm" className="mt-3 text-xs" disabled>Export Pending Backend</Button>
               </CardContent>
             </Card>
           </div>
