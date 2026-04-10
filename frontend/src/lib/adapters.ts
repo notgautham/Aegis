@@ -1,7 +1,18 @@
-// ========== Backend → Frontend Adapters ==========
+// ========== Backend -> Frontend Adapters ==========
 
-import type { Asset, ScanHistoryEntry, CertificateInfo, SoftwareInfo, RemediationAction, DimensionScores } from '@/data/demoData';
-import type { AssetResultResponse, ScanResultsResponse, ScanHistoryResponse } from '@/lib/api';
+import type {
+  Asset,
+  CertificateInfo,
+  DimensionScores,
+  RemediationAction,
+  ScanHistoryEntry,
+  SoftwareInfo,
+} from '@/data/demoData';
+import type {
+  AssetResultResponse,
+  ScanHistoryResponse,
+  ScanResultsResponse,
+} from '@/lib/api';
 
 // ========== Asset Adapter ==========
 
@@ -10,7 +21,6 @@ function mapStatus(raw: AssetResultResponse): Asset['status'] {
   const risk = raw.assessment?.risk_score ?? 50;
   if (tier === 'FULLY_QUANTUM_SAFE') return 'elite-pqc';
   if (tier === 'PQC_TRANSITIONING') return 'safe';
-  // QUANTUM_VULNERABLE or unknown
   if (risk > 70) return 'critical';
   if (risk >= 40) return 'vulnerable';
   return 'standard';
@@ -39,23 +49,29 @@ function hasForwardSecrecy(kex: string | undefined): boolean {
 }
 
 function buildDimensionScores(raw: AssetResultResponse): DimensionScores {
-  const a = raw.assessment;
-  const tier = a?.compliance_tier;
+  const assessment = raw.assessment;
+  const tier = assessment?.compliance_tier;
   return {
-    tls_version: Math.round((1 - (a?.tls_vulnerability ?? 0.5)) * 100),
-    key_exchange: Math.round((1 - (a?.kex_vulnerability ?? 0.5)) * 100),
-    cipher_strength: Math.round((1 - (a?.sym_vulnerability ?? 0.5)) * 100),
-    certificate_algo: Math.round((1 - (a?.sig_vulnerability ?? 0.5)) * 100),
-    forward_secrecy: hasForwardSecrecy(a?.kex_algorithm) ? 100 : 0,
-    pqc_readiness: tier === 'FULLY_QUANTUM_SAFE' ? 100 : tier === 'PQC_TRANSITIONING' ? 50 : 0,
+    tls_version: Math.round((1 - (assessment?.tls_vulnerability ?? 0.5)) * 100),
+    key_exchange: Math.round((1 - (assessment?.kex_vulnerability ?? 0.5)) * 100),
+    cipher_strength: Math.round((1 - (assessment?.sym_vulnerability ?? 0.5)) * 100),
+    certificate_algo: Math.round((1 - (assessment?.sig_vulnerability ?? 0.5)) * 100),
+    forward_secrecy: hasForwardSecrecy(assessment?.kex_algorithm) ? 100 : 0,
+    pqc_readiness:
+      tier === 'FULLY_QUANTUM_SAFE'
+        ? 100
+        : tier === 'PQC_TRANSITIONING'
+          ? 50
+          : 0,
   };
 }
 
 function buildCertInfo(raw: AssetResultResponse): CertificateInfo {
-  const c = raw.certificate;
+  const certificate = raw.certificate;
   const leaf = raw.leaf_certificate;
   const publicKeyAlgorithm = leaf?.public_key_algorithm?.toUpperCase() ?? '';
-  let keyType: CertificateInfo['key_type'] = (c?.key_type as CertificateInfo['key_type']) ?? 'RSA';
+  let keyType: CertificateInfo['key_type'] =
+    (certificate?.key_type as CertificateInfo['key_type']) ?? 'RSA';
 
   if (leaf?.public_key_algorithm) {
     if (publicKeyAlgorithm.includes('ML-DSA')) {
@@ -64,25 +80,26 @@ function buildCertInfo(raw: AssetResultResponse): CertificateInfo {
       keyType = 'SLH-DSA';
     } else if (publicKeyAlgorithm === 'ECDSA') {
       keyType = 'ECDSA';
-    } else if (publicKeyAlgorithm === 'RSA') {
-      keyType = 'RSA';
     } else {
       keyType = 'RSA';
     }
   }
 
   return {
-    subject_cn: leaf?.subject_cn ?? c?.subject_cn ?? raw.hostname ?? 'unknown',
-    subject_alt_names: c?.subject_alt_names ?? [],
-    issuer: leaf?.issuer ?? c?.issuer ?? 'Unknown CA',
-    certificate_authority: c?.certificate_authority ?? 'Unknown',
-    signature_algorithm: leaf?.signature_algorithm ?? c?.signature_algorithm ?? 'sha256WithRSAEncryption',
+    subject_cn: leaf?.subject_cn ?? certificate?.subject_cn ?? raw.hostname ?? 'unknown',
+    subject_alt_names: certificate?.subject_alt_names ?? [],
+    issuer: leaf?.issuer ?? certificate?.issuer ?? 'Unknown CA',
+    certificate_authority: certificate?.certificate_authority ?? 'Unknown',
+    signature_algorithm:
+      leaf?.signature_algorithm ??
+      certificate?.signature_algorithm ??
+      'sha256WithRSAEncryption',
     key_type: keyType,
-    key_size: leaf?.key_size_bits ?? c?.key_size ?? 2048,
-    valid_from: c?.valid_from ?? '',
-    valid_until: leaf?.not_after ?? c?.valid_until ?? '',
-    days_remaining: leaf?.days_remaining ?? c?.days_remaining ?? 0,
-    sha256_fingerprint: c?.sha256_fingerprint ?? '',
+    key_size: leaf?.key_size_bits ?? certificate?.key_size ?? 2048,
+    valid_from: certificate?.valid_from ?? '',
+    valid_until: leaf?.not_after ?? certificate?.valid_until ?? '',
+    days_remaining: leaf?.days_remaining ?? certificate?.days_remaining ?? 0,
+    sha256_fingerprint: certificate?.sha256_fingerprint ?? '',
   };
 }
 
@@ -103,7 +120,9 @@ export function adaptAsset(raw: AssetResultResponse): Asset {
   const qScore = Math.round(100 - (raw.assessment?.risk_score ?? 50));
   const hndl = raw.remediation?.hndl_timeline;
   const currentYear = new Date().getFullYear();
-  const hndlBreakYear = hndl?.entries.length ? Math.min(...hndl.entries.map((entry) => entry.breakYear)) : null;
+  const hndlBreakYear = hndl?.entries.length
+    ? Math.min(...hndl.entries.map((entry) => entry.breakYear))
+    : null;
   const hndlYears = hndlBreakYear === null ? null : hndlBreakYear - currentYear;
   const hndlRiskLevel = (() => {
     switch (hndl?.urgency?.toUpperCase()) {
@@ -166,18 +185,18 @@ export function adaptScanResults(response: ScanResultsResponse): Asset[] {
 // ========== Scan History Adapter ==========
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
+  const date = new Date(iso);
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = months[d.getMonth()];
-  const day = d.getDate();
-  const year = d.getFullYear();
-  const h = String(d.getHours()).padStart(2, '0');
-  const m = String(d.getMinutes()).padStart(2, '0');
-  return `${month} ${day} ${year}, ${h}:${m}`;
+  const month = months[date.getMonth()];
+  const day = date.getDate();
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${month} ${day} ${year}, ${hours}:${minutes}`;
 }
 
 function computeDuration(start: string, end: string | null): string {
-  if (!end) return '—';
+  if (!end) return '�';
   const ms = new Date(end).getTime() - new Date(start).getTime();
   const totalSec = Math.round(ms / 1000);
   const mins = Math.floor(totalSec / 60);
@@ -185,22 +204,70 @@ function computeDuration(start: string, end: string | null): string {
   return `${mins}m ${String(secs).padStart(2, '0')}s`;
 }
 
+function computeFallbackScanQScore(summary: ScanHistoryResponse['items'][number]['summary']): number {
+  const total = (
+    (summary.fully_quantum_safe_assets ?? 0) +
+    (summary.transitioning_assets ?? 0) +
+    (summary.vulnerable_assets ?? 0)
+  );
+  const safeish = (
+    (summary.fully_quantum_safe_assets ?? 0) +
+    (summary.transitioning_assets ?? 0)
+  );
+  return total > 0 ? Math.round((safeish / total) * 100) : 0;
+}
+
+function buildScanScoreReason(summary: ScanHistoryResponse['items'][number]['summary']): string {
+  const criticalAssets = summary.critical_assets ?? 0;
+  const vulnerableAssets = summary.vulnerable_assets ?? 0;
+  const transitioningAssets = summary.transitioning_assets ?? 0;
+  const fullyQuantumSafeAssets = summary.fully_quantum_safe_assets ?? 0;
+  const unknownAssets = summary.unknown_assets ?? 0;
+
+  if (criticalAssets > 0) {
+    return `${criticalAssets} critical asset${criticalAssets === 1 ? '' : 's'} are pulling the score down.`;
+  }
+  if (vulnerableAssets > 0) {
+    return `${vulnerableAssets} asset${vulnerableAssets === 1 ? '' : 's'} still use quantum-vulnerable crypto.`;
+  }
+  if (transitioningAssets > 0) {
+    return `${transitioningAssets} asset${transitioningAssets === 1 ? '' : 's'} are in active PQC transition.`;
+  }
+  if (fullyQuantumSafeAssets > 0) {
+    return `${fullyQuantumSafeAssets} asset${fullyQuantumSafeAssets === 1 ? '' : 's'} are fully quantum safe.`;
+  }
+  if (unknownAssets > 0) {
+    return `${unknownAssets} asset${unknownAssets === 1 ? '' : 's'} lacked a full cryptographic assessment.`;
+  }
+  return 'No assessed assets were available in this scan summary.';
+}
+
 export function adaptScanHistory(response: ScanHistoryResponse): ScanHistoryEntry[] {
   return response.items.map((item) => {
-    const s = item.summary;
-    const total = (s.fully_quantum_safe_assets ?? 0) + (s.transitioning_assets ?? 0) + (s.vulnerable_assets ?? 0);
-    const safeish = (s.fully_quantum_safe_assets ?? 0) + (s.transitioning_assets ?? 0);
-    const qScore = total > 0 ? Math.round((safeish / total) * 1000) : 0;
+    const summary = item.summary;
+    const qScore = Math.round(summary.average_q_score ?? computeFallbackScanQScore(summary));
 
     return {
       id: item.scan_id,
       target: item.target,
       started: formatDate(item.created_at),
       duration: computeDuration(item.created_at, item.completed_at),
-      assetsFound: item.progress?.assets_discovered ?? 0,
+      assetsFound: summary.total_assets ?? item.progress?.assets_discovered ?? 0,
       qScore,
-      criticalFindings: s.vulnerable_assets ?? 0,
+      criticalFindings: summary.critical_assets ?? summary.vulnerable_assets ?? 0,
       status: item.status === 'completed' ? 'Completed' : item.status,
+      fullyQuantumSafeAssets: summary.fully_quantum_safe_assets ?? 0,
+      transitioningAssets: summary.transitioning_assets ?? 0,
+      vulnerableAssets: summary.vulnerable_assets ?? 0,
+      criticalAssets: summary.critical_assets ?? 0,
+      unknownAssets: summary.unknown_assets ?? 0,
+      highestRiskScore: summary.highest_risk_score ?? null,
+      tlsAssets: summary.tls_assets ?? 0,
+      nonTlsAssets: summary.non_tls_assets ?? 0,
+      degradedModeCount: item.degraded_mode_count ?? 0,
+      scanProfile: item.scan_profile ?? null,
+      initiatedBy: item.initiated_by ?? null,
+      scoreReason: buildScanScoreReason(summary),
     };
   });
 }

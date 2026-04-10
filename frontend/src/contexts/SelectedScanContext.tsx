@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { scanHistory, scanAssetMap, assets, Asset } from '@/data/demoData';
 import { api, type AssetResultResponse, type DNSRecordResponse, type ScanResultsResponse } from '@/lib/api';
-import { adaptScanResults } from '@/lib/adapters';
+import { adaptScanHistory, adaptScanResults } from '@/lib/adapters';
 
 const SELECTED_SCAN_STORAGE_KEY = 'aegis-selected-scan-id';
 
@@ -11,13 +11,13 @@ interface ScanSnapshot {
 }
 
 export const scanSnapshots: Record<string, ScanSnapshot> = {
-  'SCN-007': { qScore: 370, assetIds: scanAssetMap['SCN-007'] },
-  'SCN-006': { qScore: 325, assetIds: scanAssetMap['SCN-006'] },
-  'SCN-005': { qScore: 410, assetIds: scanAssetMap['SCN-005'] },
-  'SCN-004': { qScore: 295, assetIds: scanAssetMap['SCN-004'] },
+  'SCN-007': { qScore: 37, assetIds: scanAssetMap['SCN-007'] },
+  'SCN-006': { qScore: 33, assetIds: scanAssetMap['SCN-006'] },
+  'SCN-005': { qScore: 41, assetIds: scanAssetMap['SCN-005'] },
+  'SCN-004': { qScore: 30, assetIds: scanAssetMap['SCN-004'] },
   'SCN-003': { qScore: 24, assetIds: scanAssetMap['SCN-003'] },
-  'SCN-002': { qScore: 260, assetIds: scanAssetMap['SCN-002'] },
-  'SCN-001': { qScore: 210, assetIds: scanAssetMap['SCN-001'] },
+  'SCN-002': { qScore: 26, assetIds: scanAssetMap['SCN-002'] },
+  'SCN-001': { qScore: 21, assetIds: scanAssetMap['SCN-001'] },
 };
 
 function isUUID(id: string): boolean {
@@ -143,13 +143,33 @@ export const SelectedScanProvider = ({ children }: { children: ReactNode }) => {
     return () => { cancelled = true; };
   }, [selectedScanId]);
 
-  const selectedScan = useMemo(() => scanHistory.find(s => s.id === selectedScanId), [selectedScanId]);
-
   const selectedScanResults = useMemo(() => {
     if (!isUUID(selectedScanId)) return null;
     if (liveScanResultsScanId !== selectedScanId) return null;
     return liveScanResults;
   }, [selectedScanId, liveScanResults, liveScanResultsScanId]);
+
+  const selectedScan = useMemo(() => {
+    if (isUUID(selectedScanId) && selectedScanResults) {
+      const historyEntry = adaptScanHistory({
+        items: [
+          {
+            scan_id: selectedScanResults.scan_id,
+            target: selectedScanResults.target,
+            status: selectedScanResults.status,
+            created_at: selectedScanResults.created_at,
+            completed_at: selectedScanResults.completed_at,
+            progress: selectedScanResults.progress,
+            summary: selectedScanResults.summary,
+            degraded_mode_count: selectedScanResults.degraded_modes.length,
+          },
+        ],
+      })[0];
+      return historyEntry;
+    }
+
+    return scanHistory.find((scan) => scan.id === selectedScanId);
+  }, [selectedScanId, selectedScanResults]);
 
   const selectedAssets = useMemo(() => {
     if (!selectedScanId) return [];

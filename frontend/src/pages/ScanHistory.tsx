@@ -108,7 +108,10 @@ const ScanHistory = () => {
                     onClick={() => openInDashboard(s.id)}
                   >
                     <td className="px-3 py-2 font-mono font-semibold text-brand-primary">{s.id}</td>
-                    <td className="px-3 py-2 font-mono">{s.target}</td>
+                    <td className="px-3 py-2">
+                      <div className="font-mono">{s.target}</div>
+                      <p className="mt-0.5 max-w-xs text-[10px] font-body text-muted-foreground">{s.scoreReason ?? 'No summary available.'}</p>
+                    </td>
                     <td className="px-3 py-2 text-muted-foreground">{s.started}</td>
                     <td className="px-3 py-2 font-mono text-muted-foreground">{s.duration}</td>
                     <td className="px-3 py-2 font-mono">{s.assetsFound}</td>
@@ -135,10 +138,10 @@ const ScanHistory = () => {
             <LineChart data={trendData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border-default))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-              <YAxis domain={[0, 1000]} tick={{ fontSize: 10 }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
               <Tooltip />
-              <ReferenceLine y={400} stroke="hsl(var(--accent-amber))" strokeDasharray="5 5" label={{ value: 'Standard Tier', position: 'right', fontSize: 9, fill: 'hsl(var(--accent-amber))' }} />
-              <ReferenceLine y={700} stroke="hsl(var(--status-safe))" strokeDasharray="5 5" label={{ value: 'Elite-PQC', position: 'right', fontSize: 9, fill: 'hsl(var(--status-safe))' }} />
+              <ReferenceLine y={60} stroke="hsl(var(--accent-amber))" strokeDasharray="5 5" label={{ value: 'Standard', position: 'right', fontSize: 9, fill: 'hsl(var(--accent-amber))' }} />
+              <ReferenceLine y={80} stroke="hsl(var(--status-safe))" strokeDasharray="5 5" label={{ value: 'Elite-PQC', position: 'right', fontSize: 9, fill: 'hsl(var(--status-safe))' }} />
               <Line type="monotone" dataKey="score" stroke="hsl(var(--brand-primary))" strokeWidth={2} dot={{ fill: 'hsl(var(--brand-primary))', r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
@@ -170,7 +173,9 @@ const ScanHistory = () => {
                   <div className="flex justify-between"><span className="text-muted-foreground">Q-Score</span><span className="font-mono font-bold">{a.qScore}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Assets</span><span className="font-mono">{a.assetsFound}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Critical Findings</span><span className="font-mono">{a.criticalFindings}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Transitioning</span><span className="font-mono">{a.transitioningAssets ?? 0}</span></div>
                 </div>
+                <p className="text-[10px] font-body text-muted-foreground">{a.scoreReason ?? 'No summary available.'}</p>
               </div>
               <div className="space-y-3">
                 <h4 className="font-mono text-[10px] text-muted-foreground uppercase">{b.id} ({b.started})</h4>
@@ -178,7 +183,9 @@ const ScanHistory = () => {
                   <div className="flex justify-between"><span className="text-muted-foreground">Q-Score</span><span className="font-mono font-bold">{b.qScore}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Assets</span><span className="font-mono">{b.assetsFound}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Critical Findings</span><span className="font-mono">{b.criticalFindings}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Transitioning</span><span className="font-mono">{b.transitioningAssets ?? 0}</span></div>
                 </div>
+                <p className="text-[10px] font-body text-muted-foreground">{b.scoreReason ?? 'No summary available.'}</p>
               </div>
               <div className="md:col-span-2 border-t border-border pt-3 space-y-2">
                 <h4 className="font-mono text-[10px] text-muted-foreground uppercase">DELTA</h4>
@@ -207,12 +214,12 @@ const ScanHistory = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                   <div className="p-2.5 rounded-lg bg-[hsl(var(--status-critical)/0.05)] border border-[hsl(var(--status-critical)/0.15)]">
-                    <p className="font-mono text-[10px] text-[hsl(var(--status-critical))] uppercase mb-1">New Vulnerabilities</p>
-                    <p className="text-xs font-body text-foreground">TLS 1.0 re-enabled on staging.pnb.co.in (regression)</p>
+                    <p className="font-mono text-[10px] text-[hsl(var(--status-critical))] uppercase mb-1">Current Scan Summary</p>
+                    <p className="text-xs font-body text-foreground">{a.scoreReason ?? 'No summary available.'}</p>
                   </div>
                   <div className="p-2.5 rounded-lg bg-[hsl(var(--status-safe)/0.05)] border border-[hsl(var(--status-safe)/0.15)]">
-                    <p className="font-mono text-[10px] text-[hsl(var(--status-safe))] uppercase mb-1">Resolved</p>
-                    <p className="text-xs font-body text-foreground">Certificate renewed on auth.pnb.co.in</p>
+                    <p className="font-mono text-[10px] text-[hsl(var(--status-safe))] uppercase mb-1">Comparison Scan Summary</p>
+                    <p className="text-xs font-body text-foreground">{b.scoreReason ?? 'No summary available.'}</p>
                   </div>
                 </div>
               </div>

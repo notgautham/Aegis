@@ -1,17 +1,14 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { getStatusColor, getStatusLabel, getQScoreColor, getTierFromAsset } from '@/data/demoData';
+import { assetTrends, getStatusColor, getStatusLabel, getQScoreColor, getTierFromAsset } from '@/data/demoData';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Info, Star, FileText, Shield, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
-import { api } from '@/lib/api';
-import { adaptScanResults } from '@/lib/adapters';
 import type { Asset } from '@/data/demoData';
 
 const ratingTabs = [
@@ -21,91 +18,62 @@ const ratingTabs = [
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-function isUUID(id: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-}
+function buildWeaknessSummary(asset: Asset): string {
+  const weakest = [
+    { label: 'TLS', value: asset.dimensionScores.tls_version },
+    { label: 'Key Ex', value: asset.dimensionScores.key_exchange },
+    { label: 'Cipher', value: asset.dimensionScores.cipher_strength },
+    { label: 'Certificate', value: asset.dimensionScores.certificate_algo },
+    { label: 'PQC', value: asset.dimensionScores.pqc_readiness },
+  ]
+    .sort((left, right) => left.value - right.value)
+    .slice(0, 2)
+    .map((dimension) => dimension.label);
 
-function assetKey(asset: Asset): string {
-  return `${asset.domain.toLowerCase()}|${asset.port}|${asset.type}`;
+  return `Lowest dimensions: ${weakest.join(' + ')}`;
 }
 
 const CyberRatingPerAsset = () => {
   const navigate = useNavigate();
-  const { selectedAssets, selectedScanId, selectedScanResults } = useSelectedScan();
+  const { selectedAssets, selectedAssetResults } = useSelectedScan();
 
-  const { data: trendMap } = useQuery<Record<string, { delta: number; direction: 'up' | 'down' | 'flat' }>>({
-    queryKey: ['asset-rating-trends', selectedScanId, selectedAssets.map((asset) => assetKey(asset)).sort().join(',')],
-    queryFn: async () => {
-      if (!isUUID(selectedScanId) || !selectedScanResults || selectedAssets.length === 0) {
-        return {};
-      }
+  const resolvedTrendMap = useMemo<Record<string, { delta: number; direction: 'up' | 'down' | 'flat' }>>(() => {
+    return Object.fromEntries(
+      selectedAssetResults.map((rawAsset) => {
+        const history = (rawAsset.asset_fingerprint?.q_score_history ?? [])
+          .filter((entry) => entry.q_score !== null && entry.scanned_at)
+          .map((entry) => ({
+            qScore: entry.q_score ?? 0,
+            scannedAt: new Date(entry.scanned_at ?? '').getTime(),
+          }))
+          .filter((entry) => !Number.isNaN(entry.scannedAt))
+          .sort((left, right) => left.scannedAt - right.scannedAt);
 
-      const selectedCreatedAt = new Date(selectedScanResults.created_at).getTime();
-      if (Number.isNaN(selectedCreatedAt)) {
-        return {};
-      }
-
-      const history = await api.getScanHistory();
-      const candidateScans = history.items
-        .filter((item) =>
-          item.status === 'completed' &&
-          item.scan_id !== selectedScanId &&
-          item.created_at !== null,
-        )
-        .filter((item) => {
-          const createdAt = new Date(item.created_at).getTime();
-          return !Number.isNaN(createdAt) &&
-            createdAt < selectedCreatedAt &&
-            createdAt >= selectedCreatedAt - SEVEN_DAYS_MS;
-        })
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-      if (candidateScans.length === 0) {
-        return {};
-      }
-
-      const candidateResults = await Promise.all(candidateScans.map(async (scan) => {
-        const result = await api.getScanResults(scan.scan_id);
-        return adaptScanResults(result);
-      }));
-
-      const previousScoreByAsset = new Map<string, number>();
-      const selectedAssetKeys = selectedAssets.map((asset) => assetKey(asset));
-
-      for (const key of selectedAssetKeys) {
-        for (const assets of candidateResults) {
-          const match = assets.find((asset) => assetKey(asset) === key);
-          if (match) {
-            previousScoreByAsset.set(key, match.qScore);
-            break;
-          }
+        if (history.length < 2) {
+          return [rawAsset.asset_id, { delta: 0, direction: 'flat' as const }];
         }
-      }
 
-      const computedTrends = Object.fromEntries(
-        selectedAssets.map((asset) => {
-          const key = assetKey(asset);
-          const previousScore = previousScoreByAsset.get(key);
-          const delta = previousScore === undefined ? 0 : asset.qScore - previousScore;
-          return [
-            key,
-            {
-              delta,
-              direction: delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat',
-            },
-          ];
-        }),
-      );
+        const latest = history[history.length - 1];
+        const previous = [...history]
+          .slice(0, -1)
+          .reverse()
+          .find((entry) => latest.scannedAt - entry.scannedAt <= SEVEN_DAYS_MS);
 
-      return computedTrends;
-    },
-    staleTime: 30000,
-  });
+        if (!previous) {
+          return [rawAsset.asset_id, { delta: 0, direction: 'flat' as const }];
+        }
 
-  const resolvedTrendMap = useMemo(
-    () => trendMap ?? {},
-    [trendMap],
-  );
+        const delta = latest.qScore - previous.qScore;
+        return [
+          rawAsset.asset_id,
+          {
+            delta,
+            direction: delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat',
+          },
+        ];
+      }),
+    );
+  }, [selectedAssetResults]);
 
   return (
   <div className="space-y-5">
@@ -143,10 +111,13 @@ const CyberRatingPerAsset = () => {
                 const chip = (v: number) => (
                   <span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ color: dimColor(v), backgroundColor: `${dimColor(v)}15` }}>{v}</span>
                 );
-                const trend = resolvedTrendMap[assetKey(a)] || { delta: 0, direction: 'flat' as const };
+                const trend = resolvedTrendMap[a.id] || assetTrends[a.domain] || { delta: 0, direction: 'flat' as const };
                 return (
                   <tr key={a.id} className={cn("border-b border-border/50 hover:bg-[hsl(var(--bg-sunken))]", i % 2 === 0 && "bg-[hsl(var(--bg-sunken)/0.3)]")}>
-                    <td className="px-3 py-2 font-mono font-medium cursor-pointer hover:text-brand-primary" onClick={() => navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}`)}>{a.domain}</td>
+                    <td className="px-3 py-2 cursor-pointer hover:text-brand-primary" onClick={() => navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}`)}>
+                      <div className="font-mono font-medium">{a.domain}</div>
+                      <p className="mt-0.5 text-[10px] font-body text-muted-foreground">{buildWeaknessSummary(a)}</p>
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1.5">
                         <div className="w-12 h-1.5 rounded-full bg-[hsl(var(--bg-sunken))]">

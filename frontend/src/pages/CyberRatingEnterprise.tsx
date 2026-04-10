@@ -9,7 +9,6 @@ import SectionTabBar from '@/components/dashboard/SectionTabBar';
 import { Star, FileText, HelpCircle, Shield, AlertTriangle, XCircle } from 'lucide-react';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import { api } from '@/lib/api';
-import { adaptScanResults } from '@/lib/adapters';
 import type { Asset } from '@/data/demoData';
 
 const ratingTabs = [
@@ -92,25 +91,16 @@ const CyberRatingEnterprise = () => {
     queryFn: async () => {
       if (!isUUID(selectedScanId) || !currentTarget) return [] as Array<{ label: string; score: number; createdAt: string }>;
 
-      const history = await api.getScanHistory();
-      const matchingScans = history.items
-        .filter((item) => item.status === 'completed' && item.target === currentTarget)
+      const history = await api.getScanHistory({ target: currentTarget });
+      return history.items
+        .filter((item) => item.status === 'completed')
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-        .slice(-12);
-
-      const scanResults = await Promise.allSettled(
-        matchingScans.map((item) => api.getScanResults(item.scan_id)),
-      );
-
-      return scanResults.flatMap((result) => {
-        if (result.status !== 'fulfilled') return [];
-        const assets = adaptScanResults(result.value);
-        return [{
-          label: formatHistoryLabel(result.value.created_at),
-          score: computeEnterpriseScore(assets),
-          createdAt: result.value.created_at,
-        }];
-      }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        .slice(-12)
+        .map((item) => ({
+          label: formatHistoryLabel(item.created_at),
+          score: Math.round(item.summary.average_q_score ?? 0),
+          createdAt: item.created_at,
+        }));
     },
     staleTime: 30000,
   });

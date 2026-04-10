@@ -56,6 +56,7 @@ from backend.intelligence import (
     RetrievalService,
     create_embedding_provider,
 )
+from backend.models.asset_fingerprint import AssetFingerprint
 from backend.models.crypto_assessment import CryptoAssessment
 from backend.models.discovered_asset import DiscoveredAsset
 from backend.models.certificate_chain import CertificateChain
@@ -927,7 +928,11 @@ class PipelineOrchestrator:
             )
             try:
                 async with session.begin_nested():
-                    canonical_key = f"{asset.hostname or asset.ip_address}:{asset.port}/{asset.protocol}"
+                    canonical_key = build_asset_fingerprint_key(asset)
+                    if canonical_key is None:
+                        raise ValueError(
+                            f"Cannot derive canonical fingerprint key for asset {asset.id}."
+                        )
                     q_score = round(100 - (assessment_inputs.risk_score or 50))
                     now = datetime.now(UTC)
                     score_snapshot = {
@@ -1427,6 +1432,9 @@ class ScanReadService:
                         serialize_remediation_action(action)
                         for action in bundle["remediation_actions"].get(asset.id, [])
                     ],
+                    "asset_fingerprint": serialize_asset_fingerprint(
+                        bundle["asset_fingerprints"].get(asset.id)
+                    ),
                 }
             )
 
@@ -1561,6 +1569,7 @@ class ScanReadService:
         cbom_repository = CbomDocumentRepository(session)
         remediation_repository = RemediationBundleRepository(session)
         certificate_repository = ComplianceCertificateRepository(session)
+        fingerprint_repository = AssetFingerprintRepository(session)
         dns_record_repository = DNSRecordRepository(session)
         scan_event_repository = ScanEventRepository(session)
 
@@ -1577,9 +1586,29 @@ class ScanReadService:
         certificates: dict[uuid.UUID, Any] = {}
         leaf_certificates: dict[uuid.UUID, CertificateChain] = {}
         remediation_actions: dict[uuid.UUID, list[RemediationAction]] = {}
+        asset_fingerprints: dict[uuid.UUID, AssetFingerprint] = {}
 
         asset_ids = [asset.id for asset in assets]
         if asset_ids:
+            canonical_keys_by_asset_id = {
+                asset.id: canonical_key
+                for asset in assets
+                for canonical_key in [build_asset_fingerprint_key(asset)]
+                if canonical_key is not None
+            }
+            if canonical_keys_by_asset_id:
+                fingerprint_rows = await fingerprint_repository.get_by_canonical_keys(
+                    tuple(canonical_keys_by_asset_id.values())
+                )
+                fingerprints_by_key = {
+                    fingerprint.canonical_key: fingerprint for fingerprint in fingerprint_rows
+                }
+                asset_fingerprints = {
+                    asset_id: fingerprints_by_key[canonical_key]
+                    for asset_id, canonical_key in canonical_keys_by_asset_id.items()
+                    if canonical_key in fingerprints_by_key
+                }
+
             leaf_certificate_rows = (
                 await session.execute(
                     select(CertificateChain).where(
@@ -1630,12 +1659,26 @@ class ScanReadService:
             ComplianceTier.PQC_TRANSITIONING: 0,
             ComplianceTier.QUANTUM_VULNERABLE: 0,
         }
+        critical_assets = 0
+        unknown_assets = 0
+        q_scores = []
         risk_scores = []
-        for assessment in assessments.values():
+        for asset in assets:
+            assessment = assessments.get(asset.id)
+            if assessment is None:
+                unknown_assets += 1
+                continue
+
             if assessment.compliance_tier in tier_counts:
                 tier_counts[assessment.compliance_tier] += 1
+            else:
+                unknown_assets += 1
+
             if assessment.risk_score is not None:
                 risk_scores.append(assessment.risk_score)
+                q_scores.append(max(0.0, min(100.0, 100.0 - assessment.risk_score)))
+                if assessment.risk_score > 70:
+                    critical_assets += 1
         tls_assets = sum(1 for asset in assets if asset.service_type is ServiceType.TLS)
 
         bundle = {
@@ -1649,6 +1692,7 @@ class ScanReadService:
             "certificates": certificates,
             "leaf_certificates": leaf_certificates,
             "remediation_actions": remediation_actions,
+            "asset_fingerprints": asset_fingerprints,
             "progress": {
                 "assets_discovered": len(assets),
                 "assessments_created": len(assessments),
@@ -1663,6 +1707,9 @@ class ScanReadService:
                 "fully_quantum_safe_assets": tier_counts[ComplianceTier.FULLY_QUANTUM_SAFE],
                 "transitioning_assets": tier_counts[ComplianceTier.PQC_TRANSITIONING],
                 "vulnerable_assets": tier_counts[ComplianceTier.QUANTUM_VULNERABLE],
+                "critical_assets": critical_assets,
+                "unknown_assets": unknown_assets,
+                "average_q_score": round(sum(q_scores) / len(q_scores), 1) if q_scores else None,
                 "highest_risk_score": max(risk_scores) if risk_scores else None,
             },
         }
@@ -1677,12 +1724,20 @@ class ScanReadService:
             "created_at": bundle["scan"].created_at,
             "completed_at": bundle["scan"].completed_at,
             "summary": {
+                "total_assets": bundle["summary"]["total_assets"],
+                "tls_assets": bundle["summary"]["tls_assets"],
+                "non_tls_assets": bundle["summary"]["non_tls_assets"],
                 "vulnerable_assets": bundle["summary"]["vulnerable_assets"],
                 "transitioning_assets": bundle["summary"]["transitioning_assets"],
                 "fully_quantum_safe_assets": bundle["summary"]["fully_quantum_safe_assets"],
+                "critical_assets": bundle["summary"]["critical_assets"],
+                "unknown_assets": bundle["summary"]["unknown_assets"],
+                "average_q_score": bundle["summary"]["average_q_score"],
                 "highest_risk_score": bundle["summary"]["highest_risk_score"],
             },
             "progress": bundle["progress"],
+            "scan_profile": bundle["scan"].scan_profile,
+            "initiated_by": bundle["scan"].initiated_by,
             "degraded_mode_count": len(bundle["runtime"]["degraded_modes"]),
         }
 
@@ -1915,6 +1970,94 @@ def serialize_leaf_certificate(certificate_chain: CertificateChain | None) -> di
     }
 
 
+def serialize_asset_fingerprint_history_entry(
+    entry: Any,
+) -> dict[str, Any] | None:
+    if not isinstance(entry, dict):
+        return None
+
+    scan_id = entry.get("scan_id")
+    parsed_scan_id: uuid.UUID | None = None
+    if isinstance(scan_id, uuid.UUID):
+        parsed_scan_id = scan_id
+    elif isinstance(scan_id, str):
+        try:
+            parsed_scan_id = uuid.UUID(scan_id)
+        except ValueError:
+            parsed_scan_id = None
+
+    q_score = entry.get("q_score")
+    parsed_q_score: int | None = None
+    if isinstance(q_score, bool):
+        parsed_q_score = None
+    elif isinstance(q_score, (int, float)):
+        parsed_q_score = int(round(q_score))
+    elif isinstance(q_score, str):
+        try:
+            parsed_q_score = int(round(float(q_score)))
+        except ValueError:
+            parsed_q_score = None
+
+    scanned_at = entry.get("scanned_at")
+    parsed_scanned_at: datetime | None = None
+    if isinstance(scanned_at, datetime):
+        parsed_scanned_at = scanned_at
+    elif isinstance(scanned_at, str):
+        normalized_scanned_at = scanned_at.replace("Z", "+00:00")
+        try:
+            parsed_scanned_at = datetime.fromisoformat(normalized_scanned_at)
+        except ValueError:
+            parsed_scanned_at = None
+    if parsed_scanned_at is not None and parsed_scanned_at.tzinfo is None:
+        parsed_scanned_at = parsed_scanned_at.replace(tzinfo=UTC)
+
+    if (
+        parsed_scan_id is None
+        and parsed_q_score is None
+        and parsed_scanned_at is None
+    ):
+        return None
+
+    return {
+        "scan_id": parsed_scan_id,
+        "q_score": parsed_q_score,
+        "scanned_at": parsed_scanned_at,
+    }
+
+
+def serialize_asset_fingerprint(
+    fingerprint: AssetFingerprint | None,
+) -> dict[str, Any] | None:
+    if fingerprint is None:
+        return None
+
+    history_entries = []
+    for entry in fingerprint.q_score_history or []:
+        serialized_entry = serialize_asset_fingerprint_history_entry(entry)
+        if serialized_entry is not None:
+            history_entries.append(serialized_entry)
+
+    minimum = datetime.min.replace(tzinfo=UTC)
+    history_entries.sort(
+        key=lambda entry: (
+            entry["scanned_at"] or minimum,
+            str(entry["scan_id"] or ""),
+        )
+    )
+
+    return {
+        "canonical_key": fingerprint.canonical_key,
+        "appearance_count": fingerprint.appearance_count,
+        "latest_q_score": fingerprint.latest_q_score,
+        "latest_compliance_tier": fingerprint.latest_compliance_tier,
+        "first_seen_at": fingerprint.first_seen_at,
+        "last_seen_at": fingerprint.last_seen_at,
+        "first_seen_scan_id": fingerprint.first_seen_scan_id,
+        "last_seen_scan_id": fingerprint.last_seen_scan_id,
+        "q_score_history": history_entries,
+    }
+
+
 def serialize_remediation_action(remediation_action: RemediationAction) -> dict[str, Any]:
     return {
         "priority": remediation_action.priority.value,
@@ -1976,6 +2119,13 @@ def _artifact_key_from_asset(asset: DiscoveredAsset) -> tuple[str | None, str, i
         asset.protocol.lower(),
         asset.service_type.value if asset.service_type else "",
     )
+
+
+def build_asset_fingerprint_key(asset: DiscoveredAsset) -> str | None:
+    asset_label = _normalize_hostname(asset.hostname) or (asset.ip_address or "").strip()
+    if not asset_label:
+        return None
+    return f"{asset_label}:{asset.port}/{asset.protocol.lower()}"
 
 
 def _normalize_hostname(hostname: str | None) -> str | None:

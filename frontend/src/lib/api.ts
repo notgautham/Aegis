@@ -100,6 +100,24 @@ export interface RemediationActionItem {
   nist_reference: string | null;
 }
 
+export interface AssetFingerprintHistoryEntry {
+  scan_id: string | null;
+  q_score: number | null;
+  scanned_at: string | null;
+}
+
+export interface AssetFingerprintResponse {
+  canonical_key: string;
+  appearance_count: number;
+  latest_q_score: number | null;
+  latest_compliance_tier: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  first_seen_scan_id: string | null;
+  last_seen_scan_id: string | null;
+  q_score_history: AssetFingerprintHistoryEntry[];
+}
+
 export interface DNSRecordResponse {
   hostname: string;
   resolved_ips: string[];
@@ -126,6 +144,7 @@ export interface AssetResultResponse {
   certificate: CertificateResponse | null;
   leaf_certificate: LeafCertificate | null;
   remediation_actions: RemediationActionItem[];
+  asset_fingerprint: AssetFingerprintResponse | null;
 }
 
 export interface ScanProgress {
@@ -141,10 +160,16 @@ export interface ScanRuntimeEvent {
 }
 
 export interface ScanSummary {
+  total_assets: number;
+  tls_assets: number;
+  non_tls_assets: number;
   vulnerable_assets: number;
   transitioning_assets: number;
   fully_quantum_safe_assets: number;
-  highest_risk_score: number;
+  critical_assets: number;
+  unknown_assets: number;
+  average_q_score: number | null;
+  highest_risk_score: number | null;
 }
 
 export interface ScanResultsResponse {
@@ -183,6 +208,9 @@ export interface ScanHistoryItem {
   completed_at: string | null;
   progress: ScanProgress;
   summary: ScanSummary;
+  scan_profile?: string | null;
+  initiated_by?: string | null;
+  degraded_mode_count?: number;
 }
 
 export interface ScanHistoryResponse {
@@ -205,8 +233,13 @@ export const api = {
   getScanResults: (scanId: string) =>
     request<ScanResultsResponse>('GET', `/api/v1/scan/${scanId}/results`),
 
-  getScanHistory: () =>
-    request<ScanHistoryResponse>('GET', '/api/v1/scan/history'),
+  getScanHistory: (params?: { limit?: number; target?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.limit !== undefined) search.set('limit', String(params.limit));
+    if (params?.target) search.set('target', params.target);
+    const suffix = search.toString() ? `?${search.toString()}` : '';
+    return request<ScanHistoryResponse>('GET', `/api/v1/scan/history${suffix}`);
+  },
 
   getAssetCbom: (assetId: string) =>
     request<CbomResponse>('GET', `/api/v1/assets/${assetId}/cbom`),

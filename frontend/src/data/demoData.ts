@@ -449,16 +449,28 @@ export interface ScanHistoryEntry {
   qScore: number;
   criticalFindings: number;
   status: string;
+  fullyQuantumSafeAssets?: number;
+  transitioningAssets?: number;
+  vulnerableAssets?: number;
+  criticalAssets?: number;
+  unknownAssets?: number;
+  highestRiskScore?: number | null;
+  tlsAssets?: number;
+  nonTlsAssets?: number;
+  degradedModeCount?: number;
+  scanProfile?: string | null;
+  initiatedBy?: string | null;
+  scoreReason?: string;
 }
 
 export const scanHistory: ScanHistoryEntry[] = [
-  { id: 'SCN-007', target: 'pnb.co.in', started: 'Apr 1 2026, 09:14', duration: '4m 22s', assetsFound: 21, qScore: 370, criticalFindings: 3, status: 'Completed' },
-  { id: 'SCN-006', target: 'pnb.co.in', started: 'Mar 25 2026, 11:30', duration: '3m 58s', assetsFound: 19, qScore: 325, criticalFindings: 4, status: 'Completed' },
-  { id: 'SCN-005', target: 'netbanking.pnb.co.in', started: 'Mar 18 2026, 08:45', duration: '1m 12s', assetsFound: 6, qScore: 410, criticalFindings: 1, status: 'Completed' },
-  { id: 'SCN-004', target: 'pnb.co.in', started: 'Mar 10 2026, 14:20', duration: '5m 01s', assetsFound: 21, qScore: 295, criticalFindings: 5, status: 'Completed' },
-  { id: 'SCN-003', target: 'vpn.pnb.co.in', started: 'Mar 3 2026, 10:00', duration: '0m 48s', assetsFound: 3, qScore: 24, criticalFindings: 2, status: 'Completed' },
-  { id: 'SCN-002', target: 'pnb.co.in', started: 'Feb 24 2026, 16:15', duration: '4m 33s', assetsFound: 18, qScore: 260, criticalFindings: 6, status: 'Completed' },
-  { id: 'SCN-001', target: 'pnb.co.in', started: 'Feb 14 2026, 09:00', duration: '4m 10s', assetsFound: 17, qScore: 210, criticalFindings: 7, status: 'Completed' },
+  { id: 'SCN-007', target: 'pnb.co.in', started: 'Apr 1 2026, 09:14', duration: '4m 22s', assetsFound: 21, qScore: 37, criticalFindings: 3, status: 'Completed', scoreReason: '3 critical assets are pulling the score down.' },
+  { id: 'SCN-006', target: 'pnb.co.in', started: 'Mar 25 2026, 11:30', duration: '3m 58s', assetsFound: 19, qScore: 33, criticalFindings: 4, status: 'Completed', scoreReason: '4 critical assets are pulling the score down.' },
+  { id: 'SCN-005', target: 'netbanking.pnb.co.in', started: 'Mar 18 2026, 08:45', duration: '1m 12s', assetsFound: 6, qScore: 41, criticalFindings: 1, status: 'Completed', scoreReason: '1 critical asset is pulling the score down.' },
+  { id: 'SCN-004', target: 'pnb.co.in', started: 'Mar 10 2026, 14:20', duration: '5m 01s', assetsFound: 21, qScore: 30, criticalFindings: 5, status: 'Completed', scoreReason: '5 critical assets are pulling the score down.' },
+  { id: 'SCN-003', target: 'vpn.pnb.co.in', started: 'Mar 3 2026, 10:00', duration: '0m 48s', assetsFound: 3, qScore: 24, criticalFindings: 2, status: 'Completed', scoreReason: '2 critical assets are pulling the score down.' },
+  { id: 'SCN-002', target: 'pnb.co.in', started: 'Feb 24 2026, 16:15', duration: '4m 33s', assetsFound: 18, qScore: 26, criticalFindings: 6, status: 'Completed', scoreReason: '6 critical assets are pulling the score down.' },
+  { id: 'SCN-001', target: 'pnb.co.in', started: 'Feb 14 2026, 09:00', duration: '4m 10s', assetsFound: 17, qScore: 21, criticalFindings: 7, status: 'Completed', scoreReason: '7 critical assets are pulling the score down.' },
 ];
 
 // ========== CVE Data for Discovery Detail Panels ==========

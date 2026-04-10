@@ -47,15 +47,24 @@ class ScanSummaryResponse(BaseModel):
     fully_quantum_safe_assets: int
     transitioning_assets: int
     vulnerable_assets: int
+    critical_assets: int
+    unknown_assets: int
+    average_q_score: float | None
     highest_risk_score: float | None
 
 
 class RecentScanSummaryResponse(BaseModel):
     """Compact posture counts for recent scan cards and timeline items."""
 
+    total_assets: int
+    tls_assets: int
+    non_tls_assets: int
     vulnerable_assets: int
     transitioning_assets: int
     fully_quantum_safe_assets: int
+    critical_assets: int
+    unknown_assets: int
+    average_q_score: float | None
     highest_risk_score: float | None
 
 
@@ -159,6 +168,30 @@ class RemediationActionResponse(BaseModel):
     nist_reference: str | None
 
 
+class AssetFingerprintHistoryEntryResponse(BaseModel):
+    """One persisted q-score observation for a logical asset fingerprint."""
+
+    scan_id: uuid.UUID | None
+    q_score: int | None
+    scanned_at: datetime | None
+
+
+class AssetFingerprintResponse(BaseModel):
+    """Stable cross-scan asset identity and observed score history."""
+
+    canonical_key: str
+    appearance_count: int
+    latest_q_score: int | None
+    latest_compliance_tier: ComplianceTier | None
+    first_seen_at: datetime
+    last_seen_at: datetime
+    first_seen_scan_id: uuid.UUID | None
+    last_seen_scan_id: uuid.UUID | None
+    q_score_history: list[AssetFingerprintHistoryEntryResponse] = Field(
+        default_factory=list
+    )
+
+
 class DNSRecordResponse(BaseModel):
     """Persisted DNS validation row included in compiled scan results."""
 
@@ -190,6 +223,7 @@ class AssetResultResponse(BaseModel):
     certificate: CertificateResponse | None
     leaf_certificate: LeafCertificateResponse | None = None
     remediation_actions: list[RemediationActionResponse] = Field(default_factory=list)
+    asset_fingerprint: AssetFingerprintResponse | None = None
 
 
 class ScanResultsResponse(BaseModel):
@@ -278,6 +312,8 @@ class ScanHistoryItemResponse(BaseModel):
     completed_at: datetime | None
     summary: RecentScanSummaryResponse
     progress: ProgressResponse
+    scan_profile: str | None = None
+    initiated_by: str | None = None
     degraded_mode_count: int = 0
 
 

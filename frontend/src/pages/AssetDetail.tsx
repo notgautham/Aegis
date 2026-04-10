@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,44 +11,84 @@ import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Responsi
 import PQCCertificateModal from '@/components/dashboard/PQCCertificateModal';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
-// Generate score history per asset
-const scoreHistories: Record<string, { scan: string; score: number; event?: string }[]> = {
-  'vpn-pnb-co-in': [
-    { scan: 'Feb 14', score: 12 },
-    { scan: 'Feb 24', score: 15 },
-    { scan: 'Mar 10', score: 18, event: 'Cipher downgrade detected' },
-    { scan: 'Mar 25', score: 22, event: 'TLS 1.0 disabled on port 8443' },
-    { scan: 'Apr 1', score: 24 },
-  ],
-  'auth-pnb-co-in': [
-    { scan: 'Feb 14', score: 65 },
-    { scan: 'Feb 24', score: 70, event: 'Cert renewed' },
-    { scan: 'Mar 10', score: 74 },
-    { scan: 'Mar 25', score: 78, event: 'TLS 1.3 enabled' },
-    { scan: 'Apr 1', score: 82 },
-  ],
-  'pqc-api-pnb-co-in': [
-    { scan: 'Feb 14', score: 90 },
-    { scan: 'Feb 24', score: 95 },
-    { scan: 'Mar 10', score: 98, event: 'ML-KEM-768 deployed' },
-    { scan: 'Mar 25', score: 100 },
-    { scan: 'Apr 1', score: 100 },
-  ],
-  'netbanking-pnb-co-in': [
-    { scan: 'Feb 14', score: 55 },
-    { scan: 'Feb 24', score: 58 },
-    { scan: 'Mar 10', score: 63, event: 'HSTS enabled' },
-    { scan: 'Mar 25', score: 68 },
-    { scan: 'Apr 1', score: 71 },
-  ],
-};
+function buildAssetScoreReason(asset: ReturnType<typeof useSelectedScan>['selectedAssets'][number]): string {
+  const weakestDimensions = [
+    { label: 'TLS version', value: asset.dimensionScores.tls_version },
+    { label: 'key exchange', value: asset.dimensionScores.key_exchange },
+    { label: 'certificate algorithm', value: asset.dimensionScores.certificate_algo },
+    { label: 'cipher strength', value: asset.dimensionScores.cipher_strength },
+    { label: 'PQC readiness', value: asset.dimensionScores.pqc_readiness },
+  ]
+    .sort((left, right) => left.value - right.value)
+    .slice(0, 2)
+    .map((dimension) => dimension.label);
+
+  if (asset.status === 'elite-pqc') {
+    return 'AEGIS rates this asset highly because its TLS, certificate, and PQC-readiness dimensions are all strong with no meaningful remediation backlog.';
+  }
+
+  if (asset.status === 'critical') {
+    return `AEGIS rates this asset as critical mainly because ${weakestDimensions.join(' and ')} remain weak, which keeps the quantum-readiness score depressed.`;
+  }
+
+  if (asset.status === 'safe') {
+    return `AEGIS rates this asset as transition-ready because its baseline crypto is solid, but ${weakestDimensions.join(' and ')} still need improvement before it reaches elite PQC posture.`;
+  }
+
+  return `AEGIS rates this asset at ${asset.qScore}/100 because ${weakestDimensions.join(' and ')} are the weakest scoring dimensions in the current scan.`;
+}
+
+function formatHistoryPointLabel(iso: string | null, index: number): string {
+  if (!iso) {
+    return `Point ${index + 1}`;
+  }
+
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return `Point ${index + 1}`;
+  }
+
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 const AssetDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [certModalOpen, setCertModalOpen] = useState(false);
-  const { selectedAssets } = useSelectedScan();
+  const { selectedAssets, selectedAssetResults } = useSelectedScan();
   const asset = selectedAssets.find(a => a.domain.replace(/\./g, '-') === id);
+  const rawAsset = selectedAssetResults.find((candidate) => candidate.asset_id === asset?.id);
+  const history = useMemo(() => {
+    if (!asset) {
+      return [];
+    }
+
+    const fingerprintHistory = (rawAsset?.asset_fingerprint?.q_score_history ?? [])
+      .filter((entry) => entry.q_score !== null)
+      .map((entry, index) => ({
+        scan: formatHistoryPointLabel(entry.scanned_at, index),
+        score: entry.q_score ?? asset.qScore,
+        event:
+          entry.scan_id === rawAsset?.asset_fingerprint?.last_seen_scan_id
+            ? 'Current selected scan'
+            : undefined,
+        scannedAt: entry.scanned_at ?? '',
+      }))
+      .sort((left, right) => new Date(left.scannedAt).getTime() - new Date(right.scannedAt).getTime());
+
+    if (fingerprintHistory.length > 0) {
+      return fingerprintHistory.map(({ scan, score, event }) => ({ scan, score, event }));
+    }
+
+    return [
+      {
+        scan: 'Current',
+        score: asset.qScore,
+        event: 'Current selected scan',
+      },
+    ];
+  }, [asset, rawAsset]);
+  const scoreReason = asset ? buildAssetScoreReason(asset) : '';
 
   if (selectedAssets.length === 0 || !asset) {
     return <div className="p-10 text-center"><h1 className="font-display text-2xl italic text-brand-primary">Asset Not Found</h1><p className="text-muted-foreground mt-2 font-body text-sm">No asset matching "{id}"</p><Button variant="outline" className="mt-4" onClick={() => navigate('/dashboard/inventory')}>Back to Inventory</Button></div>;
@@ -61,14 +101,6 @@ const AssetDetail = () => {
     { axis: 'Certificate', value: asset.dimensionScores.certificate_algo },
     { axis: 'Fwd Secrecy', value: asset.dimensionScores.forward_secrecy },
     { axis: 'PQC Ready', value: asset.dimensionScores.pqc_readiness },
-  ];
-
-  const history = scoreHistories[id || ''] || [
-    { scan: 'Feb 14', score: Math.max(0, asset.qScore - 15) },
-    { scan: 'Feb 24', score: Math.max(0, asset.qScore - 10) },
-    { scan: 'Mar 10', score: Math.max(0, asset.qScore - 7) },
-    { scan: 'Mar 25', score: Math.max(0, asset.qScore - 3) },
-    { scan: 'Apr 1', score: asset.qScore },
   ];
 
   const tlsVersions = ['TLS 1.0', 'TLS 1.1', 'TLS 1.2', 'TLS 1.3'];
@@ -118,6 +150,7 @@ const AssetDetail = () => {
               <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded" style={{ color: getStatusColor(asset.status), backgroundColor: `${getStatusColor(asset.status)}15` }}>{getStatusLabel(asset.status)}</span>
               <Badge variant="secondary" className="text-[10px]">{asset.type}</Badge>
             </div>
+            <p className="mt-2 max-w-2xl text-xs font-body leading-relaxed text-muted-foreground">{scoreReason}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -267,6 +300,11 @@ const AssetDetail = () => {
               <Line type="monotone" dataKey="score" stroke={getQScoreColor(asset.qScore)} strokeWidth={2} dot={{ r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
+          <p className="mt-2 text-center text-[10px] font-body text-muted-foreground">
+            {rawAsset?.asset_fingerprint?.q_score_history?.length
+              ? 'Trend is based on persisted asset fingerprint history across previous scans of the same logical asset.'
+              : 'Only the current scan is available for this asset so far.'}
+          </p>
         </CardContent>
       </Card>
 

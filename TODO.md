@@ -36,6 +36,15 @@ Update this file whenever a page is wired, a backend field is exposed, or a bloc
   - Read service now loads persisted `dns_records` and discovery-side asset metadata into scan results payloads.
 - `frontend/src/lib/api.ts`
   - Frontend API contract now includes the new discovery-side response fields.
+- `backend/api/v1/schemas.py`
+  - Scan history and compiled scan results now expose richer posture summary fields such as `average_q_score`, `critical_assets`, and `unknown_assets`.
+  - Per-asset compiled scan results now expose persisted `asset_fingerprint` history.
+- `backend/pipeline/orchestrator.py`
+  - Read service now loads `asset_fingerprints` into compiled asset results and includes richer per-scan summary metrics in history/results payloads.
+- `frontend/src/lib/api.ts`
+  - Frontend API contract now includes asset fingerprint history plus richer scan-history summary fields.
+- `frontend/src/lib/adapters.ts`
+  - Live scan history now adapts to the richer backend summary fields and exposes short deterministic score-reason text for comparison views.
 - `frontend/src/pages/DashboardHome.tsx`
   - Main dashboard sections use selected scan data.
 - `frontend/src/components/dashboard/KPIStrip.tsx`
@@ -89,6 +98,8 @@ Update this file whenever a page is wired, a backend field is exposed, or a bloc
   - Static canned patch templates were removed in favor of persisted `patch_config`, `migration_roadmap`, and remediation actions when available.
 - `frontend/src/pages/AssetDetail.tsx`
   - Uses selected scan assets.
+  - Score history now uses persisted asset fingerprint history instead of demo timelines.
+  - The page now shows a short deterministic explanation of why AEGIS assigned the current score.
 - `frontend/src/pages/AssetDiscovery.tsx`
   - `This Scan` uses selected scan data.
   - `All Time` aggregates real completed scans through API calls.
@@ -101,6 +112,7 @@ Update this file whenever a page is wired, a backend field is exposed, or a bloc
 - `frontend/src/pages/CyberRatingPerAsset.tsx`
   - Uses selected assets and computes 7-day trends from real older completed scans in scan history.
   - Falls back to neutral trend when there is not enough real history for the current asset identity.
+  - Now prefers persisted `asset_fingerprint` score history for the 7-day trend and shows a short weakest-dimensions summary per asset.
 - `frontend/src/pages/ScanReport.tsx`
   - Uses live scan history and live per-scan results with demo fallback.
   - Delta comparison now uses logical asset identity instead of scan-row IDs, so repeated scans compare more accurately.
@@ -126,6 +138,8 @@ Update this file whenever a page is wired, a backend field is exposed, or a bloc
 - `frontend/src/components/dashboard/CommandPalette.tsx`
   - Uses live selected assets for query search and live scan history with demo fallback for scan navigation.
   - Selecting a scan now updates the shared selected-scan context before navigating.
+- `frontend/src/pages/ScanHistory.tsx`
+  - Now uses richer scan summary fields and displays short deterministic score-reason summaries in the table and compare view.
 
 ### Still Demo Or Mixed
 
@@ -155,17 +169,10 @@ These fields already matter to the UI but are not currently available through th
   - city
   - ISP
 
-### Database Has Data But Frontend Contract Does Not
-
-These exist in schema and models, but are not fully exposed through the frontend-facing API contract:
-
-- `asset_fingerprints` history beyond the latest snapshot
-
 ### Required API Additions
 
-- Scan history endpoint may need richer per-scan summary fields for cross-page comparison.
 - A target-specific cyber-rating history / projection endpoint would reduce frontend fan-out for enterprise score pages.
-  - The current enterprise score page builds truthful same-target history by querying scan history and then fetching matching scan results client-side.
+  - The current enterprise score page now builds truthful same-target history from scan-history summaries client-side, but a dedicated backend read model would still scale better.
 - Reporting pages do not yet have backend report-generation support.
   - No persisted executive/compliance/risk/CBOM report artifact list is available.
   - No on-demand report render/download endpoint exists for PDF, HTML, CSV, or JSON bundles.
@@ -203,6 +210,8 @@ These exist in schema and models, but are not fully exposed through the frontend
 - The top-right export action is not functional yet.
   - Define what it should export based on the active page/scan context.
   - Add backend export endpoints/artifact generation where needed and connect the shared top-right export button to those real outputs.
+- Some legacy UI copy and scales still assume the older `0-1000` score model.
+  - Normalize remaining references in marketing/landing surfaces and any analytical pages that still present `0-1000` instead of the current `0-100` posture scale.
 
 ## Known Real-Data Sparsity
 
