@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Shield, FileText, AlertTriangle, Wrench, CheckCircle2, FileBarChart } from 'lucide-react';
+import { Shield, FileText, AlertTriangle, Wrench, CheckCircle2, FileBarChart, ExternalLink } from 'lucide-react';
 import { assets, getStatusColor, getStatusLabel, getQScoreColor } from '@/data/demoData';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
@@ -114,6 +114,7 @@ const DashboardHome = () => {
                         <TableHead className="font-mono text-[10px]">Q-SCORE</TableHead>
                         <TableHead className="font-mono text-[10px]">PQC</TableHead>
                         <TableHead className="font-mono text-[10px]">CERT EXPIRY</TableHead>
+                        <TableHead className="font-mono text-[10px]">OPEN</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -128,6 +129,19 @@ const DashboardHome = () => {
                           <TableCell><span className="font-mono text-xs font-bold" style={{ color: getQScoreColor(a.qScore) }}>{a.qScore}</span></TableCell>
                           <TableCell><span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ color: getStatusColor(a.status), backgroundColor: `${getStatusColor(a.status)}15` }}>{getStatusLabel(a.status)}</span></TableCell>
                           <TableCell className="font-mono text-xs">{a.certInfo.days_remaining > 0 ? `${a.certInfo.days_remaining}d` : 'Expired'}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1.5 text-[10px] font-mono"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}`);
+                              }}
+                            >
+                              <ExternalLink className="w-3 h-3" /> View
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

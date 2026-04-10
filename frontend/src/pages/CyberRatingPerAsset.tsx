@@ -2,10 +2,11 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { assetTrends, getStatusColor, getStatusLabel, getQScoreColor, getTierFromAsset } from '@/data/demoData';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Info, Star, FileText, Shield, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Info, Star, FileText, Shield, TrendingUp, TrendingDown, Minus, ExternalLink } from 'lucide-react';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
@@ -104,6 +105,7 @@ const CyberRatingPerAsset = () => {
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">PQC</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Tier</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Label</th>
+              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Open</th>
             </tr></thead>
             <tbody>
               {selectedAssets.map((a, i) => {
@@ -145,6 +147,17 @@ const CyberRatingPerAsset = () => {
                     <td className="px-3 py-2">{chip(a.dimensionScores.pqc_readiness)}</td>
                     <td className="px-3 py-2"><Badge variant="outline" className="text-[10px]">{getTierFromAsset(a.tier)}</Badge></td>
                     <td className="px-3 py-2"><span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded" style={{ color: getStatusColor(a.status), backgroundColor: `${getStatusColor(a.status)}15` }}>{getStatusLabel(a.status)}</span></td>
+                    <td className="px-3 py-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1.5 text-[10px] font-mono"
+                        onClick={() => navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}`)}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        View
+                      </Button>
+                    </td>
                   </tr>
                 );
               })}

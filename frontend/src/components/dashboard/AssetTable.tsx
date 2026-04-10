@@ -1,6 +1,9 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getStatusLabel, getQScoreColor } from '@/data/demoData';
 import AssetDetailPanel from '@/components/dashboard/AssetDetailPanel';
+import { Button } from '@/components/ui/button';
+import { ExternalLink } from 'lucide-react';
 import type { Asset } from '@/data/demoData';
 
 interface AssetTableProps {
@@ -8,6 +11,7 @@ interface AssetTableProps {
 }
 
 const AssetTable = ({ selectedAssets }: AssetTableProps) => {
+  const navigate = useNavigate();
   const [selected, setSelected] = useState<Asset | null>(null);
   const [search, setSearch] = useState('');
 
@@ -49,7 +53,7 @@ const AssetTable = ({ selectedAssets }: AssetTableProps) => {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-[hsl(var(--border-default))] bg-sunken/50">
-                {['ASSET', 'TYPE', 'TLS', 'CIPHER SUITE', 'KEY EXCHANGE', 'CERTIFICATE', 'Q-SCORE', 'STATUS'].map(h => (
+                {['ASSET', 'TYPE', 'TLS', 'CIPHER SUITE', 'KEY EXCHANGE', 'CERTIFICATE', 'Q-SCORE', 'STATUS', 'OPEN'].map(h => (
                   <th key={h} className="font-mono text-[10px] text-muted-foreground uppercase px-4 py-3 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -76,6 +80,20 @@ const AssetTable = ({ selectedAssets }: AssetTableProps) => {
                     <span className={`font-mono text-[10px] font-semibold px-2 py-0.5 rounded ${statusBgColor(a.status)}`}>
                       {getStatusLabel(a.status)}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1.5 text-[10px] font-mono"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}`);
+                      }}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      View
+                    </Button>
                   </td>
                 </tr>
               ))}
