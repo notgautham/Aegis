@@ -15,7 +15,7 @@ from backend.compliance.rules_engine import ComplianceInput, RulesEngine
 from backend.models.certificate_chain import CertificateChain
 from backend.models.crypto_assessment import CryptoAssessment
 from backend.models.discovered_asset import DiscoveredAsset
-from backend.models.enums import CertLevel, ComplianceTier, ServiceType
+from backend.models.enums import CertLevel, ServiceType
 
 
 def test_serial_generation_is_deterministic() -> None:

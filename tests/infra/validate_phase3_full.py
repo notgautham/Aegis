@@ -23,7 +23,6 @@ import asyncio
 import importlib
 import shutil
 import sys
-import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable

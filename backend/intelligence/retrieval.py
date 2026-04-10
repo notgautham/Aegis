@@ -4,8 +4,6 @@ Qdrant ingestion and retrieval helpers for the Phase 6 intelligence layer.
 
 from __future__ import annotations
 
-import hashlib
-import math
 import re
 import unicodedata
 import uuid
@@ -17,7 +15,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import httpx
 from qdrant_client import QdrantClient, models
 
 from backend.core.config import Settings, get_settings

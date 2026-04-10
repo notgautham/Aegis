@@ -43,9 +43,7 @@ from backend.discovery import (
     TLSScanTarget,
     ValidatedHostname,
     VPNProbe,
-    VPNProbeResult,
     APIInspector,
-    APIInspectionResult,
     URLProbeTarget,
     aggregate_assets,
 )

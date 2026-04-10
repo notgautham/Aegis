@@ -9,7 +9,6 @@ Run inside Docker:
     docker-compose exec backend pytest tests/infra/test_oqs.py -v
 """
 
-import pytest
 
 
 def test_oqs_import() -> None:

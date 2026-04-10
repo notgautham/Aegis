@@ -11,7 +11,6 @@ import socket
 import logging
 import subprocess
 import re
-import shutil
 import os
 
 from backend.discovery.types import TLSProbeResult, TLSScanTarget
@@ -70,7 +69,7 @@ class TLSProbe:
         pqc_group = None
         if server_hello:
             # Clean up hex for regex matching (remove spaces and newlines)
-            hex_body = "".join(line.strip() for line in server_hello.splitlines() if not line.startswith(" "))
+            "".join(line.strip() for line in server_hello.splitlines() if not line.startswith(" "))
             # Actually OpenSSL labels the hex lines with indentation.
             hex_lines = [line.strip() for line in server_hello.splitlines() if line.startswith("    ")]
             hex_str = "".join(hex_lines).replace(" ", "").lower()
@@ -105,7 +104,7 @@ class TLSProbe:
         try:
             py_result = await asyncio.to_thread(self._probe_with_pyopenssl, target)
             chain = py_result.certificate_chain_pem
-        except:
+        except Exception:
             chain = ()
 
         return TLSProbeResult(
@@ -128,8 +127,10 @@ class TLSProbe:
         from OpenSSL import SSL, crypto
         env_backup = os.environ.copy()
         try:
-            if "OPENSSL_CONF" in os.environ: del os.environ["OPENSSL_CONF"]
-            if "LD_LIBRARY_PATH" in os.environ: del os.environ["LD_LIBRARY_PATH"]
+            if "OPENSSL_CONF" in os.environ:
+                del os.environ["OPENSSL_CONF"]
+            if "LD_LIBRARY_PATH" in os.environ:
+                del os.environ["LD_LIBRARY_PATH"]
             
             context = SSL.Context(SSL.TLS_CLIENT_METHOD)
             context.set_verify(SSL.VERIFY_NONE, lambda *_: True)

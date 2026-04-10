@@ -8,7 +8,6 @@ from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from backend.core.base import Base
 from backend.core.config import get_settings
 
 settings = get_settings()

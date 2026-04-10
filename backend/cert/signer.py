@@ -627,7 +627,7 @@ class CertificateSigner:
             f"CN = {identity.common_name}",
             "",
             "[ req_ext ]",
-            f"subjectAltName = @alt_names",
+            "subjectAltName = @alt_names",
             "",
             "[ alt_names ]",
             f"{san_name} = {identity.san_value}",

@@ -6,11 +6,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-import httpx
 
 from backend.core.config import Settings, get_settings
 
-from .retrieval import build_citation_payload, build_langchain_documents, _clean_openssl_env
+from .retrieval import build_citation_payload, build_langchain_documents
 from .types import HndlTimelineResult, PatchArtifact, RemediationInput, RetrievedChunk, RoadmapResult
 from .cloud_utils import call_cloud_api
 
