@@ -35,5 +35,5 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-      - name: Build Next.js app
+      - name: Build Vite app
         run: npm run build

@@ -21,12 +21,12 @@ Aegis is split into two main parts:
   - PostgreSQL 15
   - Qdrant
   - pgAdmin
-- frontend on the host machine
-  - Vite + React + TypeScript app served with `npm run dev`
+- frontend in Docker
+  - Vite + React + TypeScript app
 
 Default local ports:
 
-- frontend: `http://localhost:8080`
+- frontend: `http://localhost:3000`
 - backend API: `http://localhost:8000`
 - backend Swagger/OpenAPI docs: `http://localhost:8000/docs`
 - PostgreSQL: `localhost:5432`
@@ -38,10 +38,9 @@ Default local ports:
 Install these first:
 
 - Git
-- Docker Desktop
-- Node.js 20+ for the frontend
-  - local development in this repo is currently working on Node `v22.14.0`
-- npm
+- Docker Desktop (Works seamlessly across Windows, macOS, and Linux)
+
+*Note for Windows users:* All commands below use standard `bash` syntax. We highly recommend running them in **Git Bash**, **WSL (Windows Subsystem for Linux)**, or **PowerShell** (with Docker Desktop installed and integrated).
 
 You also need API keys for the cloud intelligence path:
 
@@ -53,8 +52,8 @@ You also need API keys for the cloud intelligence path:
 
 ## 1. Clone the Repository
 
-```powershell
-git clone <your-repo-url>
+```bash
+git clone https://github.com/notgautham/Aegis.git
 cd Aegis
 ```
 
@@ -62,7 +61,7 @@ cd Aegis
 
 Copy [`.env.example`](./.env.example) to `.env`.
 
-```powershell
+```bash
 Copy-Item .env.example .env
 ```
 
@@ -123,7 +122,7 @@ Notes:
 
 From the project root:
 
-```powershell
+```bash
 docker compose up -d --build
 ```
 
@@ -136,7 +135,7 @@ This starts:
 
 Check status:
 
-```powershell
+```bash
 docker compose ps
 ```
 
@@ -146,7 +145,7 @@ The backend image uses the OQS-patched OpenSSL build.
 
 Verify the provider is present:
 
-```powershell
+```bash
 docker exec aegis-backend openssl-oqs list -providers
 ```
 
@@ -156,13 +155,13 @@ You should see `oqsprovider` in the output.
 
 Apply Alembic migrations:
 
-```powershell
+```bash
 docker compose exec backend alembic upgrade head
 ```
 
 Check migration state if needed:
 
-```powershell
+```bash
 docker compose exec backend alembic current
 ```
 
@@ -183,13 +182,13 @@ Instead:
 
 Run ingestion:
 
-```powershell
+```bash
 docker compose exec backend python scripts/ingest_nist_docs.py
 ```
 
 Validate the corpus and collection:
 
-```powershell
+```bash
 docker compose exec backend python scripts/validate_ingested_corpus.py
 ```
 
@@ -211,8 +210,8 @@ You should rerun ingestion when:
 
 Health check:
 
-```powershell
-curl.exe http://localhost:8000/health
+```bash
+curl http://localhost:8000/health
 ```
 
 Expected response:
@@ -225,33 +224,7 @@ You can also open:
 
 - Swagger UI: `http://localhost:8000/docs`
 
-## 8. Install Frontend Dependencies
-
-In a new terminal:
-
-```powershell
-cd frontend
-npm install
-```
-
-Notes:
-
-- this project is a Vite app, not a Next.js app
-- use `npm run build` or `npm run dev`, not `next build`
-
-## 9. Start the Frontend
-
-From [frontend](./frontend):
-
-```powershell
-npm run dev
-```
-
-The frontend runs on:
-
-- `http://localhost:8080`
-
-## 10. Sign In
+## 8. Sign In
 
 The current frontend auth is still a prototype local gate, not real backend auth.
 
@@ -265,47 +238,47 @@ Example:
 - email: `demo@aegis.bank`
 - password: `aegis2026`
 
-## 11. Run a First Scan
+## 9. Run a First Scan
 
 You can start a scan from the UI or directly against the API.
 
 Example API call:
 
-```powershell
-curl.exe -X POST http://localhost:8000/api/v1/scan ^
-  -H "Content-Type: application/json" ^
+```bash
+curl -X POST http://localhost:8000/api/v1/scan \
+  -H "Content-Type: application/json" \
   -d '{"target":"testssl.sh"}'
 ```
 
 Poll status:
 
-```powershell
-curl.exe http://localhost:8000/api/v1/scan/<scan-id>
+```bash
+curl http://localhost:8000/api/v1/scan/<scan-id>
 ```
 
 Fetch compiled results after completion:
 
-```powershell
-curl.exe http://localhost:8000/api/v1/scan/<scan-id>/results
+```bash
+curl http://localhost:8000/api/v1/scan/<scan-id>/results
 ```
 
-## 12. Optional Validation Queries
+## 10. Optional Validation Queries
 
 Inspect tables in Postgres:
 
-```powershell
+```bash
 docker compose exec postgres psql -U aegis -d aegis -c "\dt"
 ```
 
 Inspect recent scans:
 
-```powershell
+```bash
 docker compose exec postgres psql -U aegis -d aegis -c "select id, target, status, created_at, completed_at from scan_jobs order by created_at desc limit 20;"
 ```
 
 Check Qdrant collection status:
 
-```powershell
+```bash
 docker compose exec backend python scripts/validate_ingested_corpus.py
 ```
 
@@ -324,25 +297,25 @@ Default login from [docker-compose.yml](./docker-compose.yml):
 
 Restart backend after changing backend code or `.env`:
 
-```powershell
+```bash
 docker compose restart backend
 ```
 
 View recent backend logs:
 
-```powershell
+```bash
 docker compose logs backend --tail=200
 ```
 
 Rebuild backend image:
 
-```powershell
+```bash
 docker compose up -d --build backend
 ```
 
 Re-run corpus ingestion:
 
-```powershell
+```bash
 docker compose exec backend python scripts/ingest_nist_docs.py
 ```
 

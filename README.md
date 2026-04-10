@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/notgautham/Aegis/main/frontend/public/logo.png" alt="Aegis Logo" width="120" />
+  <img src="./frontend/public/logo.jpeg" alt="Aegis Logo" width="120" />
 </p>
 
 <h1 align="center">🛡️ Aegis</h1>
@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Status-In_Development-yellow?style=for-the-badge" alt="Status" />
   <img src="https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/TypeScript-Next.js-blue?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/TypeScript-Vite--React-blue?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
 </p>
 
 <p align="center">
@@ -60,7 +60,7 @@ By combining low-level handshake inspection with NIST-grounded AI intelligence, 
 - **Backend:** FastAPI (Python 3.11), SQLAlchemy, PostgreSQL 15
 - **Infrastructure:** **Alpine Linux** with **liboqs** and OQS-patched **OpenSSL 3.4.0**
 - **Intelligence:** LangChain, Qdrant (Vector DB), Groq (Llama 3.3 70B)
-- **Frontend:** Next.js 14, TypeScript, Tailwind CSS, Lucide icons
+- **Frontend:** Vite, React, TypeScript, Tailwind CSS, Lucide icons
 
 ## 📊 Benchmark Results
 
@@ -80,8 +80,8 @@ Clone the repo and configure your `.env` as per [SETUP.md](./SETUP.md). You will
 ### 2. Launch Stack
 ```bash
 docker compose up -d --build
-docker exec aegis-backend alembic upgrade head
-docker exec aegis-backend python scripts/ingest_nist_docs.py
+docker compose exec backend alembic upgrade head
+docker compose exec backend python scripts/ingest_nist_docs.py
 ```
 
 ### 3. Run Your First Scan

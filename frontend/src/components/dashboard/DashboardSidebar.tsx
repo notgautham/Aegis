@@ -226,7 +226,7 @@ const DashboardSidebar = ({ activeItem, onItemClick }: DashboardSidebarProps) =>
       {/* Logo */}
       <div className="px-2.5 py-3 flex items-center gap-2 h-14 flex-shrink-0">
         <Link to="/" className="flex items-center gap-2 min-w-[24px]">
-          <Shield className="w-5 h-5 text-accent-amber fill-accent-amber/20 flex-shrink-0" />
+          <img src="/logo.jpeg" alt="Aegis" className="w-5 h-5 rounded flex-shrink-0" />
           <AnimatePresence>
             {!isCollapsed && (
               <motion.span

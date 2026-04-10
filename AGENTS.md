@@ -42,7 +42,7 @@ When relevant, prioritize finding and using these skills:
 
 ## 5. Implementation Rules
 - **Do not invent new architecture** unless absolutely necessary.
-- Respect the defined tech stack (FastAPI, Python 3.11, Next.js 14, PostgreSQL, Qdrant).
+- Respect the defined tech stack (FastAPI, Python 3.11, Vite, React, PostgreSQL, Qdrant).
 - Maintain the **45/35/10/10** weighted risk scoring formula as defined in the core logic.
 - Avoid large refactors unless explicitly requested by the user.
 - **Never modify `SOLUTION.md`.**

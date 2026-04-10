@@ -1,182 +1,114 @@
-import httpx
+import argparse
 import asyncio
-import time
-import sys
-import os
 import json
+import logging
+import sys
+import time
 from pathlib import Path
-from datetime import datetime
 
-# Configuration
-BASE_URL = "http://localhost:8000/api/v1"
-TARGETS = [
-    "pq.cloudflareresearch.com",
-    "discord.com",
-    "github.com",
-    "google.com",
-    "microsoft.com",
-    "amazon.com",
-    "apple.com",
-    "icicibank.com",
-    "tls-v1-2.badssl.com",
-    "dh2048.badssl.com"
-]
+# Setup paths so we can import backend
+SIM_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SIM_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-# Path setup
-SIM_DIR = Path(__file__).parent
-RESULTS_DIR = SIM_DIR / "results"
+from backend.core.config import get_settings
+from backend.core.database import async_session_factory
+from backend.models.enums import ScanStatus
+from backend.repositories.scan_job_repo import ScanJobRepository
+from backend.pipeline.orchestrator import PipelineOrchestrator, ScanReadService
 
-def log(msg, color="white", style=""):
-    colors = {
-        "green": "\033[92m",
-        "blue": "\033[94m",
-        "yellow": "\033[93m",
-        "red": "\033[91m",
-        "cyan": "\033[96m",
-        "white": "\033[0m",
-        "bold": "\033[1m"
+async def main():
+    parser = argparse.ArgumentParser(description="Run Aegis Pipeline locally.")
+    parser.add_argument("--target", required=True, help="Target domain (e.g. sc.com)")
+    parser.add_argument("--skip-enumeration", action="store_true", help="Skip Amass/DNSx")
+    args = parser.parse_args()
+
+    settings = get_settings()
+    if args.skip_enumeration:
+        settings.SKIP_ENUMERATION = True
+
+    # Keep logging visible so errors during pipeline execution are not swallowed
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    # 1. Create Scan Job exactly as the API does
+    async with async_session_factory() as session:
+        repo = ScanJobRepository(session)
+        scan_job = await repo.create(
+            target=args.target,
+            status=ScanStatus.PENDING,
+        )
+        await session.commit()
+        scan_id = scan_job.id
+
+    # 2. Run Pipeline Orchestrator directly
+    start_time = time.time()
+    orchestrator = PipelineOrchestrator()
+    try:
+        await orchestrator.run_scan(scan_id=scan_id, target=args.target)
+    except Exception as e:
+        print(f"PIPELINE CRASHED: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    end_time = time.time()
+    scan_duration_seconds = round(end_time - start_time, 2)
+
+    # 3. Retrieve Results exactly as the API does
+    read_service = ScanReadService()
+    results = await read_service.get_scan_results(scan_id=scan_id)
+
+    # 4. Format JSON Output
+    formatted_assets = []
+    for asset in results.get("assets", []):
+        assessment = asset.get("assessment") or {}
+        cbom = asset.get("cbom") or {}
+        remediation = asset.get("remediation") or {}
+        
+        cbom_json = cbom.get("cbom_json", {})
+        cbom_summary = cbom_json.get("quantumRiskSummary") if cbom_json else None
+        
+        hndl_timeline = remediation.get("hndl_timeline") or {}
+        entries = hndl_timeline.get("entries", [])
+        hndl_break_year = min((e["breakYear"] for e in entries), default=None) if entries else None
+
+        tier = assessment.get("compliance_tier")
+        tier_val = tier.value if hasattr(tier, "value") else tier
+
+        formatted_assets.append({
+            "hostname": asset.get("hostname"),
+            "port": asset.get("port"),
+            "tls_version": assessment.get("tls_version"),
+            "cipher_suite": assessment.get("cipher_suite"),
+            "kex_algorithm": assessment.get("kex_algorithm"),
+            "sig_algorithm": assessment.get("auth_algorithm"),
+            "enc_algorithm": assessment.get("enc_algorithm"),
+            "V_kex": assessment.get("kex_vulnerability"),
+            "V_sig": assessment.get("sig_vulnerability"),
+            "V_sym": assessment.get("sym_vulnerability"),
+            "V_tls": assessment.get("tls_vulnerability"),
+            "risk_score": assessment.get("risk_score"),
+            "compliance_tier": tier_val,
+            "hndl_break_year": hndl_break_year,
+            "cbom_summary": cbom_summary,
+            "remediation_patch": remediation.get("patch_config")
+        })
+
+    output = {
+        "target": args.target,
+        "scan_duration_seconds": scan_duration_seconds,
+        "assets": formatted_assets
     }
-    s = colors.get(style, "")
-    c = colors.get(color, "")
-    print(f"{s}{c}{msg}\033[0m")
 
-async def save_asset_evidence(target_dir, asset_index, asset):
-    """Save all artifacts for a specific discovered asset."""
-    asset_name = f"asset_{asset_index}_{asset['port']}"
-    asset_dir = target_dir / asset_name
-    asset_dir.mkdir(parents=True, exist_ok=True)
+    json_output = json.dumps(output, indent=2)
+    
+    # Write to file
+    results_dir = SIM_DIR / "results"
+    results_dir.mkdir(exist_ok=True, parents=True)
+    latest_file = results_dir / "latest.json"
+    latest_file.write_text(json_output)
 
-    # 1. Assessment & Reason (The 'Why')
-    assessment = asset.get("assessment") or {}
-    (asset_dir / "risk_assessment.json").write_text(json.dumps(assessment, indent=2))
-
-    # 2. CBOM (The Inventory)
-    cbom = asset.get("cbom") or {}
-    if cbom:
-        (asset_dir / "cbom_cyclonedx.json").write_text(json.dumps(cbom.get("cbom_json", {}), indent=2))
-
-    # 3. The Fix (Remediation Patch & Roadmap)
-    remediation = asset.get("remediation") or {}
-    if remediation:
-        # Save raw HNDL Timeline data (The 'Reason')
-        hndl = remediation.get("hndl_timeline")
-        if hndl:
-            (asset_dir / "hndl_timeline.json").write_text(json.dumps(hndl, indent=2))
-
-        # Create the Human-Readable Report
-        roadmap = remediation.get("migration_roadmap", "No roadmap generated.")
-        patch = remediation.get("patch_config", "")
-        
-        report = f"# Aegis Remediation Report: {asset.get('hostname') or asset.get('ip_address')}\n\n"
-        report += f"**Port:** {asset['port']} | **Protocol:** {asset['protocol'].upper()}\n"
-        report += f"**Final Risk Score:** {assessment.get('risk_score', 'N/A')}\n"
-        report += f"**Compliance Tier:** {assessment.get('compliance_tier', 'UNKNOWN')}\n\n"
-        
-        if hndl:
-            urgency = hndl.get('urgency', 'UNKNOWN')
-            report += f"## HNDL Vulnerability Reason\n"
-            report += f"The asset is flagged due to high **{urgency}** urgency. "
-            for entry in hndl.get('entries', []):
-                report += f"Algorithm {entry['algorithm']} is predicted to be broken by year {entry['breakYear']}. "
-            report += "\n\n"
-
-        report += "## Technical Fix (Nginx/OpenSSL Patch)\n"
-        report += "Apply this configuration to enable Post-Quantum Cryptography:\n"
-        report += "```ini\n" + patch + "\n```\n\n"
-        report += "## Phased Migration Roadmap\n"
-        report += roadmap
-        
-        (asset_dir / "remediation_report.md").write_text(report)
-
-    # 4. Compliance Certificate
-    certificate = asset.get("certificate") or {}
-    if certificate and certificate.get("certificate_pem"):
-        (asset_dir / "compliance_certificate.pem").write_text(certificate["certificate_pem"])
-
-async def run_simulation():
-    log("🛡️  Aegis Final Production Benchmark (10 Targets)", "bold")
-    log(f"📅 Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    log(f"📁 Evidence Root: {RESULTS_DIR}")
-    print("="*85)
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        # Step 1: Health Check
-        try:
-            health = await client.get("http://localhost:8000/health")
-            if health.status_code != 200:
-                log("❌ Backend is OFFLINE. Start it with 'docker-compose up -d'", "red")
-                return
-            log("✅ Backend is ONLINE", "green")
-        except Exception:
-            log("❌ Backend connection failed.", "red")
-            return
-
-        results_summary = []
-
-        for target in TARGETS:
-            log(f"\n▶️ SCANNING: {target}", "cyan", "bold")
-            try:
-                # Trigger
-                r = await client.post(f"{BASE_URL}/scan", json={"target": target})
-                scan_id = r.json()["scan_id"]
-                
-                # Poll
-                start_time = time.time()
-                while True:
-                    s_resp = await client.get(f"{BASE_URL}/scan/{scan_id}")
-                    s_data = s_resp.json()
-                    status = s_data["status"]
-                    stage = s_data.get("stage", "starting")
-                    sys.stdout.write(f"\r   [{status.upper()}] {stage} ({int(time.time()-start_time)}s)")
-                    sys.stdout.flush()
-                    if status in ["completed", "failed"]: break
-                    await asyncio.sleep(2)
-                print()
-
-                if status == "failed":
-                    log(f"   ❌ Scan failed for {target}", "red")
-                    continue
-
-                # Save Results
-                res_resp = await client.get(f"{BASE_URL}/scan/{scan_id}/results")
-                data = res_resp.json()
-                
-                if data["assets"]:
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    target_dir = RESULTS_DIR / f"{target.replace('.', '_')}_{timestamp}"
-                    target_dir.mkdir(parents=True, exist_ok=True)
-                    
-                    # We only care about the primary asset for the summary table
-                    main_asset = data["assets"][0]
-                    assessment = main_asset.get("assessment") or {}
-                    score = assessment.get("risk_score", "N/A")
-                    kex = assessment.get("kex_algorithm", "UNKNOWN")
-                    tier = assessment.get("compliance_tier", "UNKNOWN")
-
-                    for i, asset in enumerate(data["assets"]):
-                        await save_asset_evidence(target_dir, i, asset)
-                    
-                    results_summary.append({
-                        "target": target,
-                        "score": score,
-                        "kex": kex,
-                        "tier": tier,
-                        "assets": len(data["assets"])
-                    })
-                    log(f"   ✅ SUCCESS. {len(data['assets'])} asset(s) analyzed.", "green")
-                else:
-                    log(f"   ⚠️ No assets discovered.", "yellow")
-            except Exception as e:
-                log(f"   ❌ Error: {e}", "red")
-
-    print("\n" + "="*100)
-    print(f"{'TARGET':<30} | {'SCORE':<8} | {'ASSETS':<8} | {'KEX':<20} | {'TIER'}")
-    print("-" * 100)
-    for res in results_summary:
-        print(f"{res['target']:<30} | {str(res['score']):<8} | {str(res['assets']):<8} | {str(res['kex']):<20} | {res['tier']}")
-    print("="*100)
-
-    log("\n🏁 Data Generation Complete. Refresh your dashboard to see the live portfolio.", "bold")
+    # Print to terminal
+    print(json_output)
 
 if __name__ == "__main__":
-    asyncio.run(run_simulation())
+    asyncio.run(main())

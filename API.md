@@ -568,39 +568,39 @@ This endpoint currently powers:
 
 ### Start the backend stack
 
-```powershell
+```bash
 docker compose up -d --build
 ```
 
 ### Apply migrations
 
-```powershell
+```bash
 docker compose exec backend alembic upgrade head
 ```
 
 ### Ingest the corpus required for remediation retrieval
 
-```powershell
+```bash
 docker compose exec backend python scripts/ingest_nist_docs.py
 ```
 
 ### Validate the corpus and Qdrant collection
 
-```powershell
+```bash
 docker compose exec backend python scripts/validate_ingested_corpus.py
 ```
 
 ### Health check
 
-```powershell
-curl.exe http://localhost:8000/health
+```bash
+curl http://localhost:8000/health
 ```
 
 ### Example create-scan request
 
-```powershell
-curl.exe -X POST http://localhost:8000/api/v1/scan ^
-  -H "Content-Type: application/json" ^
+```bash
+curl -X POST http://localhost:8000/api/v1/scan \
+  -H "Content-Type: application/json" \
   -d '{"target":"testssl.sh"}'
 ```
 

@@ -7,12 +7,14 @@ on:
       - 'backend/**'
       - 'tests/**'
       - 'scripts/**'
+      - 'simulation/**'
   pull_request:
     branches: [ "main" ]
     paths:
       - 'backend/**'
       - 'tests/**'
       - 'scripts/**'
+      - 'simulation/**'
 
 jobs:
   lint:

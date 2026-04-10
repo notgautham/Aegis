@@ -34,3 +34,13 @@ jobs:
           tags: aegis-backend:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Test frontend image build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: false
+          tags: aegis-frontend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
