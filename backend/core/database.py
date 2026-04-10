@@ -9,6 +9,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from backend.core.config import get_settings
+from backend.core.base import Base  # noqa: F401
 
 settings = get_settings()
 

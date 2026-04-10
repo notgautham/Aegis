@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from typing import Any, Callable, Sequence
 
 from qdrant_client import QdrantClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.analysis import (
@@ -334,6 +334,9 @@ class PipelineOrchestrator:
                         asset.hostname or asset.ip_address,
                         asset.port,
                     )
+            
+            # Update Graph DB
+            await self._update_network_graph(target, persisted_assets)
 
             terminal_status = ScanStatus.COMPLETED
             terminal_timestamp = datetime.now(UTC)
@@ -394,6 +397,40 @@ class PipelineOrchestrator:
                         "Failed to persist runtime events for scan %s.",
                         scan_id,
                     )
+
+    async def _update_network_graph(self, target: str, assets: Sequence[DiscoveredAsset]) -> None:
+        try:
+            async with self.session_factory() as session:
+                await session.execute(text("LOAD 'age'"))
+                await session.execute(text("SET search_path = ag_catalog, \"$user\", public"))
+                
+                query1 = f"SELECT * FROM cypher('aegis_network_graph', $$ MERGE (d:Domain {{name: '{target}'}}) $$) as (v agtype);"
+                await session.execute(text(query1))
+                
+                for asset in assets:
+                    if not asset.ip_address:
+                        continue
+                    ip = asset.ip_address
+                    port = asset.port
+                    service = asset.service_type.value if asset.service_type else 'unknown'
+                    hostname = asset.hostname or target
+                    
+                    query2 = f"""
+                        SELECT * FROM cypher('aegis_network_graph', $$
+                            MATCH (d:Domain {{name: '{target}'}})
+                            MERGE (h:Domain {{name: '{hostname}'}})
+                            MERGE (i:IP {{address: '{ip}'}})
+                            MERGE (p:Port {{number: '{port}', service: '{service}'}})
+                            MERGE (d)-[:SUBDOMAIN]->(h)
+                            MERGE (h)-[:RESOLVES_TO]->(i)
+                            MERGE (i)-[:EXPOSES]->(p)
+                        $$) as (v agtype);
+                    """
+                    await session.execute(text(query2))
+                
+                await session.commit()
+        except Exception:
+            logger.exception("Failed to update network graph for %s.", target)
 
     def _set_runtime_stage(
         self,

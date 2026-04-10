@@ -111,7 +111,7 @@ async def unexpected_exception_handler(request: Request, exc: Exception) -> JSON
 # ── CORS Middleware ─────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Tighten in production
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8080"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -126,3 +126,21 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 async def health_check() -> dict[str, str]:
     """Basic health check endpoint."""
     return {"status": "ok"}
+
+# ── Serve Frontend SPA ────────────────────────────────────────
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
+if os.path.isdir(frontend_dist):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+    
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        # Serve exact file if it exists (e.g. favicon.ico, logo.jpeg)
+        file_path = os.path.join(frontend_dist, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        # Otherwise, serve index.html for SPA routing
+        return FileResponse(os.path.join(frontend_dist, "index.html"))

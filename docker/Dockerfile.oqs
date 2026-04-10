@@ -1,5 +1,13 @@
+# ── Stage 1: Build Frontend ─────────────────────────────────────────
+FROM node:20-alpine AS frontend-builder
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ .
+RUN npm run build
+
 # ─────────────────────────────────────────────────────────
-# Aegis – PQC-Enabled Infrastructure (Alpine Native Build)
+# Stage 2: Aegis – PQC-Enabled Infrastructure (Alpine Native Build)
 # ─────────────────────────────────────────────────────────
 
 FROM python:3.11-alpine
@@ -94,6 +102,8 @@ RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir liboqs-python
 
 COPY . .
+# Copy frontend dist from stage 1
+COPY --from=frontend-builder /frontend/dist /app/frontend/dist
 
 # Set OQS configuration at runtime
 ENV LD_LIBRARY_PATH=/usr/local/lib

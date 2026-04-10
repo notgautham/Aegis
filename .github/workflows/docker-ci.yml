@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - 'docker/**'
+      - 'frontend/**'
       - 'docker-compose.yml'
       - 'requirements.txt'
       - '.github/workflows/docker-ci.yml'
@@ -12,6 +13,7 @@ on:
     branches: [ "main" ]
     paths:
       - 'docker/**'
+      - 'frontend/**'
       - 'docker-compose.yml'
       - 'requirements.txt'
 
@@ -25,22 +27,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Test backend image build
+      - name: Test Aegis image build
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./docker/Dockerfile.oqs
           push: false
-          tags: aegis-backend:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Test frontend image build
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: false
-          tags: aegis-frontend:test
+          tags: aegis:test
           cache-from: type=gha
           cache-to: type=gha,mode=max

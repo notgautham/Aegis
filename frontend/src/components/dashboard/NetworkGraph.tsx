@@ -1,31 +1,4 @@
-import { useState } from 'react';
-
-const nodes = [
-  { id: 'pnb.co.in', x: 300, y: 180, r: 22, status: 'standard', label: 'pnb.co.in' },
-  { id: 'vpn', x: 80, y: 80, r: 14, status: 'critical', label: 'vpn' },
-  { id: 'reporting', x: 140, y: 50, r: 12, status: 'critical', label: 'reporting' },
-  { id: 'legacy', x: 100, y: 150, r: 12, status: 'critical', label: 'legacy' },
-  { id: 'staging', x: 60, y: 220, r: 10, status: 'unknown', label: 'staging' },
-  { id: 'swift', x: 200, y: 100, r: 13, status: 'standard', label: 'swift' },
-  { id: 'imps', x: 250, y: 60, r: 12, status: 'standard', label: 'imps' },
-  { id: 'neft', x: 180, y: 250, r: 12, status: 'standard', label: 'neft' },
-  { id: 'netbanking', x: 380, y: 80, r: 14, status: 'standard', label: 'netbanking' },
-  { id: 'trade', x: 420, y: 150, r: 12, status: 'standard', label: 'trade' },
-  { id: 'fx', x: 450, y: 250, r: 11, status: 'standard', label: 'fx' },
-  { id: 'mail', x: 350, y: 290, r: 11, status: 'standard', label: 'mail' },
-  { id: 'auth', x: 500, y: 120, r: 15, status: 'safe', label: 'auth' },
-  { id: 'pqc-api', x: 520, y: 200, r: 16, status: 'elite-pqc', label: 'pqc-api' },
-  { id: 'mobileapi', x: 240, y: 300, r: 11, status: 'standard', label: 'mobileapi' },
-];
-
-const edges = [
-  ['pnb.co.in', 'vpn'], ['pnb.co.in', 'reporting'], ['pnb.co.in', 'legacy'],
-  ['pnb.co.in', 'staging'], ['pnb.co.in', 'swift'], ['pnb.co.in', 'imps'],
-  ['pnb.co.in', 'neft'], ['pnb.co.in', 'netbanking'], ['pnb.co.in', 'trade'],
-  ['pnb.co.in', 'fx'], ['pnb.co.in', 'mail'], ['pnb.co.in', 'auth'],
-  ['pnb.co.in', 'pqc-api'], ['pnb.co.in', 'mobileapi'],
-  ['swift', 'imps'], ['neft', 'mobileapi'], ['auth', 'pqc-api'],
-];
+import { useState, useEffect } from 'react';
 
 function getColor(status: string) {
   switch (status) {
@@ -40,7 +13,20 @@ function getColor(status: string) {
 
 const NetworkGraph = () => {
   const [filter, setFilter] = useState('All');
+  const [nodes, setNodes] = useState<any[]>([]);
+  const [edges, setEdges] = useState<any[]>([]);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const filters = ['All', 'Elite-PQC', 'Standard', 'Vulnerable'];
+
+  useEffect(() => {
+    fetch('http://localhost:8000/api/v1/mission-control/graph')
+      .then(res => res.json())
+      .then(data => {
+        setNodes(data.nodes || []);
+        setEdges(data.edges || []);
+      })
+      .catch(console.error);
+  }, []);
 
   const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
 
@@ -59,8 +45,8 @@ const NetworkGraph = () => {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-body font-bold text-sm text-foreground">Asset Discovery Network Graph</h3>
-          <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-accent-amber/10 text-accent-amber border border-accent-amber/20 mt-1 inline-block">
-            <span className="animate-pulse-dot">●</span> SIMULATED DATA
+          <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-status-safe/10 text-status-safe border border-status-safe/20 mt-1 inline-block">
+            <span className="animate-pulse-dot">●</span> LIVE DATA
           </span>
         </div>
         <div className="flex gap-1">
@@ -78,43 +64,82 @@ const NetworkGraph = () => {
         </div>
       </div>
 
-      <svg viewBox="0 0 600 360" className="w-full h-auto">
-        {/* Edges */}
-        {edges.map(([from, to]) => {
-          const a = nodeMap[from];
-          const b = nodeMap[to];
-          if (!a || !b || !filteredIds.has(from) || !filteredIds.has(to)) return null;
-          return (
-            <line
-              key={`${from}-${to}`}
-              x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-              stroke="hsl(var(--border-default))"
-              strokeWidth="1"
-            />
-          );
-        })}
+      <div className="relative group">
+        <svg viewBox="0 0 600 360" className="w-full h-auto cursor-crosshair">
+          {/* Edges */}
+          {edges.map(([from, to], idx) => {
+            const a = nodeMap[from];
+            const b = nodeMap[to];
+            if (!a || !b || !filteredIds.has(from) || !filteredIds.has(to)) return null;
+            const isHovered = hoveredNode === from || hoveredNode === to;
+            return (
+              <line
+                key={`${from}-${to}-${idx}`}
+                x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                stroke={isHovered ? 'hsl(var(--brand-primary))' : 'hsl(var(--border-default))'}
+                strokeWidth={isHovered ? "2" : "1"}
+                strokeOpacity={isHovered ? "0.8" : "0.4"}
+                className="transition-all duration-300"
+              />
+            );
+          })}
 
-        {/* Nodes */}
-        {filteredNodes.map(n => (
-          <g key={n.id}>
-            <circle
-              cx={n.x} cy={n.y} r={n.r}
-              fill={getColor(n.status)}
-              opacity={0.85}
-              className="transition-all duration-200 hover:opacity-100"
-            />
-            <text
-              x={n.x} y={n.y + n.r + 12}
-              textAnchor="middle"
-              className="font-mono"
-              fontSize="8"
-              fill="hsl(var(--text-secondary))"
+          {/* Nodes */}
+          {filteredNodes.map(n => (
+            <g 
+              key={n.id} 
+              onMouseEnter={() => setHoveredNode(n.id)}
+              onMouseLeave={() => setHoveredNode(null)}
+              className="cursor-pointer"
             >
-              {n.label}
-            </text>
-          </g>
+              <circle
+                cx={n.x} cy={n.y} r={n.r}
+                fill={getColor(n.status)}
+                opacity={hoveredNode && hoveredNode !== n.id ? 0.3 : 0.85}
+                className="transition-all duration-300 hover:r-[24]"
+                stroke={hoveredNode === n.id ? "white" : "none"}
+                strokeWidth="2"
+              />
+              <text
+                x={n.x} y={n.y + n.r + 12}
+                textAnchor="middle"
+                className="font-mono select-none pointer-events-none"
+                fontSize="8"
+                fill={hoveredNode === n.id ? "hsl(var(--foreground))" : "hsl(var(--text-secondary))"}
+                fontWeight={hoveredNode === n.id ? "bold" : "normal"}
+              >
+                {n.label}
+              </text>
+            </g>
+          ))}
+        </svg>
+        
+        {/* Tooltip */}
+        {hoveredNode && nodeMap[hoveredNode] && (
+          <div 
+            className="absolute top-2 right-2 bg-slate-900/90 text-white p-3 rounded-lg border border-slate-700 shadow-2xl backdrop-blur-sm pointer-events-none z-50 animate-in fade-in zoom-in duration-200"
+            style={{ width: '180px' }}
+          >
+            <div className="text-[10px] text-brand-primary font-bold uppercase mb-1">Asset Details</div>
+            <div className="text-xs font-bold mb-1 truncate">{nodeMap[hoveredNode].id}</div>
+            <div className="flex items-center gap-2 mt-2">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getColor(nodeMap[hoveredNode].status) }}></div>
+              <div className="text-[10px] font-mono uppercase tracking-wider">{nodeMap[hoveredNode].status}</div>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      <div className="mt-4 flex gap-4 justify-center border-t border-[hsl(var(--border-default))] pt-4">
+        {['safe', 'standard', 'critical'].map((s) => (
+          <div key={s} className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getColor(s) }}></div>
+            <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-tighter">
+              {s === 'safe' ? 'Quantum Safe' : s === 'standard' ? 'Transitioning' : 'Vulnerable'}
+            </span>
+          </div>
         ))}
-      </svg>
+      </div>
     </div>
   );
 };
