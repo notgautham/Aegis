@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty,
@@ -9,8 +10,11 @@ import {
   Wrench, BarChart3, Terminal, Settings, Globe, Key, FileText,
   Cpu, Lock, Sparkles, Map, Calendar, PenTool, Bell, Plug, Clock, HelpCircle,
 } from 'lucide-react';
-import { assets, scanHistory, getStatusColor, getStatusLabel, getQScoreColor } from '@/data/demoData';
-import { Badge } from '@/components/ui/badge';
+import { scanHistory as demoScanHistory, getStatusColor, getStatusLabel, getQScoreColor } from '@/data/demoData';
+import type { Asset, ScanHistoryEntry } from '@/data/demoData';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
+import { api } from '@/lib/api';
+import { adaptScanHistory } from '@/lib/adapters';
 
 interface SearchRoute {
   label: string;
@@ -48,19 +52,26 @@ const searchRoutes: SearchRoute[] = [
 
 // Query syntax patterns
 const queryPatterns = [
-  { prefix: 'cipher:', filter: (val: string) => (a: typeof assets[0]) => a.cipher.toLowerCase().includes(val.toLowerCase()) },
-  { prefix: 'tls:', filter: (val: string) => (a: typeof assets[0]) => a.tlsVersionsSupported.some(t => t.includes(val.replace('.', '_'))) || a.tls.includes(val) },
-  { prefix: 'status:', filter: (val: string) => (a: typeof assets[0]) => a.status.includes(val.toLowerCase()) },
-  { prefix: 'type:', filter: (val: string) => (a: typeof assets[0]) => a.type.includes(val.toLowerCase()) },
-  { prefix: 'score:<', filter: (val: string) => (a: typeof assets[0]) => a.qScore < parseInt(val) },
-  { prefix: 'score:>', filter: (val: string) => (a: typeof assets[0]) => a.qScore > parseInt(val) },
-  { prefix: 'expiry:<', filter: (val: string) => (a: typeof assets[0]) => { const days = parseInt(val); return a.certInfo.days_remaining > 0 && a.certInfo.days_remaining < days; }},
+  { prefix: 'cipher:', filter: (val: string) => (a: Asset) => a.cipher.toLowerCase().includes(val.toLowerCase()) },
+  { prefix: 'tls:', filter: (val: string) => (a: Asset) => a.tlsVersionsSupported.some(t => t.includes(val.replace('.', '_'))) || a.tls.includes(val) },
+  { prefix: 'status:', filter: (val: string) => (a: Asset) => a.status.includes(val.toLowerCase()) },
+  { prefix: 'type:', filter: (val: string) => (a: Asset) => a.type.includes(val.toLowerCase()) },
+  { prefix: 'score:<', filter: (val: string) => (a: Asset) => a.qScore < parseInt(val) },
+  { prefix: 'score:>', filter: (val: string) => (a: Asset) => a.qScore > parseInt(val) },
+  { prefix: 'expiry:<', filter: (val: string) => (a: Asset) => { const days = parseInt(val); return a.certInfo.days_remaining > 0 && a.certInfo.days_remaining < days; }},
 ];
 
 const CommandPalette = () => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
+  const { selectedAssets, setSelectedScanId } = useSelectedScan();
+
+  const historyQuery = useQuery({
+    queryKey: ['command-palette-scan-history'],
+    queryFn: async (): Promise<ScanHistoryEntry[]> => adaptScanHistory(await api.getScanHistory()),
+    staleTime: 30000,
+  });
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -78,6 +89,10 @@ const CommandPalette = () => {
     setOpen(false);
   };
 
+  const resolvedScanHistory = historyQuery.data && historyQuery.data.length > 0
+    ? historyQuery.data
+    : demoScanHistory;
+
   // Check if search is a query
   const queryResult = useMemo(() => {
     if (!search) return null;
@@ -85,12 +100,12 @@ const CommandPalette = () => {
       if (search.startsWith(pattern.prefix)) {
         const val = search.slice(pattern.prefix.length).replace('d', '');
         if (!val) return null;
-        const filtered = assets.filter(pattern.filter(val));
+        const filtered = selectedAssets.filter(pattern.filter(val));
         return { query: search, results: filtered };
       }
     }
     return null;
-  }, [search]);
+  }, [search, selectedAssets]);
 
   const groups = Array.from(new Set(searchRoutes.map(r => r.group)));
 
@@ -110,10 +125,10 @@ const CommandPalette = () => {
                     value={a.domain}
                     onSelect={() => handleSelect(`/dashboard/assets/${a.domain.replace(/\./g, '-')}`)}
                     className="cursor-pointer"
-                  >
-                    <Globe className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="font-mono text-xs flex-1">{a.domain}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground mr-2">{a.ip}</span>
+                    >
+                      <Globe className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="font-mono text-xs flex-1">{a.domain}</span>
+                      <span className="font-mono text-[10px] text-muted-foreground mr-2">{a.ip}</span>
                     <span className="font-mono text-[10px] font-bold mr-2" style={{ color: getQScoreColor(a.qScore) }}>{a.qScore}</span>
                     <span className="text-[9px] font-mono px-1 rounded" style={{ color: getStatusColor(a.status), backgroundColor: `${getStatusColor(a.status)}15` }}>{getStatusLabel(a.status)}</span>
                   </CommandItem>
@@ -144,11 +159,14 @@ const CommandPalette = () => {
               </CommandGroup>
             ))}
             <CommandGroup heading="Scans">
-              {scanHistory.map(s => (
+              {resolvedScanHistory.map(s => (
                 <CommandItem
                   key={s.id}
                   value={`${s.id} ${s.target} scan report`}
-                  onSelect={() => handleSelect(`/dashboard/scans/${s.id}`)}
+                  onSelect={() => {
+                    setSelectedScanId(s.id);
+                    handleSelect(`/dashboard/scans/${s.id}`);
+                  }}
                   className="cursor-pointer"
                 >
                   <Clock className="mr-2 h-4 w-4 text-muted-foreground" />

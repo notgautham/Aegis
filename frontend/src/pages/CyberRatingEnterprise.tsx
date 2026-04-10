@@ -17,14 +17,6 @@ const ratingTabs = [
   { id: 'per-asset', label: 'Per-Asset', icon: FileText, route: '/dashboard/rating/per-asset' },
 ];
 
-const demoScoreHistory = [
-  { label: 'W1', score: 28 },
-  { label: 'W2', score: 29 },
-  { label: 'W3', score: 31 },
-  { label: 'W4', score: 34 },
-  { label: 'W5', score: 37 },
-];
-
 const tierThresholds = [
   { status: 'Critical', range: '0-39', desc: 'Immediate remediation required', color: 'hsl(var(--status-critical))' },
   { status: 'Legacy', range: '40-59', desc: 'Basic modernization required', color: 'hsl(var(--accent-amber))' },
@@ -91,9 +83,9 @@ function getNextTier(score: number): { label: string; threshold: number } | null
 
 const CyberRatingEnterprise = () => {
   const [tierSheetOpen, setTierSheetOpen] = useState(false);
-  const { selectedAssets, selectedScanId, selectedScanResults } = useSelectedScan();
+  const { selectedAssets, selectedScanId, selectedScan, selectedScanResults } = useSelectedScan();
 
-  const currentTarget = selectedScanResults?.target ?? null;
+  const currentTarget = selectedScanResults?.target ?? selectedScan?.target ?? null;
 
   const historyQuery = useQuery({
     queryKey: ['enterprise-rating-history', selectedScanId, currentTarget],
@@ -145,12 +137,8 @@ const CyberRatingEnterprise = () => {
       return historyQuery.data.map((item) => ({ label: item.label, score: item.score }));
     }
 
-    if (!isUUID(selectedScanId)) {
-      return demoScoreHistory;
-    }
-
     return [{ label: 'Now', score: enterpriseScore }];
-  }, [enterpriseScore, historyQuery.data, selectedScanId]);
+  }, [enterpriseScore, historyQuery.data]);
 
   const previousComparableScore = scoreHistory.length > 1 ? scoreHistory[scoreHistory.length - 2]?.score ?? enterpriseScore : enterpriseScore;
   const scoreDelta = enterpriseScore - previousComparableScore;

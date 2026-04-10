@@ -67,7 +67,8 @@ Update this file whenever a page is wired, a backend field is exposed, or a bloc
   - Can truthfully export current-scan JSON and CSV from available persisted/frontend-held data.
   - Unsupported formats are now explicitly marked as requiring backend export support instead of pretending to work.
 - `frontend/src/pages/CyberRatingEnterprise.tsx`
-  - Uses selected scan assets, but see outstanding scale/text issues below.
+  - Uses selected scan assets.
+  - Removed the leftover fake score-history fallback so the page only shows real same-target history or an honest baseline state.
 - `frontend/src/pages/CyberRatingTiers.tsx`
   - Uses selected scan assets.
 - `frontend/src/pages/PQCCompliance.tsx`
@@ -122,17 +123,15 @@ Update this file whenever a page is wired, a backend field is exposed, or a bloc
 - `frontend/src/pages/ReportingOnDemand.tsx`
   - Uses selected scan context to show real section availability and report scope.
   - Leaves final generation blank until backend render/download support exists.
+- `frontend/src/components/dashboard/CommandPalette.tsx`
+  - Uses live selected assets for query search and live scan history with demo fallback for scan navigation.
+  - Selecting a scan now updates the shared selected-scan context before navigating.
 
 ### Still Demo Or Mixed
-
-- `frontend/src/components/dashboard/CommandPalette.tsx`
-  - Still searches demo `assets` and demo `scanHistory`.
-  - Needs live selected assets plus live scan history.
 
 ## Frontend Follow-Up Fixes
 
 - `frontend/src/pages/AssetDiscovery.tsx`
-  - Clean up stale comments that still mention old demo-only behavior.
   - If backend starts exposing richer discovery data, replace placeholder values instead of extending frontend inference logic.
 - `frontend/src/pages/DashboardHome.tsx`
   - The intelligence digest is intentionally demo.
@@ -192,6 +191,18 @@ These exist in schema and models, but are not fully exposed through the frontend
   - CDXA attestation package
 - Signed CBOM attestation metadata is not exposed to the frontend today.
   - If the product should show or export real CBOM signatures/hashes, the backend needs to persist and expose that evidence instead of the frontend inferring it.
+- Graph visualization/storage is not implemented yet.
+  - The Discovery/network graph areas currently do not have a real backend graph model behind them.
+  - Evaluate a local graph-capable store such as Neo4j (or a simpler relational/materialized graph approach if sufficient) for persisting relationships between scans, domains, IPs, certificates, ports, software, and ownership.
+  - Add backend ingestion/read paths for graph relationships and expose graph-ready API payloads for the frontend.
+  - Wire the relevant frontend pages/components to render real graph topology from persisted relationship data instead of placeholders.
+- A real notification mechanism is not implemented yet.
+  - Current notification behavior is mostly local/frontend-only and not backed by persisted notification state or delivery channels.
+  - Add backend-owned notification entities/events plus read/update APIs for in-app notifications.
+  - Decide later whether email, Slack, webhook, or other delivery channels should be supported, and wire those through the backend rather than frontend-only logic.
+- The top-right export action is not functional yet.
+  - Define what it should export based on the active page/scan context.
+  - Add backend export endpoints/artifact generation where needed and connect the shared top-right export button to those real outputs.
 
 ## Known Real-Data Sparsity
 
@@ -208,8 +219,8 @@ These are not necessarily bugs, but they make some pages look empty for single-h
 
 ## Suggested Next Work Order
 
-1. Clean up `CyberRatingEnterprise.tsx` remaining 0-1000 assumptions.
-2. Wire `CommandPalette.tsx` to live assets and scan history.
+1. Revisit real auth and backend access control before productionizing broader multi-user usage.
+2. Add richer backend comparison/history endpoints where current pages still fan out across many scan-result calls client-side.
 
 ## Agent Acceptance Checklist
 

@@ -28,10 +28,10 @@ async def get_mission_control_overview(
 @router.get("/scan/history", response_model=ScanHistoryResponse)
 async def get_scan_history(
     request: Request,
-    limit: int = Query(default=10, ge=1, le=25),
+    limit: int | None = Query(default=None, ge=1, le=5000),
     target: str | None = Query(default=None, min_length=1),
 ) -> ScanHistoryResponse:
-    """Return a lightweight recent scan timeline, optionally filtered by exact target."""
+    """Return a lightweight scan timeline, optionally filtered by exact target."""
     normalized_target = target.strip() if target is not None else None
     payload = await request.app.state.scan_read_service.get_scan_history(
         limit=limit,

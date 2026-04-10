@@ -29,13 +29,15 @@ class ScanJobRepository(BaseRepository[ScanJob]):
     async def get_recent(
         self,
         *,
-        limit: int = 10,
+        limit: int | None = None,
         target: str | None = None,
     ) -> Sequence[ScanJob]:
         """Retrieve the most recent scan jobs, optionally filtered by exact target."""
         stmt = select(ScanJob)
         if target is not None:
             stmt = stmt.where(ScanJob.target == target)
-        stmt = stmt.order_by(ScanJob.created_at.desc(), ScanJob.id.desc()).limit(limit)
+        stmt = stmt.order_by(ScanJob.created_at.desc(), ScanJob.id.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self.session.execute(stmt)
         return result.scalars().all()

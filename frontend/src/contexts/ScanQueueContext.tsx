@@ -77,11 +77,9 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const updateQueue = useCallback((updater: QueueItem[] | ((prev: QueueItem[]) => QueueItem[])) => {
-    setQueue((prev) => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      queueRef.current = next;
-      return next;
-    });
+    const next = typeof updater === 'function' ? updater(queueRef.current) : updater;
+    queueRef.current = next;
+    setQueue(next);
   }, []);
 
   const finishQueue = useCallback((emitCompleteToast: boolean) => {

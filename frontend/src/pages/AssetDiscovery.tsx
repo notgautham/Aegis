@@ -58,6 +58,9 @@ interface ObservedDNSRecord {
 
 interface DiscoveryQueryResult {
   history: ScanHistoryEntry[];
+  completedHistory: ScanHistoryEntry[];
+  totalCompletedScanCount: number;
+  loadedCompletedScanCount: number;
   observedAssets: ObservedAsset[];
   observedDnsRecords: ObservedDNSRecord[];
 }
@@ -329,9 +332,11 @@ const AssetDiscovery = () => {
     queryFn: async () => {
       const historyResponse = await api.getScanHistory();
       const adaptedHistory = adaptScanHistory(historyResponse);
-      const completedItems = historyResponse.items.filter((item) => item.status === 'completed');
+      const completedItems = historyResponse.items.filter(
+        (item) => item.status.toLowerCase() === 'completed',
+      );
 
-      const results = await Promise.all(completedItems.map(async (item) => {
+      const settledResults = await Promise.allSettled(completedItems.map(async (item) => {
         const result = await api.getScanResults(item.scan_id);
         const observedAt = result.completed_at ?? result.created_at;
         return {
@@ -344,16 +349,23 @@ const AssetDiscovery = () => {
         };
       }));
 
+      const successfulResults = settledResults.flatMap((result) => (
+        result.status === 'fulfilled' ? [result.value] : []
+      ));
+
       return {
         history: adaptedHistory,
-        observedAssets: results.flatMap((result) => toObservedAssets(
+        completedHistory: adaptScanHistory({ items: completedItems }),
+        totalCompletedScanCount: completedItems.length,
+        loadedCompletedScanCount: successfulResults.length,
+        observedAssets: successfulResults.flatMap((result) => toObservedAssets(
           result.assets,
           result.scanId,
           result.target,
           result.rawAssets,
           result.observedAt,
         )),
-        observedDnsRecords: results.flatMap((result) => toObservedDnsRecords(
+        observedDnsRecords: successfulResults.flatMap((result) => toObservedDnsRecords(
           result.dnsRecords,
           result.scanId,
           result.target,
@@ -387,9 +399,13 @@ const AssetDiscovery = () => {
     [selectedDnsRecords, selectedScanId, selectedHistoryEntry, d, selectedObservedAt],
   );
 
-  const liveAllTimeAvailable = (discoveryData?.observedAssets.length ?? 0) > 0;
   const allTimeObservedAssets = discoveryData?.observedAssets ?? [];
   const allTimeObservedDnsRecords = discoveryData?.observedDnsRecords ?? [];
+  const totalCompletedScanCount = discoveryData?.totalCompletedScanCount ?? 0;
+  const loadedCompletedScanCount = discoveryData?.loadedCompletedScanCount ?? 0;
+  const liveAllTimeAvailable = loadedCompletedScanCount > 0
+    || allTimeObservedAssets.length > 0
+    || allTimeObservedDnsRecords.length > 0;
   const activeObservedAssets = scopeMode === 'this-scan'
     ? currentObservedAssets
     : liveAllTimeAvailable
@@ -576,7 +592,9 @@ const AssetDiscovery = () => {
           {allTimeLoading
             ? 'Loading aggregated discovery history across all scans...'
             : liveAllTimeAvailable
-              ? `Showing aggregated discovery across ${discoveryData?.history.length ?? 0} completed scans.`
+              ? loadedCompletedScanCount < totalCompletedScanCount
+                ? `Showing aggregated discovery across ${loadedCompletedScanCount} of ${totalCompletedScanCount} completed scans.`
+                : `Showing aggregated discovery across ${loadedCompletedScanCount} completed scans.`
               : 'Live discovery history is unavailable, so this view is using the local demo fallback.'}
         </p>
       )}
@@ -606,7 +624,7 @@ const AssetDiscovery = () => {
       </div>
 
       {/* Tab content */}
-      {/* Domains tab — uses domainRecords (always all-time, own dataset) */}
+      {/* Domains tab */}
       {activeTab === 'domains' && (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5">
           <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
@@ -712,7 +730,7 @@ const AssetDiscovery = () => {
         </Card>
       )}
 
-      {/* IP/Subnets tab — uses ipRecords (always all-time, own dataset) */}
+      {/* IP/Subnets tab */}
       {activeTab === 'ip' && (
         <div className="space-y-4">
           <div className="flex gap-3">
@@ -756,7 +774,7 @@ const AssetDiscovery = () => {
         </div>
       )}
 
-      {/* Software tab — uses softwareRecords (always all-time, own dataset) */}
+      {/* Software tab */}
       {activeTab === 'software' && (
         <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
           <CardContent className="p-0">

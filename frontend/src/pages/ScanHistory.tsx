@@ -87,7 +87,7 @@ const ScanHistory = () => {
       {/* Scan Table */}
       <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className="max-h-[34rem] overflow-y-auto overflow-x-auto">
             <table className="w-full text-xs font-body">
               <thead><tr className="border-b border-border bg-[hsl(var(--bg-sunken))]">
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Scan ID</th>

@@ -1509,7 +1509,7 @@ class ScanReadService:
     async def get_scan_history(
         self,
         *,
-        limit: int = 10,
+        limit: int | None = None,
         target: str | None = None,
     ) -> dict[str, Any]:
         async with self.session_factory() as session:
