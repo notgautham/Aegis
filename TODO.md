@@ -153,6 +153,16 @@ Update this file whenever a page is wired, a backend field is exposed, or a bloc
 
 ## Backend / API Gaps Blocking Better Frontend Wiring
 
+### Core Platform Gaps
+
+- Real authentication and authorization are not implemented yet.
+  - The current login flow is frontend-local only.
+  - Backend API routes are not protected by JWT, session, API key, or user/tenant scoping.
+  - Add backend auth enforcement, token/session handling, and scan ownership rules before treating the system as multi-user or production-ready.
+- Alembic migration history is not fully in sync with the current ORM/runtime schema.
+  - The running code expects later tables and columns such as `scan_events`, `dns_records`, `asset_fingerprints`, `remediation_actions`, and newer scan/discovery columns.
+  - Add the missing migration(s) so a completely fresh database can be created from repo state without manual intervention.
+
 ### Discovery Page Data Missing From API
 
 These fields already matter to the UI but are not currently available through the scan results payload:
@@ -228,8 +238,9 @@ These are not necessarily bugs, but they make some pages look empty for single-h
 
 ## Suggested Next Work Order
 
-1. Revisit real auth and backend access control before productionizing broader multi-user usage.
-2. Add richer backend comparison/history endpoints where current pages still fan out across many scan-result calls client-side.
+1. Implement real backend auth and access control before productionizing broader multi-user usage.
+2. Bring Alembic migration history fully in sync with the current ORM/runtime schema.
+3. Add richer backend comparison/history endpoints where current pages still fan out across many scan-result calls client-side.
 
 ## Agent Acceptance Checklist
 

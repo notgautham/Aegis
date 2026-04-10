@@ -1,114 +1,391 @@
-# 🛡️ Aegis: Project Setup Guide
+# Aegis Setup Guide
 
-Follow these steps to set up the **Aegis Post-Quantum Cryptography Platform** on your local machine.
+This guide explains how to bring up Aegis on a new machine after cloning the repo.
 
-## 📋 Prerequisites
+It covers:
 
-*   **Docker Desktop**: [Install Here](https://www.docker.com/products/docker-desktop/)
-*   **Git**: [Install Here](https://git-scm.com/downloads)
-*   **API Keys**: You will need keys for **Groq** (primary LLM) and **Jina AI** (primary Embeddings).
+- required local tools
+- environment variables
+- Docker services
+- PostgreSQL initialization
+- Qdrant corpus ingestion
+- frontend startup
+- first-scan verification
 
----
+## What Runs Where
 
-## 🔑 1. Environment Configuration
+Aegis is split into two main parts:
 
-Create a `.env` file in the root directory. Copy the template below and replace the placeholder keys with your own.
+- backend services in Docker
+  - FastAPI backend
+  - PostgreSQL 15
+  - Qdrant
+  - pgAdmin
+- frontend on the host machine
+  - Vite + React + TypeScript app served with `npm run dev`
+
+Default local ports:
+
+- frontend: `http://localhost:8080`
+- backend API: `http://localhost:8000`
+- backend Swagger/OpenAPI docs: `http://localhost:8000/docs`
+- PostgreSQL: `localhost:5432`
+- Qdrant: `localhost:6333`
+- pgAdmin: `http://localhost:5050`
+
+## Prerequisites
+
+Install these first:
+
+- Git
+- Docker Desktop
+- Node.js 20+ for the frontend
+  - local development in this repo is currently working on Node `v22.14.0`
+- npm
+
+You also need API keys for the cloud intelligence path:
+
+- Jina AI for embeddings
+- Groq for the primary LLM
+- optional fallback keys:
+  - OpenRouter
+  - Cohere
+
+## 1. Clone the Repository
+
+```powershell
+git clone <your-repo-url>
+cd Aegis
+```
+
+## 2. Create `.env`
+
+Copy [`.env.example`](./.env.example) to `.env`.
+
+```powershell
+Copy-Item .env.example .env
+```
+
+At minimum, set real values for:
+
+- `GROQ_API_KEY`
+- `JINA_API_KEY`
+
+Important environment variables:
 
 ```ini
-# ── Database & Vector DB ───────────────────────────────
 DATABASE_URL=postgresql+asyncpg://aegis:aegis@postgres:5432/aegis
 QDRANT_URL=http://qdrant:6333
 QDRANT_COLLECTION_NAME=aegis_nist_docs
 DOCS_SOURCE_DIR=docs/nist
 
-# ── Application ────────────────────────────────────────
 SECRET_KEY=change-me-in-production
 PROJECT_NAME=Aegis
 API_V1_STR=/api/v1
 SKIP_ENUMERATION=true
 
-# ── Cloud Intelligence (RAG) ──────────────────────────
 EMBEDDING_PROVIDER_MODE=cloud
 LLM_PROVIDER_MODE=cloud
+RAG_TOP_K=5
 LLM_TIMEOUT_SECONDS=20.0
 EMBEDDING_TIMEOUT_SECONDS=20.0
 
-# Groq (Primary LLM)
-GROQ_API_KEY=gsk_...
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_API_KEY=REPLACE_WITH_REAL_GROQ_API_KEY
+GROQ_MODEL=qwen/qwen3-32b
 
-# Jina AI (Primary Embeddings)
-JINA_API_KEY=jina_...
+JINA_BASE_URL=https://api.jina.ai/v1
+JINA_API_KEY=REPLACE_WITH_REAL_JINA_API_KEY
 JINA_EMBEDDING_MODEL=jina-embeddings-v3
 
-# Fallbacks
-OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_API_KEY=
 OPENROUTER_MODEL=google/gemma-3-27b-it
-COHERE_API_KEY=...
+OPENROUTER_EMBEDDING_MODEL=text-embedding-3-small
+
+COHERE_BASE_URL=https://api.cohere.com/v2
+COHERE_API_KEY=
 COHERE_EMBEDDING_MODEL=embed-english-v3.0
+
+CERT_ISSUER_COMMON_NAME=Aegis Compliance CA
+CERT_ISSUER_ORGANIZATION=Aegis
+CERT_ISSUER_ORG_UNIT=Quantum Compliance
+CERT_RUNTIME_DIR=.aegis-runtime/certs
 ```
 
----
+Notes:
 
-## 🏗️ 2. Infrastructure Deployment
+- `EMBEDDING_PROVIDER_MODE` and `LLM_PROVIDER_MODE` should remain `cloud` for the current setup.
+- Without a valid embedding key, Qdrant ingestion and remediation retrieval will not work.
+- Without a valid LLM key, remediation roadmap and patch generation will be degraded or fail.
 
-Aegis uses a custom **Alpine Linux** build with a pre-compiled **OQS-OpenSSL** binary.
+## 3. Start Docker Services
 
-1.  **Launch the services**:
-    ```bash
-    docker compose up -d --build
-    ```
-    *Note: The first build compiles libraries from source and takes 3-5 minutes.*
+From the project root:
 
-2.  **Verify the PQC Engine**:
-    ```bash
-    docker exec aegis-backend openssl-oqs list -providers
-    ```
-    Confirm that `oqsprovider` appears in the active list.
-
----
-
-## 🗄️ 3. Initialization
-
-Once the containers are running, initialize the database and the vector index.
-
-1.  **Apply Database Schema**:
-    ```bash
-    docker exec aegis-backend alembic upgrade head
-    ```
-
-2.  **Ingest NIST Standards**:
-    This step embeds the NIST standard documents into Qdrant using Jina AI.
-    ```bash
-    docker exec aegis-backend python scripts/ingest_nist_docs.py
-    ```
-
----
-
-## 🌐 4. Usage
-
-### Dashboard Access
-*   **Frontend UI:** `http://localhost:3000` (run `cd frontend && npm install && npm run dev`)
-*   **Backend API (Swagger):** `http://localhost:8000/docs`
-
-### Terminal Simulation
-Aegis includes a terminal-based benchmark tool to verify the entire pipeline and save evidence to disk:
-```bash
-# Setup venv
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-# Run simulation
-python simulation/run.py
+```powershell
+docker compose up -d --build
 ```
 
-Results will be stored in `simulation/results/`.
+This starts:
 
----
+- `aegis-backend`
+- `aegis-postgres`
+- `aegis-qdrant`
+- `aegis-pgadmin`
 
-## 🛠️ Troubleshooting
+Check status:
 
-*   **SSL Errors**: If cloud API calls fail, ensure the `backend/intelligence/cloud_utils.py` tunnel is active.
-*   **N/A Scores**: Ensure the target site is reachable. Try `github.com` as a verified target.
-*   **Docker Crash**: Ensure Docker Desktop has at least 4GB of RAM allocated.
+```powershell
+docker compose ps
+```
+
+## 4. Verify the PQC Runtime
+
+The backend image uses the OQS-patched OpenSSL build.
+
+Verify the provider is present:
+
+```powershell
+docker exec aegis-backend openssl-oqs list -providers
+```
+
+You should see `oqsprovider` in the output.
+
+## 5. Initialize PostgreSQL
+
+Apply Alembic migrations:
+
+```powershell
+docker compose exec backend alembic upgrade head
+```
+
+Check migration state if needed:
+
+```powershell
+docker compose exec backend alembic current
+```
+
+Important note:
+
+- the repo's Alembic history currently contains the initial migration, while the live application code expects additional later tables and columns documented in [DATABASE.md](./DATABASE.md)
+- if you are bringing up a completely fresh database, verify that the runtime schema matches the current ORM models
+
+## 6. Ingest the Qdrant Corpus
+
+Aegis does not ingest the remediation corpus on every scan.
+
+Instead:
+
+- source files live under [docs/nist](./docs/nist)
+- you ingest them into Qdrant once during setup
+- scans then query the stored vectors in Qdrant
+
+Run ingestion:
+
+```powershell
+docker compose exec backend python scripts/ingest_nist_docs.py
+```
+
+Validate the corpus and collection:
+
+```powershell
+docker compose exec backend python scripts/validate_ingested_corpus.py
+```
+
+What this does:
+
+- reads supported files from `docs/nist`
+- generates embeddings using the configured cloud embedding provider
+- recreates the `aegis_nist_docs` collection
+- writes all document chunks into Qdrant
+
+You should rerun ingestion when:
+
+- setting up on a new machine
+- changing the files in `docs/nist`
+- changing the embedding model
+- rebuilding the collection from scratch
+
+## 7. Verify the Backend
+
+Health check:
+
+```powershell
+curl.exe http://localhost:8000/health
+```
+
+Expected response:
+
+```json
+{"status":"ok"}
+```
+
+You can also open:
+
+- Swagger UI: `http://localhost:8000/docs`
+
+## 8. Install Frontend Dependencies
+
+In a new terminal:
+
+```powershell
+cd frontend
+npm install
+```
+
+Notes:
+
+- this project is a Vite app, not a Next.js app
+- use `npm run build` or `npm run dev`, not `next build`
+
+## 9. Start the Frontend
+
+From [frontend](./frontend):
+
+```powershell
+npm run dev
+```
+
+The frontend runs on:
+
+- `http://localhost:8080`
+
+## 10. Sign In
+
+The current frontend auth is still a prototype local gate, not real backend auth.
+
+Current demo login behavior:
+
+- email must contain `aegis` or `pnb`
+- password must be `aegis2026`
+
+Example:
+
+- email: `demo@aegis.bank`
+- password: `aegis2026`
+
+## 11. Run a First Scan
+
+You can start a scan from the UI or directly against the API.
+
+Example API call:
+
+```powershell
+curl.exe -X POST http://localhost:8000/api/v1/scan ^
+  -H "Content-Type: application/json" ^
+  -d '{"target":"testssl.sh"}'
+```
+
+Poll status:
+
+```powershell
+curl.exe http://localhost:8000/api/v1/scan/<scan-id>
+```
+
+Fetch compiled results after completion:
+
+```powershell
+curl.exe http://localhost:8000/api/v1/scan/<scan-id>/results
+```
+
+## 12. Optional Validation Queries
+
+Inspect tables in Postgres:
+
+```powershell
+docker compose exec postgres psql -U aegis -d aegis -c "\dt"
+```
+
+Inspect recent scans:
+
+```powershell
+docker compose exec postgres psql -U aegis -d aegis -c "select id, target, status, created_at, completed_at from scan_jobs order by created_at desc limit 20;"
+```
+
+Check Qdrant collection status:
+
+```powershell
+docker compose exec backend python scripts/validate_ingested_corpus.py
+```
+
+## pgAdmin
+
+Open:
+
+- `http://localhost:5050`
+
+Default login from [docker-compose.yml](./docker-compose.yml):
+
+- email: `admin@aegis.com`
+- password: `admin`
+
+## Common Operational Commands
+
+Restart backend after changing backend code or `.env`:
+
+```powershell
+docker compose restart backend
+```
+
+View recent backend logs:
+
+```powershell
+docker compose logs backend --tail=200
+```
+
+Rebuild backend image:
+
+```powershell
+docker compose up -d --build backend
+```
+
+Re-run corpus ingestion:
+
+```powershell
+docker compose exec backend python scripts/ingest_nist_docs.py
+```
+
+## Troubleshooting
+
+### `curl http://localhost:8000/health` hangs or fails
+
+Check:
+
+- `docker compose ps`
+- `docker compose logs backend --tail=200`
+- whether the backend has valid cloud-provider keys in `.env`
+
+### Remediation features are empty or failing
+
+Check:
+
+- Qdrant is running
+- corpus ingestion completed successfully
+- embedding keys are valid
+- the collection vector size matches the active embedding model
+
+### `npm ci` fails with `EPERM` on `esbuild.exe`
+
+That usually means `node_modules/@esbuild/win32-x64/esbuild.exe` is locked by:
+
+- a running Vite dev server
+- another Node process
+- VS Code or antivirus
+
+Stop frontend processes, then rerun `npm ci`.
+
+### Frontend opens but data looks stale
+
+Check:
+
+- the backend is reachable at `localhost:8000`
+- the selected scan is a real UUID-backed scan
+- the latest scan completed successfully
+
+## Related Files
+
+- [README.md](./README.md)
+- [DATABASE.md](./DATABASE.md)
+- [API.md](./API.md)
+- [docs/nist/README.md](./docs/nist/README.md)
