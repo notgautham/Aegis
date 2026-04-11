@@ -39,6 +39,13 @@ export interface AssessmentResponse {
   cipher_suite: string;
   kex_algorithm: string;
   risk_score: number; // 0–100
+  score_explanation?: {
+    kex_explanation?: string;
+    sig_explanation?: string;
+    sym_explanation?: string;
+    tls_explanation?: string;
+    overall_explanation?: string;
+  } | null;
   compliance_tier: string;
   kex_vulnerability: number;
   sig_vulnerability: number;

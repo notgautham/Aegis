@@ -26,6 +26,7 @@ from backend.analysis import (
     CertificateAnalyzer,
     HandshakeMetadataResolutionError,
     calculate_risk_score,
+    generate_score_explanation,
     parse_tls12_cipher_suite,
     resolve_tls13_handshake_metadata,
 )
@@ -151,6 +152,7 @@ class _AssessmentInputs:
     sym_vulnerability: float | None
     tls_vulnerability: float | None
     risk_score: float | None
+    score_explanation: dict[str, Any] | None
 
 
 @dataclass(slots=True)
@@ -465,9 +467,9 @@ class PipelineOrchestrator:
                             MERGE (h:Domain {{name: '{hostname}'}})
                             MERGE (i:IP {{address: '{ip}'}})
                             MERGE (p:Port {{number: '{port}', service: '{service}'}})
-                            MERGE (d)-[:SUBDOMAIN]->(h)
-                            MERGE (h)-[:RESOLVES_TO]->(i)
-                            MERGE (i)-[:EXPOSES]->(p)
+                            MERGE (d)-[\:SUBDOMAIN]->(h)
+                            MERGE (h)-[\:RESOLVES_TO]->(i)
+                            MERGE (i)-[\:EXPOSES]->(p)
                         $$) as (v agtype);
                     """
                     await session.execute(text(query2))
@@ -848,10 +850,7 @@ class PipelineOrchestrator:
 
         scan_results = await asyncio.gather(
             *(
-                self.port_scanner.scan_host(
-                    ip_address,
-                    full_tcp_scan=full_port_scan_enabled,
-                )
+                self._scan_host_with_profile(ip_address, full_port_scan_enabled)
                 for ip_address in ip_addresses
             ),
             return_exceptions=True,
@@ -874,6 +873,20 @@ class PipelineOrchestrator:
             stage="scanning_ports",
         )
         return findings
+
+    async def _scan_host_with_profile(
+        self,
+        ip_address: str,
+        full_port_scan_enabled: bool,
+    ) -> list[PortFinding]:
+        """Call scanner with backward compatibility for older stub signatures."""
+        try:
+            return await self.port_scanner.scan_host(
+                ip_address,
+                full_tcp_scan=full_port_scan_enabled,
+            )
+        except TypeError:
+            return await self.port_scanner.scan_host(ip_address)
 
     async def _probe_tls_targets(
         self,
@@ -1270,14 +1283,14 @@ class PipelineOrchestrator:
         ):
             return None
 
-        for field in vcard_array[1]:
+        for vcard_field in vcard_array[1]:
             if (
-                not isinstance(field, list)
-                or len(field) < 4
-                or str(field[0]).strip().lower() != "fn"
+                not isinstance(vcard_field, list)
+                or len(vcard_field) < 4
+                or str(vcard_field[0]).strip().lower() != "fn"
             ):
                 continue
-            value = field[3]
+            value = vcard_field[3]
             if isinstance(value, str) and value.strip():
                 return value.strip()
 
@@ -1447,6 +1460,7 @@ class PipelineOrchestrator:
                 sym_vulnerability=assessment_inputs.sym_vulnerability,
                 tls_vulnerability=assessment_inputs.tls_vulnerability,
                 risk_score=assessment_inputs.risk_score,
+                score_explanation=assessment_inputs.score_explanation,
             )
             try:
                 async with session.begin_nested():
@@ -1770,6 +1784,17 @@ class PipelineOrchestrator:
                 sym_vulnerability=1.0,
                 tls_vulnerability=1.0,
             )
+            score_explanation = generate_score_explanation(
+                kex_vulnerability=1.0,
+                sig_vulnerability=1.0,
+                sym_vulnerability=1.0,
+                tls_vulnerability=1.0,
+                kex_algorithm="UNKNOWN",
+                auth_algorithm="UNKNOWN",
+                enc_algorithm="UNKNOWN",
+                tls_version="Handshake Failed",
+                risk_score=100.0,
+            )
             return _AssessmentInputs(
                 tls_version="Handshake Failed",
                 cipher_suite="BROKEN",
@@ -1782,6 +1807,7 @@ class PipelineOrchestrator:
                 sym_vulnerability=1.0,
                 tls_vulnerability=1.0,
                 risk_score=100.0,
+                score_explanation=score_explanation,
             )
 
         tls_version = tls_result.tls_version
@@ -1810,6 +1836,17 @@ class PipelineOrchestrator:
             sym_vulnerability=parsed.sym_vulnerability,
             tls_version=tls_result.tls_version,
         )
+        score_explanation = generate_score_explanation(
+            kex_vulnerability=risk.kex_vulnerability,
+            sig_vulnerability=parsed.sig_vulnerability,
+            sym_vulnerability=parsed.sym_vulnerability,
+            tls_vulnerability=risk.tls_vulnerability,
+            kex_algorithm=resolved_kex_algorithm,
+            auth_algorithm=parsed.auth_algorithm,
+            enc_algorithm=parsed.enc_algorithm,
+            tls_version=tls_result.tls_version,
+            risk_score=risk.score,
+        )
         return _AssessmentInputs(
             tls_version=tls_result.tls_version,
             cipher_suite=tls_result.cipher_suite,
@@ -1822,6 +1859,7 @@ class PipelineOrchestrator:
             sym_vulnerability=parsed.sym_vulnerability,
             tls_vulnerability=risk.tls_vulnerability,
             risk_score=risk.score,
+            score_explanation=score_explanation,
         )
 
     def _build_tls13_assessment_inputs(
@@ -1879,6 +1917,17 @@ class PipelineOrchestrator:
             sym_vulnerability=sym_vulnerability,
             tls_version=tls_result.tls_version,
         )
+        score_explanation = generate_score_explanation(
+            kex_vulnerability=kex_vulnerability,
+            sig_vulnerability=sig_vulnerability,
+            sym_vulnerability=sym_vulnerability,
+            tls_vulnerability=risk.tls_vulnerability,
+            kex_algorithm=kex_algorithm,
+            auth_algorithm=auth_algorithm,
+            enc_algorithm=enc_algorithm,
+            tls_version=tls_result.tls_version,
+            risk_score=risk.score,
+        )
         return _AssessmentInputs(
             tls_version=tls_result.tls_version,
             cipher_suite=tls_result.cipher_suite,
@@ -1891,6 +1940,7 @@ class PipelineOrchestrator:
             sym_vulnerability=sym_vulnerability,
             tls_vulnerability=risk.tls_vulnerability,
             risk_score=risk.score,
+            score_explanation=score_explanation,
         )
 
     @staticmethod
@@ -2686,6 +2736,7 @@ def serialize_assessment(assessment: CryptoAssessment | None) -> dict[str, Any] 
         "enc_algorithm": assessment.enc_algorithm,
         "mac_algorithm": assessment.mac_algorithm,
         "risk_score": assessment.risk_score,
+        "score_explanation": assessment.score_explanation,
         "compliance_tier": assessment.compliance_tier,
         "kex_vulnerability": assessment.kex_vulnerability,
         "sig_vulnerability": assessment.sig_vulnerability,

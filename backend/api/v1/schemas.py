@@ -104,6 +104,7 @@ class AssessmentResponse(BaseModel):
     enc_algorithm: str | None
     mac_algorithm: str | None
     risk_score: float | None
+    score_explanation: dict[str, Any] | None = None
     compliance_tier: ComplianceTier | None
     kex_vulnerability: float | None
     sig_vulnerability: float | None

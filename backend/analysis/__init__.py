@@ -10,7 +10,11 @@ from backend.analysis.handshake_metadata_resolver import (
     ResolvedHandshakeMetadata,
     resolve_tls13_handshake_metadata,
 )
-from backend.analysis.risk_scorer import RiskScoreBreakdown, calculate_risk_score
+from backend.analysis.risk_scorer import (
+    RiskScoreBreakdown,
+    calculate_risk_score,
+    generate_score_explanation,
+)
 
 __all__ = [
     "CertificateAnalysis",
@@ -24,6 +28,7 @@ __all__ = [
     "VULNERABILITY_MAP",
     "WEIGHTS",
     "calculate_risk_score",
+    "generate_score_explanation",
     "parse_tls12_cipher_suite",
     "resolve_tls13_handshake_metadata",
 ]

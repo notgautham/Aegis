@@ -210,6 +210,10 @@ class RulesEngine:
         sig: DimensionEvaluation,
         sym: DimensionEvaluation,
     ) -> ComplianceTier:
+        # Hard failures in major dimensions stay vulnerable.
+        if kex.status is DimensionStatus.FAIL or sig.status is DimensionStatus.FAIL:
+            return ComplianceTier.QUANTUM_VULNERABLE
+
         # 1. FULLY_QUANTUM_SAFE: Pure PQC on both major dimensions + OK symmetric
         if (
             kex.status == DimensionStatus.PASS

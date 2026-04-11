@@ -45,3 +45,13 @@ def test_patch_generator_keeps_quantum_acceptable_symmetric_cipher() -> None:
     )
 
     assert artifact.preserved_cipher == "CHACHA20POLY1305"
+
+
+def test_patch_generator_marks_aes128_for_upgrade() -> None:
+    artifact = PatchGenerator().generate(
+        server_software="nginx",
+        enc_algorithm="AES_128_GCM",
+    )
+
+    assert "# Upgrade symmetric cipher: AES128GCM -> AES256GCM recommended" in artifact.patch
+    assert "# Preserve quantum-acceptable symmetric cipher: AES128GCM" not in artifact.patch

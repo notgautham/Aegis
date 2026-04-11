@@ -48,7 +48,7 @@ class PortScanner:
             full_tcp_scan,
         )
 
-    def _scan_host_sync(self, ip_address: str, full_tcp_scan: bool) -> list[PortFinding]:
+    def _scan_host_sync(self, ip_address: str, full_tcp_scan: bool = False) -> list[PortFinding]:
         """Run the actual nmap scans synchronously."""
         try:
             import nmap

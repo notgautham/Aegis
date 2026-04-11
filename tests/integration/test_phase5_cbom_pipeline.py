@@ -52,7 +52,7 @@ async def test_documented_vulnerable_case_persists_cbom_and_updates_tier(db_sess
         timestamp=datetime(2026, 3, 26, tzinfo=UTC),
     )
 
-    assert persisted.serial_number == f"urn:aegis:scan:20260326:testssl.sh:443:{bundle.asset.id}"
+    assert persisted.serial_number == f"urn:uuid:aegis-scan-20260326-testssl.sh-443-{bundle.asset.id}"
     assert persisted.cbom_json["quantumRiskSummary"]["tier"] == "QUANTUM_VULNERABLE"
     assert persisted.cbom_json["quantumRiskSummary"]["overallScore"] == 84.5
     assert bundle.assessment.compliance_tier is ComplianceTier.QUANTUM_VULNERABLE

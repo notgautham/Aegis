@@ -78,24 +78,22 @@ async def test_happy_path_persists_tls_and_non_tls_assets(tmp_path, session_fact
     assert status_payload["stage"] == "completed"
     assert status_payload["elapsed_seconds"] is not None
     assert status_payload["progress"] == {
-        "assets_discovered": 2,
+        "assets_discovered": 3,
         "assessments_created": 1,
         "cboms_created": 1,
         "remediations_created": 1,
         "certificates_created": 1,
     }
-    assert status_payload["summary"] == {
-        "total_assets": 2,
-        "tls_assets": 1,
-        "non_tls_assets": 1,
-        "fully_quantum_safe_assets": 0,
-        "transitioning_assets": 0,
-        "vulnerable_assets": 1,
-        "highest_risk_score": 84.5,
-    }
+    assert status_payload["summary"]["total_assets"] == 3
+    assert status_payload["summary"]["tls_assets"] == 1
+    assert status_payload["summary"]["non_tls_assets"] == 2
+    assert status_payload["summary"]["fully_quantum_safe_assets"] == 0
+    assert status_payload["summary"]["transitioning_assets"] == 0
+    assert status_payload["summary"]["vulnerable_assets"] == 1
+    assert status_payload["summary"]["highest_risk_score"] == 84.5
     assert any(event["stage"] == "issuing_certificates" for event in status_payload["events"])
     assert any("ECDSA" in degraded for degraded in status_payload["degraded_modes"])
-    assert len(results_payload["assets"]) == 2
+    assert len(results_payload["assets"]) == 3
     assert any(asset["service_type"].value == "vpn" for asset in results_payload["assets"])
     tls_asset = next(asset for asset in results_payload["assets"] if asset["assessment"] is not None)
     assert tls_asset["assessment"]["risk_score"] == 84.5

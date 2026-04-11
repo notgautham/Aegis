@@ -4,7 +4,6 @@ Unit tests for retrieved-context-grounded roadmap generation.
 
 from __future__ import annotations
 
-import httpx
 import pytest
 
 from backend.core.config import Settings
@@ -73,16 +72,13 @@ def test_deterministic_fallback_mode_works_without_cloud_llm() -> None:
         ),
     )
 
-    assert result.used_deterministic_fallback is True
-    assert "Preparation / Prerequisites" in result.content
+    assert result.used_deterministic_fallback is False
+    assert "Phase 1 - Preparation / Prerequisites" in result.content
+    assert "NIST IR 8547" in result.content
     assert result.citations["documents"][0]["title"] == "FIPS 203"
 
 
-def test_provider_timeout_falls_back_to_deterministic_stub() -> None:
-    class TimeoutRoadmapGenerator(RoadmapGenerator):
-        def _generate_with_provider(self, **kwargs) -> str:
-            raise httpx.TimeoutException("simulated timeout")
-
+def test_cloud_mode_still_uses_deterministic_template() -> None:
     _, asset, assessment, _, cbom_document = build_remediation_fixture()
     remediation_input = RemediationInput(
         asset=asset,
@@ -99,7 +95,7 @@ def test_provider_timeout_falls_back_to_deterministic_stub() -> None:
         ),
     )
 
-    result = TimeoutRoadmapGenerator(
+    result = RoadmapGenerator(
         settings=Settings(
             LLM_PROVIDER_MODE="cloud",
             OPENROUTER_API_KEY="test-key",
@@ -114,5 +110,5 @@ def test_provider_timeout_falls_back_to_deterministic_stub() -> None:
         ),
     )
 
-    assert result.used_deterministic_fallback is True
-    assert "Full PQC Replacement" in result.content
+    assert result.used_deterministic_fallback is False
+    assert "Phase 3 - Full PQC Replacement" in result.content

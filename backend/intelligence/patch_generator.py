@@ -66,14 +66,25 @@ class PatchGenerator:
         template_key = self._normalize_server_type(server_software)
         template = self._TEMPLATES[template_key]
         preserved_cipher = canonicalize_algorithm("sym", enc_algorithm) or "AES256GCM"
+        if preserved_cipher == "AES256GCM":
+            symmetric_cipher_comment = "# Preserve quantum-acceptable symmetric cipher: AES256GCM"
+        elif preserved_cipher in {"AES128", "AES128GCM"}:
+            symmetric_cipher_comment = (
+                "# Upgrade symmetric cipher: AES128GCM -> AES256GCM recommended"
+            )
+        else:
+            symmetric_cipher_comment = (
+                f"# Preserve quantum-acceptable symmetric cipher: {preserved_cipher}"
+            )
         patch_lines = [
             "# Requires OQS-provider-enabled OpenSSL build",
-            f"# Preserve quantum-acceptable symmetric cipher: {preserved_cipher}",
+            symmetric_cipher_comment,
             *template.config_lines,
             template.hybrid_directive,
         ]
         return PatchArtifact(
             server_type=template.server_type,
+            hybrid_directive=template.hybrid_directive,
             patch="\n".join(patch_lines),
             preserved_cipher=preserved_cipher,
             prerequisite_notes=(

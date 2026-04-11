@@ -68,6 +68,7 @@ class PatchArtifact:
     """Deterministic PQC patch output."""
 
     server_type: str
+    hybrid_directive: str
     patch: str
     preserved_cipher: str | None
     prerequisite_notes: tuple[str, ...] = ()

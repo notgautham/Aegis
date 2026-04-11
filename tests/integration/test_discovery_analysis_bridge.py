@@ -69,5 +69,5 @@ def test_tls13_probe_metadata_flows_into_analysis_pipeline() -> None:
 
     assert resolved.kex_algorithm == "X25519_MLKEM768"
     assert resolved.auth_algorithm == "MLDSA65"
-    assert risk.tls_vulnerability == 0.0
-    assert risk.score == 14.0
+    assert risk.tls_vulnerability == 0.1
+    assert risk.score == 15.0

@@ -25,13 +25,32 @@ function detectServer(assetSoftware: string | null | undefined): string {
   return 'nginx';
 }
 
+function normalizeReferenceLabel(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/\bnist\s*ir\s*8547\b/i.test(trimmed)) return 'NIST IR 8547';
+  if (/\bir\s*[-_ ]?8547(?:\.pdf)?\b/i.test(trimmed)) return 'NIST IR 8547';
+  if (/\bir8547(?:\.pdf)?\b/i.test(trimmed)) return 'NIST IR 8547';
+  if (/\bir8547\.pdf\b/i.test(trimmed)) return 'NIST IR 8547';
+  if (/\bIr8547\.pdf\b/.test(trimmed)) return 'NIST IR 8547';
+  return trimmed;
+}
+
 function buildCitationLabel(rawAsset: ReturnType<typeof useSelectedScan>['selectedAssetResults'][number] | undefined, fallback?: string | null): string {
-  if (fallback) return fallback;
+  const normalizedFallback = normalizeReferenceLabel(fallback);
+  if (normalizedFallback) return normalizedFallback;
 
   const firstDocument = rawAsset?.remediation?.source_citations?.documents?.[0];
   if (!firstDocument) return 'AEGIS remediation bundle';
 
-  return [firstDocument.title, firstDocument.section, firstDocument.path].filter(Boolean).join(' - ');
+  const normalizedParts = [
+    normalizeReferenceLabel(firstDocument.title),
+    normalizeReferenceLabel(firstDocument.section),
+    normalizeReferenceLabel(firstDocument.path),
+  ].filter((part): part is string => Boolean(part));
+
+  return Array.from(new Set(normalizedParts)).join(' - ');
 }
 
 function cleanRoadmapText(value: string): string {
@@ -88,14 +107,14 @@ function parseRoadmapLine(line: string): { title: string; body: string; referenc
     return {
       title: withoutReference.slice(0, colonIndex).trim(),
       body: withoutReference.slice(colonIndex + 1).trim(),
-      reference,
+      reference: normalizeReferenceLabel(reference),
     };
   }
 
   return {
     title: withoutReference,
     body: '',
-    reference,
+    reference: normalizeReferenceLabel(reference),
   };
 }
 
@@ -175,6 +194,13 @@ const RemediationAIPatch = () => {
   const patchBundle = typeof rawAsset?.remediation?.patch_config === 'string' ? rawAsset.remediation.patch_config.trim() : '';
   const roadmapSections = splitRoadmapSections(typeof rawAsset?.remediation?.migration_roadmap === 'string' ? rawAsset.remediation.migration_roadmap : '');
   const isPqcSafe = Boolean(asset) && remediationActions.length === 0 && asset.status === 'elite-pqc';
+  const scoreExplanation = rawAsset?.assessment?.score_explanation ?? null;
+  const explanationRows = [
+    { label: 'Key Exchange', value: scoreExplanation?.kex_explanation },
+    { label: 'Signature', value: scoreExplanation?.sig_explanation },
+    { label: 'Symmetric', value: scoreExplanation?.sym_explanation },
+    { label: 'TLS', value: scoreExplanation?.tls_explanation },
+  ].filter((row) => Boolean(row.value));
 
   const relevantPatches = useMemo(() => {
     if (!asset) return [];
@@ -329,6 +355,31 @@ const RemediationAIPatch = () => {
         </Card>
       ) : (
         <>
+          {explanationRows.length > 0 && (
+            <Card className="bg-surface border-border shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
+              <CardHeader className="pb-2">
+                <CardTitle className="font-body text-base">Why this score?</CardTitle>
+                <p className="font-body text-xs text-muted-foreground">
+                  Deterministic scoring explanation derived from weighted vulnerability components.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {explanationRows.map((row) => (
+                  <div key={row.label} className="rounded-lg border border-border bg-[hsl(var(--bg-sunken)/0.4)] px-3 py-2">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{row.label}</p>
+                    <p className="mt-1 font-body text-sm text-foreground/90">{row.value}</p>
+                  </div>
+                ))}
+                {scoreExplanation?.overall_explanation && (
+                  <div className="rounded-lg border border-brand-primary/20 bg-brand-primary/5 px-3 py-2">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-brand-primary">Overall</p>
+                    <p className="mt-1 font-body text-sm text-foreground/90">{scoreExplanation.overall_explanation}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {relevantPatches.length === 0 ? (
             <Card className="bg-surface border-border">
               <CardContent className="py-8 text-center">

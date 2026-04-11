@@ -8,7 +8,7 @@ See IMPLEMENTATION.md Section 5.1 — crypto_assessments table.
 import uuid
 
 from sqlalchemy import Enum, Float, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.base import Base
@@ -48,6 +48,7 @@ class CryptoAssessment(Base):
 
     # ── Computed Risk Score (0–100) ─────────────────────
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_explanation: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # ── Compliance Tier ─────────────────────────────────
     compliance_tier: Mapped[ComplianceTier | None] = mapped_column(
