@@ -15,14 +15,38 @@ const AssetTable = ({ selectedAssets }: AssetTableProps) => {
   const [selected, setSelected] = useState<Asset | null>(null);
   const [search, setSearch] = useState('');
 
-  const filtered = selectedAssets.filter(a =>
-    a.domain.toLowerCase().includes(search.toLowerCase())
+  const groupedAssets = Object.values(
+    selectedAssets.reduce<Record<string, { primary: Asset; uniqueIps: Set<string> }>>((acc, asset) => {
+      const groupKey = `${asset.domain}:${asset.port}`;
+      if (!acc[groupKey]) {
+        acc[groupKey] = {
+          primary: asset,
+          uniqueIps: new Set(asset.ip ? [asset.ip] : []),
+        };
+        return acc;
+      }
+
+      if (asset.ip) {
+        acc[groupKey].uniqueIps.add(asset.ip);
+      }
+
+      return acc;
+    }, {}),
+  ).map((group) => ({
+    ...group,
+    extraIpCount: Math.max(group.uniqueIps.size - 1, 0),
+  }));
+
+  const filtered = groupedAssets.filter(({ primary }) =>
+    `${primary.domain}:${primary.port}`.toLowerCase().includes(search.toLowerCase())
   );
 
   const statusBgColor = (status: string) => {
     switch (status) {
       case 'critical': return 'bg-status-critical/10 text-status-critical';
+      case 'vulnerable': return 'bg-status-critical/10 text-status-critical';
       case 'standard': return 'bg-accent-amber/10 text-accent-amber';
+      case 'transitioning': return 'bg-accent-amber/10 text-accent-amber';
       case 'safe': return 'bg-status-safe/10 text-status-safe';
       case 'elite-pqc': return 'bg-status-safe/10 text-status-safe';
       case 'unknown': return 'bg-status-unknown/10 text-status-unknown';
@@ -59,13 +83,25 @@ const AssetTable = ({ selectedAssets }: AssetTableProps) => {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(a => (
+              {filtered.map(({ primary: a, extraIpCount }) => (
                 <tr
-                  key={a.domain}
+                  key={`${a.domain}:${a.port}:${a.ip || 'no-ip'}`}
                   onClick={() => setSelected(a)}
                   className="border-b border-[hsl(var(--border-default))] last:border-0 hover:bg-sunken/30 cursor-pointer transition-colors"
                 >
-                  <td className="font-mono text-xs text-foreground px-4 py-3">{a.domain}</td>
+                  <td className="font-mono text-xs text-foreground px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      <span>{a.domain}:{a.port}</span>
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                        {a.ip || 'unknown ip'}
+                        {extraIpCount > 0 && (
+                          <span className="inline-flex items-center rounded border border-[hsl(var(--border-default))] bg-sunken px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            +{extraIpCount} IPs
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </td>
                   <td className="font-mono text-[10px] text-muted-foreground px-4 py-3 uppercase">{a.type}</td>
                   <td className="font-mono text-xs text-foreground px-4 py-3">{a.tls}</td>
                   <td className="font-mono text-[10px] text-muted-foreground px-4 py-3 max-w-[200px] truncate">{a.cipher}</td>

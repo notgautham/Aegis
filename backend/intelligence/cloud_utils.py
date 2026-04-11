@@ -3,7 +3,8 @@ import json
 import os
 import sys
 
-def call_cloud_api(url, headers, payload, method="POST"):
+
+def call_cloud_api(url, headers, payload, method="POST", timeout_seconds=15.0):
     """
     Run a cloud API call in a separate process with a clean environment 
     to bypass OQS-patched OpenSSL restrictions.
@@ -15,7 +16,7 @@ import sys
 
 try:
     payload = json.loads(sys.stdin.read())
-    with httpx.Client(timeout=60.0) as client:
+    with httpx.Client(timeout={float(timeout_seconds)}) as client:
         r = client.request(
             "{method}",
             "{url}",

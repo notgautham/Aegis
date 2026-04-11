@@ -4,76 +4,34 @@ Mission Control overview and lightweight scan history endpoints.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Request
-from sqlalchemy import text
+import uuid
+from typing import Any
 
-from backend.api.v1.schemas import MissionControlOverviewResponse, ScanHistoryResponse
-from backend.core.database import async_session_factory
+from fastapi import APIRouter, Query, Request
+
+from backend.api.v1.schemas import (
+    MissionControlActivityResponse,
+    MissionControlOverviewResponse,
+    ScanHistoryResponse,
+)
 
 router = APIRouter(tags=["Mission Control"])
 
-
-from typing import Any
-
 @router.get("/mission-control/graph")
-async def get_network_graph(request: Request) -> dict[str, list[Any]]:
-    """Return the real Network Graph nodes and edges from Apache AGE."""
-    async with async_session_factory() as session:
-        # We'll just fetch nodes directly from SQL since AGE provides a custom type agtype
-        # For simplicity in this hackathon, we can execute Cypher that returns objects.
-        # But agtype parsing in asyncpg can be tricky. Instead, we can build the nodes/edges in Python.
-        
-        # We'll return a static shape to ensure frontend compatibility immediately, 
-        # but you can update this to execute the actual cypher read query!
-        
-        nodes = []
-        edges = []
-        
-        # Let's query domains and IPs from the relational model to populate the graph
-        # This gives a 100% real graph without worrying about age parsing drivers for now!
-        from sqlalchemy import select
-        from backend.models.discovered_asset import DiscoveredAsset
-        
-        assets = (await session.execute(select(DiscoveredAsset).limit(100))).scalars().all()
-        
-        added_nodes = set()
-        
-        for asset in assets:
-            domain = asset.hostname or "unknown"
-            ip = asset.ip_address
-            port = str(asset.port)
-            
-            if domain not in added_nodes:
-                nodes.append({"id": domain, "label": domain, "status": "standard", "x": 300, "y": 180, "r": 20})
-                added_nodes.add(domain)
-            
-            if ip and ip not in added_nodes:
-                nodes.append({"id": ip, "label": ip, "status": "safe", "x": 100 + len(added_nodes)*20 % 400, "y": 100 + len(added_nodes)*30 % 200, "r": 15})
-                added_nodes.add(ip)
-                edges.append([domain, ip])
-                
-            if ip:
-                port_id = f"{ip}:{port}"
-                if port_id not in added_nodes:
-                    nodes.append({"id": port_id, "label": port, "status": "elite-pqc" if port in ("443", "8443") else "critical", "x": 200 + len(added_nodes)*15 % 300, "y": 200 + len(added_nodes)*25 % 150, "r": 10})
-                    added_nodes.add(port_id)
-                    edges.append([ip, port_id])
+async def get_network_graph(
+    request: Request,
+    scan_id: uuid.UUID | None = Query(default=None),
+    limit: int = Query(default=150, ge=1, le=500),
+) -> dict[str, list[Any]]:
+    """Return graph nodes/edges derived from persisted scan assets."""
+    payload = await request.app.state.scan_read_service.get_network_graph(
+        scan_id=scan_id,
+        limit=limit,
+    )
+    return payload
 
-        if not nodes:
-            # Fallback to the dummy graph if no scans exist yet
-            return {
-                "nodes": [
-                    {"id": "sc.com", "x": 300, "y": 180, "r": 22, "status": "standard", "label": "sc.com"},
-                    {"id": "107.154.243.19", "x": 200, "y": 100, "r": 15, "status": "safe", "label": "107.154.243.19"},
-                    {"id": "443", "x": 100, "y": 150, "r": 12, "status": "elite-pqc", "label": "443"},
-                ],
-                "edges": [
-                    ["sc.com", "107.154.243.19"],
-                    ["107.154.243.19", "443"],
-                ]
-            }
 
-        return {"nodes": nodes, "edges": edges}
+@router.get("/mission-control/overview", response_model=MissionControlOverviewResponse)
 async def get_mission_control_overview(
     request: Request,
     recent_limit: int = Query(default=10, ge=1, le=25),
@@ -87,10 +45,20 @@ async def get_mission_control_overview(
     return MissionControlOverviewResponse(**payload)
 
 
+@router.get("/mission-control/activity", response_model=MissionControlActivityResponse)
+async def get_mission_control_activity(
+    request: Request,
+    limit: int = Query(default=25, ge=1, le=100),
+) -> MissionControlActivityResponse:
+    """Return recent persisted scan activity for dashboard feeds."""
+    payload = await request.app.state.scan_read_service.get_recent_activity(limit=limit)
+    return MissionControlActivityResponse(**payload)
+
+
 @router.get("/scan/history", response_model=ScanHistoryResponse)
 async def get_scan_history(
     request: Request,
-    limit: int | None = Query(default=None, ge=1, le=5000),
+    limit: int | None = Query(default=200, ge=1, le=5000),
     target: str | None = Query(default=None, min_length=1),
 ) -> ScanHistoryResponse:
     """Return a lightweight scan timeline, optionally filtered by exact target."""

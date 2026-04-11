@@ -65,11 +65,50 @@ interface DiscoveryQueryResult {
   observedDnsRecords: ObservedDNSRecord[];
 }
 
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+
+const nestedRecord = (root: Record<string, unknown> | null, key: string): Record<string, unknown> | null =>
+  root ? asRecord(root[key]) : null;
+
+const stringValue = (root: Record<string, unknown> | null, key: string): string | null => {
+  if (!root) return null;
+  const value = root[key];
+  return typeof value === 'string' && value.trim() ? value : null;
+};
+
+const stringArray = (root: Record<string, unknown> | null, key: string): string[] => {
+  if (!root) return [];
+  const value = root[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === 'string');
+};
+
 const formatDateCell = (value: string | null | undefined): string => {
-  if (!value) return '—';
+  if (!value) return 'Unavailable';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toISOString().slice(0, 10);
+};
+
+const normalizeDisplayValue = (value: string | null | undefined): string => {
+  if (!value) return 'Unavailable';
+  const normalized = value.trim();
+  if (!normalized || normalized === '—' || normalized.toLowerCase() === 'unknown') {
+    return 'Unavailable';
+  }
+  return normalized;
+};
+
+const hasCertificateDetails = (asset: Asset): boolean => {
+  if (!asset.certInfo) return false;
+  return Boolean(
+    (asset.certInfo.subject_cn && asset.certInfo.subject_cn !== 'unknown') ||
+    (asset.certInfo.valid_until && asset.certInfo.valid_until !== 'Unavailable') ||
+    (asset.certInfo.sha256_fingerprint && asset.certInfo.sha256_fingerprint.length > 10),
+  );
 };
 
 const getObservedTime = (value: string): number => {
@@ -108,12 +147,19 @@ const toObservedDnsRecords = (
     target,
   }));
 
+const MAX_ALL_TIME_SCANS = 40;
+
 const assetRiskScore = (asset: Asset): number => Math.max(0, Math.min(100, 100 - asset.qScore));
 
 const assetRiskLevel = (asset: Asset): IPRecord['risk'] => {
   if (asset.status === 'critical') return 'critical';
   if (asset.status === 'vulnerable') return 'high';
-  if (asset.status === 'standard' || asset.status === 'safe') return 'medium';
+  if (
+    asset.status === 'standard' ||
+    asset.status === 'transitioning' ||
+    asset.status === 'safe' ||
+    asset.complianceTier === 'PQC_TRANSITIONING'
+  ) return 'medium';
   return 'low';
 };
 
@@ -175,15 +221,36 @@ const buildDomainRecords = (
     return {
       detectionDate: formatDateCell(allObservedAt[0]),
       domain,
-      registrationDate: '—',
-      expiryDate: '—',
-      registrar: 'Unknown',
+      registrationDate: (() => {
+        const metadata = nestedRecord(asRecord(latestAsset?.rawAsset?.asset_metadata ?? null), 'domain_enrichment');
+        return normalizeDisplayValue(
+          stringValue(metadata, 'registration_date')
+          ?? latestAsset?.asset.certInfo.valid_from
+          ?? null,
+        );
+      })(),
+      expiryDate: (() => {
+        const metadata = nestedRecord(asRecord(latestAsset?.rawAsset?.asset_metadata ?? null), 'domain_enrichment');
+        return normalizeDisplayValue(
+          stringValue(metadata, 'expiry_date')
+          ?? latestAsset?.asset.certInfo.valid_until
+          ?? null,
+        );
+      })(),
+      registrar: (() => {
+        const metadata = nestedRecord(asRecord(latestAsset?.rawAsset?.asset_metadata ?? null), 'domain_enrichment');
+        return normalizeDisplayValue(stringValue(metadata, 'registrar'));
+      })(),
       company: latestAsset && latestAsset.asset.ownerTeam !== 'Unassigned'
         ? latestAsset.asset.ownerTeam
-        : 'Unknown',
+        : 'Unassigned',
       status: seenInScans > 1 ? 'confirmed' : 'new',
       riskScore: assetItems.length > 0 ? Math.max(...assetItems.map((item) => assetRiskScore(item.asset))) : 0,
-      nameservers: [],
+      nameservers: (() => {
+        const metadata = nestedRecord(asRecord(latestAsset?.rawAsset?.asset_metadata ?? null), 'domain_enrichment');
+        const values = stringArray(metadata, 'nameservers');
+        return values.length > 0 ? values : [];
+      })(),
     };
   }).sort((a, b) => a.domain.localeCompare(b.domain));
 };
@@ -221,16 +288,21 @@ const buildIPRecords = (observedAssets: ObservedAsset[]): IPRecord[] => {
           ? 'medium'
           : 'low';
 
+    const networkMetadata = nestedRecord(asRecord(latest.rawAsset?.asset_metadata ?? null), 'network_enrichment');
+    const city = stringValue(networkMetadata, 'city');
+    const country = stringValue(networkMetadata, 'country');
+    const composedLocation = [city, country].filter(Boolean).join(', ');
+
     return {
       detectionDate: formatDateCell(sorted[0]?.observedAt),
       ip,
       portsOpen,
-      subnet: '—',
-      asn: '—',
-      netname: '—',
-      city: '—',
-      isp: '—',
-      reverseDns: latest.asset.domain,
+      subnet: normalizeDisplayValue(stringValue(networkMetadata, 'subnet')),
+      asn: normalizeDisplayValue(stringValue(networkMetadata, 'asn')),
+      netname: normalizeDisplayValue(stringValue(networkMetadata, 'netname')),
+      city: normalizeDisplayValue(composedLocation),
+      isp: normalizeDisplayValue(stringValue(networkMetadata, 'isp')),
+      reverseDns: normalizeDisplayValue(stringValue(networkMetadata, 'reverse_dns') ?? latest.asset.domain),
       risk,
     };
   }).sort((a, b) => a.ip.localeCompare(b.ip));
@@ -240,9 +312,43 @@ const buildSoftwareRecords = (observedAssets: ObservedAsset[]): SoftwareRecord[]
   const latest = new Map<string, SoftwareRecord & { observedAt: string }>();
 
   observedAssets.forEach((item) => {
-    if (!item.asset.software) return;
+    const fallbackServiceName = (() => {
+      if (!Array.isArray(item.rawAsset?.open_ports)) return null;
+      const withService = item.rawAsset.open_ports.find((entry) => {
+        if (typeof entry !== 'object' || entry === null) return false;
+        const serviceName = (entry as Record<string, unknown>).service_name;
+        return typeof serviceName === 'string' && serviceName.trim().length > 0;
+      }) as Record<string, unknown> | undefined;
+      const value = withService?.service_name;
+      return typeof value === 'string' && value.trim() ? value.trim() : null;
+    })();
 
-    const software = item.asset.software;
+    const software = item.asset.software ?? {
+      product: item.rawAsset?.server_software
+        || (fallbackServiceName === 'https'
+          ? `HTTPS Service (${item.asset.port})`
+          : fallbackServiceName === 'http'
+            ? `HTTP Service (${item.asset.port})`
+            : fallbackServiceName)
+        || (item.asset.type === 'web'
+          ? 'HTTPS Endpoint'
+          : item.asset.type === 'api'
+            ? 'API Service'
+            : item.asset.type === 'vpn'
+              ? 'VPN Gateway'
+              : 'Network Service'),
+      version: '',
+      type: item.asset.type === 'web'
+        ? 'Web Service'
+        : item.asset.type === 'api'
+          ? 'API Service'
+          : item.asset.type === 'vpn'
+            ? 'VPN Service'
+            : 'Network Service',
+      eolDate: null,
+      cveCount: 0,
+      pqcNativeSupport: false,
+    };
     const eolDate = software.eolDate;
     const eolTime = eolDate ? new Date(eolDate).getTime() : Number.NaN;
     const now = Date.now();
@@ -259,10 +365,10 @@ const buildSoftwareRecords = (observedAssets: ObservedAsset[]): SoftwareRecord[]
     const record = {
       detectionDate: formatDateCell(item.observedAt),
       product: software.product,
-      version: software.version || '—',
+      version: software.version || 'Unavailable',
       type: software.type,
       port: item.asset.port,
-      hostIp: item.asset.ip || '—',
+      hostIp: item.asset.ip || 'Unavailable',
       hostname: item.asset.domain,
       eolStatus,
       eolDate: software.eolDate,
@@ -328,15 +434,18 @@ const AssetDiscovery = () => {
   const [selectedSoftware, setSelectedSoftware] = useState<SoftwareRecord | undefined>();
 
   const { data: discoveryData, isLoading: allTimeLoading } = useQuery<DiscoveryQueryResult>({
-    queryKey: ['asset-discovery-all-time'],
+    queryKey: ['asset-discovery-all-time', scopeMode],
+    enabled: scopeMode === 'all-time',
     queryFn: async () => {
-      const historyResponse = await api.getScanHistory();
+      const historyResponse = await api.getScanHistory({ limit: 400 });
       const adaptedHistory = adaptScanHistory(historyResponse);
       const completedItems = historyResponse.items.filter(
         (item) => item.status.toLowerCase() === 'completed',
       );
 
-      const settledResults = await Promise.allSettled(completedItems.map(async (item) => {
+      const cappedCompletedItems = completedItems.slice(0, MAX_ALL_TIME_SCANS);
+
+      const settledResults = await Promise.allSettled(cappedCompletedItems.map(async (item) => {
         const result = await api.getScanResults(item.scan_id);
         const observedAt = result.completed_at ?? result.created_at;
         return {
@@ -468,7 +577,7 @@ const AssetDiscovery = () => {
   ));
 
   const filteredSslAssets = scopedSslAssets
-    .filter((asset) => asset.certInfo.subject_cn)
+    .filter((asset) => hasCertificateDetails(asset))
     .filter((asset) => includesSearch(
       [
         asset.domain,
@@ -705,11 +814,11 @@ const AssetDiscovery = () => {
                       className={cn("border-b border-border/50 cursor-pointer hover:bg-[hsl(var(--bg-sunken))] transition-colors", i % 2 === 0 && "bg-[hsl(var(--bg-sunken)/0.3)]")}
                     >
                       <td className="px-3 py-2 font-mono font-medium">{a.certInfo.subject_cn}</td>
-                      <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">{a.certInfo.subject_alt_names.join(', ') || '—'}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{a.certInfo.certificate_authority}</td>
-                      <td className="px-3 py-2 font-mono">{a.certInfo.signature_algorithm.substring(0, 16)}</td>
+                      <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">{a.certInfo.subject_alt_names.join(', ') || 'Unavailable'}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{normalizeDisplayValue(a.certInfo.certificate_authority)}</td>
+                      <td className="px-3 py-2 font-mono">{normalizeDisplayValue(a.certInfo.signature_algorithm).substring(0, 16)}</td>
                       <td className="px-3 py-2 font-mono">{a.certInfo.key_type}-{a.certInfo.key_size || 'PQC'}</td>
-                      <td className="px-3 py-2 font-mono text-muted-foreground">{a.certInfo.valid_until || '—'}</td>
+                      <td className="px-3 py-2 font-mono text-muted-foreground">{normalizeDisplayValue(a.certInfo.valid_until)}</td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
                           <div className="w-16 h-1.5 rounded-full bg-[hsl(var(--bg-sunken))]">
@@ -718,7 +827,9 @@ const AssetDiscovery = () => {
                               backgroundColor: a.certInfo.days_remaining <= 30 ? 'hsl(var(--status-critical))' : a.certInfo.days_remaining <= 90 ? 'hsl(var(--accent-amber))' : 'hsl(var(--status-safe))'
                             }} />
                           </div>
-                          <span className={cn("font-mono", a.certInfo.days_remaining <= 30 ? "text-[hsl(var(--status-critical))]" : "text-muted-foreground")}>{a.certInfo.days_remaining}d</span>
+                          <span className={cn("font-mono", a.certInfo.days_remaining <= 30 ? "text-[hsl(var(--status-critical))]" : "text-muted-foreground")}>
+                            {a.certInfo.days_remaining < 0 ? 'Expired' : `${a.certInfo.days_remaining}d`}
+                          </span>
                         </div>
                       </td>
                     </tr>
@@ -824,6 +935,9 @@ const AssetDiscovery = () => {
         <div className="space-y-4">
           <Card className="p-3 shadow-sm border-[hsl(var(--status-warn)/0.3)] bg-[hsl(var(--status-warn)/0.05)]">
             <p className="text-xs font-body font-medium text-[hsl(var(--status-warn))]">⚠ {shadowData.length} Shadow IT assets detected — not in official inventory</p>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Count is computed from live scan assets in the selected scope ({scopeMode === 'this-scan' ? 'This Scan' : 'All Time'}).
+            </p>
           </Card>
           <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
             <CardContent className="p-0">
@@ -875,5 +989,4 @@ const AssetDiscovery = () => {
 };
 
 export default AssetDiscovery;
-
 

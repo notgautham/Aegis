@@ -26,6 +26,7 @@ const criticalityRows = [
 
 const tierCriteria = [
   { tier: 'Tier-1 (Elite-PQC)', criteria: 'TLS 1.3 only + ML-KEM-768 + ML-DSA-65 + HSTS', action: 'Maintain + Monitor', color: 'hsl(var(--status-safe))' },
+  { tier: 'Tier-2 (Transitioning)', criteria: 'Hybrid posture: partial PQC adoption with remaining classical dependencies', action: 'Accelerate hybrid rollout', color: 'hsl(var(--status-warn))' },
   { tier: 'Tier-2 (Standard)', criteria: 'TLS 1.2/1.3 + ECDHE + >=2048-bit + strong ciphers', action: 'Gradual improvement', color: 'hsl(210, 70%, 50%)' },
   { tier: 'Tier-3 (Legacy)', criteria: 'TLS 1.0/1.1 enabled + CBC ciphers + <=1024-bit', action: 'Remediation required', color: 'hsl(var(--accent-amber))' },
   { tier: 'Critical', criteria: 'SSLv2/v3 + DES + <1024-bit + known CVEs', action: 'Immediate action', color: 'hsl(var(--status-critical))' },
@@ -33,7 +34,7 @@ const tierCriteria = [
 
 function getStrengthBucket(tier: string): 'weak' | 'standard' | 'strong' {
   if (tier === 'elite_pqc') return 'strong';
-  if (tier === 'standard') return 'standard';
+  if (tier === 'standard' || tier === 'transitioning') return 'standard';
   return 'weak';
 }
 
@@ -66,6 +67,7 @@ const PQCCompliance = () => {
 
   const tierCounts = {
     elite_pqc: selectedAssets.filter((asset) => asset.tier === 'elite_pqc').length,
+    transitioning: selectedAssets.filter((asset) => asset.tier === 'transitioning').length,
     standard: selectedAssets.filter((asset) => asset.tier === 'standard').length,
     legacy: selectedAssets.filter((asset) => asset.tier === 'legacy').length,
     critical: selectedAssets.filter((asset) => asset.tier === 'critical').length,
@@ -73,6 +75,7 @@ const PQCCompliance = () => {
 
   const classData = [
     { name: 'Elite-PQC', count: tierCounts.elite_pqc, fill: 'hsl(var(--status-safe))' },
+    { name: 'Transitioning', count: tierCounts.transitioning, fill: 'hsl(var(--status-warn))' },
     { name: 'Standard', count: tierCounts.standard, fill: 'hsl(210, 70%, 50%)' },
     { name: 'Legacy', count: tierCounts.legacy, fill: 'hsl(var(--accent-amber))' },
     { name: 'Critical', count: tierCounts.critical, fill: 'hsl(var(--status-critical))' },
@@ -80,6 +83,7 @@ const PQCCompliance = () => {
 
   const pieData = classData.filter((item) => item.count > 0);
   const eliteCount = selectedAssets.filter((asset) => asset.status === 'elite-pqc').length;
+  const transitioningCount = selectedAssets.filter((asset) => asset.tier === 'transitioning').length;
   const critCount = selectedAssets.filter((asset) => asset.tier === 'critical').length;
 
   const heatmapRows = criticalityRows.map((row) => ({
@@ -102,7 +106,11 @@ const PQCCompliance = () => {
     },
     {
       text: 'Update cryptographic libraries to OQS-enabled versions',
-      affected: selectedAssets.filter((asset) => !asset.software?.pqcNativeSupport).length,
+      affected: selectedAssets.filter((asset) => asset.software !== null && !asset.software.pqcNativeSupport).length,
+    },
+    {
+      text: 'Complete software inventory for accurate PQC readiness tracking',
+      affected: selectedAssets.filter((asset) => asset.software === null).length,
     },
     {
       text: 'Develop PQC migration plan and assign asset owners',
@@ -116,7 +124,7 @@ const PQCCompliance = () => {
       <h1 className="font-display text-2xl italic text-brand-primary">PQC Compliance Dashboard</h1>
       <SectionTabBar tabs={pqcTabs} />
       <p className="text-xs font-body text-muted-foreground italic">
-        PQC readiness across {selectedAssets.length} assets: {eliteCount} Elite-PQC, {critCount} Critical. {critCount > 0 ? `${critCount} assets require immediate remediation.` : 'No critical assets detected.'}
+        PQC readiness across {selectedAssets.length} assets: {eliteCount} Elite-PQC, {transitioningCount} Transitioning, {critCount} Critical. {critCount > 0 ? `${critCount} assets require immediate remediation.` : 'No critical assets detected.'}
       </p>
 
       <div className="flex gap-3">

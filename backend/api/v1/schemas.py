@@ -17,6 +17,8 @@ class ScanCreateRequest(BaseModel):
     """Request body for starting a scan."""
 
     target: str
+    scan_profile: str | None = None
+    initiated_by: str | None = None
 
 
 class ProgressResponse(BaseModel):
@@ -118,8 +120,8 @@ class CbomResponse(BaseModel):
     cbom_json: dict[str, Any]
 
 
-class CertificateResponse(BaseModel):
-    """Certificate retrieval payload."""
+class ComplianceCertificateResponse(BaseModel):
+    """Compliance certificate retrieval payload."""
 
     id: uuid.UUID
     tier: ComplianceTier
@@ -129,6 +131,22 @@ class CertificateResponse(BaseModel):
     extensions_json: dict[str, Any] | None
     remediation_bundle_id: uuid.UUID | None
     certificate_pem: str | None = None
+
+
+class AssetCertificateResponse(BaseModel):
+    """TLS certificate summary used by frontend asset views."""
+
+    subject_cn: str
+    subject_alt_names: list[str] = Field(default_factory=list)
+    issuer: str
+    certificate_authority: str
+    signature_algorithm: str
+    key_type: str
+    key_size: int
+    valid_from: datetime | None
+    valid_until: datetime | None
+    days_remaining: int | None
+    sha256_fingerprint: str
 
 
 class RemediationResponse(BaseModel):
@@ -220,7 +238,8 @@ class AssetResultResponse(BaseModel):
     assessment: AssessmentResponse | None
     cbom: CbomResponse | None
     remediation: RemediationResponse | None
-    certificate: CertificateResponse | None
+    certificate: AssetCertificateResponse | None
+    compliance_certificate: ComplianceCertificateResponse | None = None
     leaf_certificate: LeafCertificateResponse | None = None
     remediation_actions: list[RemediationActionResponse] = Field(default_factory=list)
     asset_fingerprint: AssetFingerprintResponse | None = None
@@ -300,6 +319,25 @@ class MissionControlOverviewResponse(BaseModel):
     recent_scans: list[MissionControlRecentScanResponse] = Field(default_factory=list)
     priority_findings: list[MissionControlPriorityFindingResponse] = Field(default_factory=list)
     system_health: MissionControlSystemHealthResponse
+
+
+class MissionControlActivityItemResponse(BaseModel):
+    """One recent activity event for dashboard activity feeds."""
+
+    timestamp: datetime
+    kind: str
+    message: str
+    stage: str | None = None
+    scan_id: uuid.UUID
+    target: str
+    status: ScanStatus
+    route: str | None = None
+
+
+class MissionControlActivityResponse(BaseModel):
+    """Recent activity feed payload for Mission Control widgets."""
+
+    items: list[MissionControlActivityItemResponse] = Field(default_factory=list)
 
 
 class ScanHistoryItemResponse(BaseModel):

@@ -137,7 +137,12 @@ class RoadmapGenerator:
             "temperature": 0.2,
         }
         
-        response_json = call_cloud_api(url, headers, payload)
+        response_json = call_cloud_api(
+            url,
+            headers,
+            payload,
+            timeout_seconds=self.settings.LLM_TIMEOUT_SECONDS,
+        )
         content = response_json["choices"][0]["message"]["content"].strip()
         if not content:
             raise ValueError("Provider returned an empty roadmap.")

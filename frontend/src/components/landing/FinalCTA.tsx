@@ -44,7 +44,7 @@ const FinalCTA = () => {
         </div>
 
         <div className="mt-20 font-mono text-[11px] text-white/40 tracking-[2px] uppercase">
-          PNB Cybersecurity Hackathon 2026 · NIST FIPS 203 / 204 / 205 · CycloneDX 1.7 · Ed25519 Attestation
+          Aegis Security Platform · NIST FIPS 203 / 204 / 205 · CycloneDX 1.7 · Ed25519 Attestation
         </div>
       </motion.div>
     </section>

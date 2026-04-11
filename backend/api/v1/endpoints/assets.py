@@ -8,7 +8,11 @@ import uuid
 
 from fastapi import APIRouter, Request
 
-from backend.api.v1.schemas import CbomResponse, CertificateResponse, RemediationResponse
+from backend.api.v1.schemas import (
+    CbomResponse,
+    ComplianceCertificateResponse,
+    RemediationResponse,
+)
 
 router = APIRouter(tags=["Assets"])
 
@@ -20,11 +24,11 @@ async def get_asset_cbom(asset_id: uuid.UUID, request: Request) -> CbomResponse:
     return CbomResponse(**payload)
 
 
-@router.get("/assets/{asset_id}/certificate", response_model=CertificateResponse)
-async def get_asset_certificate(asset_id: uuid.UUID, request: Request) -> CertificateResponse:
+@router.get("/assets/{asset_id}/certificate", response_model=ComplianceCertificateResponse)
+async def get_asset_certificate(asset_id: uuid.UUID, request: Request) -> ComplianceCertificateResponse:
     """Return the latest persisted certificate for one asset."""
     payload = await request.app.state.scan_read_service.get_latest_certificate(asset_id=asset_id)
-    return CertificateResponse(**payload)
+    return ComplianceCertificateResponse(**payload)
 
 
 @router.get("/assets/{asset_id}/remediation", response_model=RemediationResponse)

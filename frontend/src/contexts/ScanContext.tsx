@@ -3,14 +3,14 @@ import { createContext, useContext, useState, ReactNode } from 'react';
 interface ScanContextType {
   scannedDomain: string;
   setScannedDomain: (domain: string) => void;
-  /** e.g. "pnb.co.in" → "pnb.co.in" (root domain) */
+  /** e.g. "aegis.com" → "aegis.com" (root domain) */
   rootDomain: string;
-  /** e.g. "pnb.co.in" → "PNB" or "example.com" → "EXAMPLE" */
+  /** e.g. "aegis.com" → "PNB" or "example.com" → "EXAMPLE" */
   orgLabel: string;
 }
 
 function deriveRootDomain(domain: string): string {
-  // Strip subdomains: "vpn.pnb.co.in" → "pnb.co.in"
+  // Strip subdomains: "vpn.aegis.com" → "aegis.com"
   const parts = domain.replace(/^https?:\/\//, '').split('.');
   // Handle TLDs like .co.in, .com.au (2-part TLDs)
   const knownSecondLevel = ['co', 'com', 'org', 'net', 'ac', 'gov', 'edu'];

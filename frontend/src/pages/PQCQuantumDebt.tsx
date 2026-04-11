@@ -44,13 +44,16 @@ function deriveDebtScore(assets: Asset[]): number {
 const PQCQuantumDebt = () => {
   const [migrationPercent, setMigrationPercent] = useState([30]);
   const { selectedAssets, selectedScanId, selectedScanResults } = useSelectedScan();
+  const currentTarget = selectedScanResults?.target ?? null;
 
   const historyQuery = useQuery({
     queryKey: ['scan-history-for-quantum-debt'],
     queryFn: () => api.getScanHistory(),
   });
 
-  const historyItems = [...(historyQuery.data?.items ?? [])].sort((a, b) => (
+  const historyItems = [...(historyQuery.data?.items ?? [])]
+    .filter((item) => !currentTarget || item.target === currentTarget)
+    .sort((a, b) => (
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   ));
 
@@ -70,17 +73,19 @@ const PQCQuantumDebt = () => {
   const monthsBetween = selectedScanResults && previousScanQuery.data
     ? Math.max(1 / 30, (new Date(selectedScanResults.created_at).getTime() - new Date(previousScanQuery.data.created_at).getTime()) / (1000 * 60 * 60 * 24 * 30.4375))
     : 1;
-  const monthlyGrowth = previousScanQuery.data ? Math.max(0, Math.round((quantumDebtScore - previousDebtScore) / monthsBetween)) : 0;
+  const monthlyGrowth = previousScanQuery.data ? Math.round((quantumDebtScore - previousDebtScore) / monthsBetween) : 0;
+  const safeMonthlyGrowth = Object.is(monthlyGrowth, -0) ? 0 : monthlyGrowth;
 
   const debtByType = Object.entries(selectedAssets.reduce((acc, asset) => {
     const key = asset.type;
-    const current = assetDebtUnits(asset) * 10;
-    acc[key] = (acc[key] || 0) + current;
+    acc[key] = acc[key] || { total: 0, count: 0 };
+    acc[key].total += assetDebtUnits(asset);
+    acc[key].count += 1;
     return acc;
-  }, {} as Record<Asset['type'], number>)).map(([type, current]) => ({
+  }, {} as Record<Asset['type'], { total: number; count: number }>)).map(([type, metrics]) => ({
     type: typeLabels[type as Asset['type']] ?? type,
-    current: Math.round(current),
-    projected: Math.max(0, Math.round(current * (1 - (migrationPercent[0] / 100)))),
+    current: Math.round(metrics.total / Math.max(metrics.count, 1)),
+    projected: Math.max(0, Math.round((metrics.total / Math.max(metrics.count, 1)) * (1 - (migrationPercent[0] / 100)))),
   })).sort((a, b) => b.current - a.current);
 
   const reduction = Math.round(quantumDebtScore * (migrationPercent[0] / 100));
@@ -88,8 +93,8 @@ const PQCQuantumDebt = () => {
 
   const projectionData = Array.from({ length: 13 }, (_, index) => ({
     month: `M${index}`,
-    current: quantumDebtScore + (monthlyGrowth * index),
-    migrated: Math.max(0, (quantumDebtScore + (monthlyGrowth * index)) - (reduction * (index / 12))),
+    current: Math.max(0, quantumDebtScore + (safeMonthlyGrowth * index)),
+    migrated: Math.max(0, Math.max(0, quantumDebtScore + (safeMonthlyGrowth * index)) - (reduction * (index / 12))),
   }));
 
   const migrated = selectedAssets.filter((asset) => asset.status === 'elite-pqc').length;
@@ -116,7 +121,7 @@ const PQCQuantumDebt = () => {
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-3 text-center font-body">
-              Growing by ~{monthlyGrowth} units/month based on recent scan-to-scan debt movement
+              {safeMonthlyGrowth > 0 ? `Growing by ~+${safeMonthlyGrowth}` : safeMonthlyGrowth < 0 ? `Improving by ~${safeMonthlyGrowth}` : 'Flat at ~0'} units/month based on recent same-target scan movement
             </p>
           </CardContent>
         </Card>

@@ -1,4 +1,5 @@
 import type { Asset } from '@/data/demoData';
+import { isTransitionAsset } from '@/lib/status';
 
 interface QScoreOverviewProps {
   selectedAssets: Asset[];
@@ -12,7 +13,7 @@ const QScoreOverview = ({ selectedAssets }: QScoreOverviewProps) => {
 
   const breakdown = [
     { label: 'Quantum Safe', count: selectedAssets.filter((asset) => asset.status === 'elite-pqc').length, color: 'bg-status-safe' },
-    { label: 'PQC Transition', count: selectedAssets.filter((asset) => asset.status === 'safe').length, color: 'bg-blue-500' },
+    { label: 'PQC Transition', count: selectedAssets.filter(isTransitionAsset).length, color: 'bg-blue-500' },
     { label: 'Vulnerable', count: selectedAssets.filter((asset) => asset.status === 'vulnerable' || asset.status === 'standard').length, color: 'bg-accent-amber' },
     { label: 'Critical', count: selectedAssets.filter((asset) => asset.status === 'critical').length, color: 'bg-status-critical' },
     { label: 'Unknown', count: selectedAssets.filter((asset) => asset.status === 'unknown').length, color: 'bg-status-unknown' },

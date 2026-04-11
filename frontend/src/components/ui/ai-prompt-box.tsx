@@ -18,7 +18,7 @@ const ScanPromptBox = React.forwardRef<HTMLDivElement, ScanPromptBoxProps>(
       onScan,
       onDemoScan,
       isLoading = false,
-      placeholder = "Enter domain to scan (e.g. pnb.co.in)",
+      placeholder = "Enter domain to scan (e.g. aegis.com)",
       className,
       compact = false,
     },

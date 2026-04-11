@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Asset } from '@/data/demoData';
 import { cn } from '@/lib/utils';
+import { isTransitionAsset } from '@/lib/status';
 
 interface Insight {
   severity: 'critical' | 'high' | 'safe';
@@ -85,7 +86,7 @@ const generateInsights = (assets: Asset[]): Insight[] => {
     });
   }
 
-  const transitioning = assets.filter((asset) => asset.status === 'safe' || asset.status === 'standard');
+  const transitioning = assets.filter((asset) => isTransitionAsset(asset) || asset.status === 'standard');
   if (transitioning.length > 0) {
     insights.push({
       severity: 'high',

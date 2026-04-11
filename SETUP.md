@@ -69,6 +69,32 @@ To run a scan directly from your terminal and verify the engine logic:
 docker compose exec backend python simulation/run.py --target sc.com --skip-enumeration
 ```
 
+Alternative simulation modes:
+```bash
+docker compose exec backend python simulation/run.py --target sc.com --full-port-scan
+docker compose exec backend python simulation/run.py --target sc.com --format json
+```
+
+Score note:
+- `risk_score` is the deterministic backend risk value (higher is worse)
+- `q_score` is the dashboard readiness score (higher is better)
+- relation: `q_score = 100 - risk_score`
+
+Dashboard scan mode note:
+- The Quantum Readiness Scanner prompt accepts a **single target** URL/domain per run.
+- Pressing Enter in the scanner input immediately starts the scan.
+- The prompt includes a **Full Port Scan** toggle.
+- Disabled: bounded fast scan.
+- Enabled: bounded scan first, then full TCP sweep (1-65535).
+- The prompt includes a **Subdomain Enumeration** toggle:
+	- Enabled: full Amass-driven enumeration.
+	- Disabled: root + `www` hostname path only.
+- If Amass is unavailable in the runtime, enumeration automatically falls back to Certificate Transparency (`crt.sh`) discovery and deterministic hostname expansion.
+- During active queue scans, live logs retain extended history for long-running troubleshooting.
+- Discovery graph view auto-fits the current scan network so larger topologies remain visible.
+- Discovery graph supports zoom controls for dense multi-asset scopes.
+- Scan history and all-time discovery timelines are intentionally bounded/on-demand to keep dashboard navigation responsive for large scans.
+
 ## Monitoring and Logs
 
 - **Engine/Scanning Logs:** `docker compose logs -f backend`
@@ -78,5 +104,6 @@ docker compose exec backend python simulation/run.py --target sc.com --skip-enum
 ## Related Documentation
 
 - [README.md](./README.md)
-- [DATABASE.md](./DATABASE.md)
-- [API.md](./API.md)
+- [context/DATABASE.md](./context/DATABASE.md)
+- [context/API.md](./context/API.md)
+- [context/CONTEXT.md](./context/CONTEXT.md)

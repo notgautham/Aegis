@@ -1,53 +1,46 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const HISTORY_MAX_IDX_KEY = 'aegis-history-max-idx';
+
 const PageNavButtons = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const navHistory = useRef<string[]>([]);
-  const navPointer = useRef<number>(-1);
-  const isNavAction = useRef(false);
+  const [maxIdx, setMaxIdx] = useState<number>(() => {
+    const raw = sessionStorage.getItem(HISTORY_MAX_IDX_KEY);
+    const parsed = raw ? Number(raw) : 0;
+    return Number.isFinite(parsed) ? parsed : 0;
+  });
+
+  const currentIdx = useMemo(() => {
+    const value = (window.history.state as { idx?: number } | null)?.idx;
+    return typeof value === 'number' ? value : 0;
+  }, [location.key]);
 
   useEffect(() => {
-    const path = location.pathname + location.search;
+    setMaxIdx((prevMax) => {
+      const nextMax = Math.max(prevMax, currentIdx);
+      sessionStorage.setItem(HISTORY_MAX_IDX_KEY, String(nextMax));
+      return nextMax;
+    });
+  }, [currentIdx]);
 
-    if (isNavAction.current) {
-      isNavAction.current = false;
-      return;
-    }
-
-    // If current pointer path is the same, skip
-    if (navPointer.current >= 0 && navHistory.current[navPointer.current] === path) return;
-
-    // Truncate forward history and push
-    navHistory.current = navHistory.current.slice(0, navPointer.current + 1);
-    navHistory.current.push(path);
-
-    // Cap at 30
-    if (navHistory.current.length > 30) {
-      navHistory.current = navHistory.current.slice(-30);
-    }
-
-    navPointer.current = navHistory.current.length - 1;
-  }, [location.pathname, location.search]);
-
-  const canGoBack = navPointer.current > 0;
-  const canGoForward = navPointer.current < navHistory.current.length - 1;
+  const canGoBack = currentIdx > 0;
+  const canGoForward = currentIdx < maxIdx;
 
   const goBack = useCallback(() => {
-    if (!canGoBack) return;
-    isNavAction.current = true;
-    navPointer.current -= 1;
-    navigate(navHistory.current[navPointer.current], { replace: false });
+    if (canGoBack) {
+      navigate(-1);
+      return;
+    }
+    navigate('/dashboard');
   }, [canGoBack, navigate]);
 
   const goForward = useCallback(() => {
     if (!canGoForward) return;
-    isNavAction.current = true;
-    navPointer.current += 1;
-    navigate(navHistory.current[navPointer.current], { replace: false });
+    navigate(1);
   }, [canGoForward, navigate]);
 
   return (

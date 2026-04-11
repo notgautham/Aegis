@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 'recharts';
 import type { Asset } from '@/data/demoData';
+import { isTransitionAsset } from '@/lib/status';
 
 interface AssetRiskDistributionProps {
   selectedAssets: Asset[];
@@ -10,7 +11,7 @@ const AssetRiskDistribution = ({ selectedAssets }: AssetRiskDistributionProps) =
   const data = [
     { level: 'Critical', count: selectedAssets.filter((asset) => asset.status === 'critical').length, color: 'hsl(var(--status-critical))' },
     { level: 'High', count: selectedAssets.filter((asset) => asset.status === 'vulnerable').length, color: 'hsl(var(--status-vuln))' },
-    { level: 'Medium', count: selectedAssets.filter((asset) => asset.status === 'standard' || asset.status === 'safe').length, color: 'hsl(var(--accent-amber))' },
+    { level: 'Medium', count: selectedAssets.filter((asset) => asset.status === 'standard' || isTransitionAsset(asset)).length, color: 'hsl(var(--accent-amber))' },
     { level: 'Low', count: selectedAssets.filter((asset) => asset.status === 'elite-pqc').length, color: 'hsl(var(--status-safe))' },
   ];
 

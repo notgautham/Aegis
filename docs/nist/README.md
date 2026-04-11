@@ -4,7 +4,7 @@ Place the approved local reference documents for the Phase 6 remediation pipelin
 
 ## Purpose
 
-The ingestion pipeline in [scripts/ingest_nist_docs.py](/c:/Gautham/VSCode%20projects/Aegis/scripts/ingest_nist_docs.py) reads only local files from `docs/nist/`.
+The ingestion pipeline in [scripts/ingest_nist_docs.py](../../scripts/ingest_nist_docs.py) reads local files from this directory.
 
 This directory is intentionally local-only:
 - no remote fetching is performed by the core pipeline

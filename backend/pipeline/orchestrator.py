@@ -5,10 +5,15 @@ Phase 8 pipeline orchestration and compiled read models.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
+import json
 import logging
 import os
 import re
+import socket
 import uuid
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Callable, Sequence
@@ -60,6 +65,7 @@ from backend.models.discovered_asset import DiscoveredAsset
 from backend.models.certificate_chain import CertificateChain
 from backend.models.dns_record import DNSRecord
 from backend.models.enums import CertLevel, ComplianceTier, ScanStatus, ServiceType
+from backend.models.scan_job import ScanJob
 from backend.models.scan_event import ScanEvent
 from backend.models.remediation_action import (
     RemediationAction,
@@ -82,6 +88,34 @@ from backend.repositories import (
 
 logger = logging.getLogger(__name__)
 MAX_SCAN_RUNTIME_EVENTS = 60
+COMMON_ENUMERATION_PREFIXES: tuple[str, ...] = (
+    "www",
+    "api",
+    "auth",
+    "login",
+    "sso",
+    "portal",
+    "secure",
+    "vpn",
+    "mail",
+    "smtp",
+    "imap",
+    "pop",
+    "m",
+    "mobile",
+    "cdn",
+    "static",
+    "assets",
+    "img",
+    "media",
+    "status",
+    "support",
+    "admin",
+    "dev",
+    "test",
+    "staging",
+    "beta",
+)
 
 
 class ScanNotFoundError(RuntimeError):
@@ -273,11 +307,16 @@ class PipelineOrchestrator:
                 default_top_k=self.settings.RAG_TOP_K,
             )
         )
+        self._ip_enrichment_cache: dict[str, dict[str, Any]] = {}
+        self._domain_enrichment_cache: dict[str, dict[str, Any]] = {}
 
     async def run_scan(self, *, scan_id: uuid.UUID, target: str) -> None:
         """Run the full Phase 3-to-7 pipeline for one existing scan job."""
         terminal_status: ScanStatus | None = None
         terminal_timestamp: datetime | None = None
+        scan_profile = await self._get_scan_profile(scan_id)
+        full_port_scan_enabled = self._profile_requests_full_port_scan(scan_profile)
+        skip_enumeration = self._resolve_skip_enumeration(scan_profile)
 
         try:
             if self.runtime_store is not None:
@@ -289,7 +328,12 @@ class PipelineOrchestrator:
                     message="Scan execution started.",
                 )
             await self._transition_scan_to_running(scan_id)
-            discovery = await self._run_discovery(target, scan_id=scan_id)
+            discovery = await self._run_discovery(
+                target,
+                scan_id=scan_id,
+                full_port_scan_enabled=full_port_scan_enabled,
+                skip_enumeration=skip_enumeration,
+            )
             persisted_assets = await self._persist_discovered_assets(
                 scan_id=scan_id,
                 aggregated_assets=discovery.aggregated_assets,
@@ -510,9 +554,63 @@ class PipelineOrchestrator:
             )
             await session.commit()
 
-    async def _run_discovery(self, target: str, *, scan_id: uuid.UUID | None = None) -> _DiscoveryExecution:
+    async def _get_scan_profile(self, scan_id: uuid.UUID) -> str | None:
+        async with self.session_factory() as session:
+            repository = ScanJobRepository(session)
+            scan_job = await repository.get_by_id(scan_id)
+            if scan_job is None:
+                return None
+            return scan_job.scan_profile
+
+    @staticmethod
+    def _profile_requests_full_port_scan(scan_profile: str | None) -> bool:
+        if not scan_profile:
+            return False
+
+        normalized = scan_profile.lower()
+        return (
+            "full-port" in normalized
+            or "full_port" in normalized
+            or "full port" in normalized
+            or "all-ports" in normalized
+            or "all_ports" in normalized
+            or "all ports" in normalized
+        )
+
+    def _resolve_skip_enumeration(self, scan_profile: str | None) -> bool:
+        # Start from global setting and allow per-scan override.
+        if not scan_profile:
+            return self.settings.SKIP_ENUMERATION
+
+        normalized = scan_profile.lower()
+        if "full enumeration" in normalized or "enumeration enabled" in normalized:
+            return False
+        if "no enumeration" in normalized or "enumeration disabled" in normalized:
+            return True
+        return self.settings.SKIP_ENUMERATION
+
+    @staticmethod
+    def _augment_hostname_candidates(base_domain: str, hostnames: set[str]) -> int:
+        before = len(hostnames)
+        for prefix in COMMON_ENUMERATION_PREFIXES:
+            hostnames.add(f"{prefix}.{base_domain}")
+        return len(hostnames) - before
+
+    async def _run_discovery(
+        self,
+        target: str,
+        *,
+        scan_id: uuid.UUID | None = None,
+        full_port_scan_enabled: bool = False,
+        skip_enumeration: bool = False,
+    ) -> _DiscoveryExecution:
         scope = AuthorizedScope.from_target(target)
-        validated_hostnames = await self._resolve_hostnames(target, scope, scan_id=scan_id)
+        validated_hostnames = await self._resolve_hostnames(
+            target,
+            scope,
+            scan_id=scan_id,
+            skip_enumeration=skip_enumeration,
+        )
         ip_addresses = self._collect_scan_ips(scope, validated_hostnames)
         self._add_runtime_event(
             scan_id,
@@ -520,13 +618,27 @@ class PipelineOrchestrator:
             kind="info",
             stage="scanning_ports",
         )
-        port_findings = await self._scan_ports(ip_addresses, scan_id=scan_id)
+        port_findings = await self._scan_ports(
+            ip_addresses,
+            scan_id=scan_id,
+            full_port_scan_enabled=full_port_scan_enabled,
+        )
         tls_results = await self._probe_tls_targets(
             scope=scope,
             validated_hostnames=validated_hostnames,
             port_findings=port_findings,
             scan_id=scan_id,
         )
+
+        if len(port_findings) == 0:
+            fallback_tls_results = await self._probe_tls_fallback_without_port_findings(
+                scope=scope,
+                validated_hostnames=validated_hostnames,
+                ip_addresses=ip_addresses,
+                scan_id=scan_id,
+            )
+            if fallback_tls_results:
+                tls_results.extend(fallback_tls_results)
         
         # Call optional probes for VPN and API metadata
         vpn_results = []
@@ -571,6 +683,7 @@ class PipelineOrchestrator:
         scope: AuthorizedScope,
         *,
         scan_id: uuid.UUID | None = None,
+        skip_enumeration: bool = False,
     ) -> list[ValidatedHostname]:
         if scope.scope_type != "domain" or scope.domain is None:
             self._add_runtime_event(
@@ -582,10 +695,15 @@ class PipelineOrchestrator:
             return []
 
         hostnames = {scope.domain}
-        if self.settings.SKIP_ENUMERATION:
+        www_candidate = f"www.{scope.domain}"
+        hostnames.add(www_candidate)
+        if skip_enumeration:
             self._add_runtime_event(
                 scan_id,
-                f"Domain enumeration skipped via configuration; using root target only: {target}",
+                (
+                    "Domain enumeration skipped via configuration; "
+                    f"using root and www candidate hostnames: {target}, {www_candidate}"
+                ),
                 kind="info",
                 stage="enumerating_domains",
             )
@@ -623,6 +741,18 @@ class PipelineOrchestrator:
                 self._add_degraded_mode(
                     scan_id,
                     f"Domain enumeration failed for {target}; continued with the root target only.",
+                )
+
+            heuristic_additions = self._augment_hostname_candidates(scope.domain, hostnames)
+            if heuristic_additions > 0:
+                self._add_runtime_event(
+                    scan_id,
+                    (
+                        "Expanded enumeration scope with "
+                        f"{heuristic_additions} deterministic hostname candidates."
+                    ),
+                    kind="info",
+                    stage="enumerating_domains",
                 )
 
         self._set_runtime_stage(
@@ -691,6 +821,7 @@ class PipelineOrchestrator:
         ip_addresses: Sequence[str],
         *,
         scan_id: uuid.UUID | None = None,
+        full_port_scan_enabled: bool = False,
     ) -> list[PortFinding]:
         findings: list[PortFinding] = []
         if not ip_addresses:
@@ -702,15 +833,27 @@ class PipelineOrchestrator:
             )
             return findings
 
+        stage_message = (
+            "Running full TCP scan across all ports (1-65535) and bounded UDP discovery."
+            if full_port_scan_enabled
+            else "Running bounded TCP/UDP discovery across in-scope addresses."
+        )
+
         self._set_runtime_stage(
             scan_id,
             stage="scanning_ports",
             detail=f"{len(ip_addresses)} address(es)",
-            message="Running bounded TCP/UDP discovery across in-scope addresses.",
+            message=stage_message,
         )
 
         scan_results = await asyncio.gather(
-            *(self.port_scanner.scan_host(ip_address) for ip_address in ip_addresses),
+            *(
+                self.port_scanner.scan_host(
+                    ip_address,
+                    full_tcp_scan=full_port_scan_enabled,
+                )
+                for ip_address in ip_addresses
+            ),
             return_exceptions=True,
         )
         for ip_address, result in zip(ip_addresses, scan_results, strict=True):
@@ -803,6 +946,97 @@ class PipelineOrchestrator:
         )
         return tls_results
 
+    async def _probe_tls_fallback_without_port_findings(
+        self,
+        *,
+        scope: AuthorizedScope,
+        validated_hostnames: Sequence[ValidatedHostname],
+        ip_addresses: Sequence[str],
+        scan_id: uuid.UUID | None = None,
+    ) -> list[TLSProbeResult]:
+        """
+        Fallback TLS probing path for environments where nmap reports zero open ports.
+
+        This attempts direct TLS handshakes to common HTTPS ports using hostname+SNI.
+        """
+        common_tls_ports = (443, 8443)
+        targets: list[TLSScanTarget] = []
+        seen: set[tuple[str | None, str, int]] = set()
+
+        for validated in validated_hostnames:
+            normalized_hostname = validated.hostname.strip().lower().rstrip('.')
+            if not scope.contains(hostname=normalized_hostname):
+                continue
+            for ip_address in validated.ip_addresses:
+                for port in common_tls_ports:
+                    key = (normalized_hostname, ip_address, port)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    targets.append(
+                        TLSScanTarget(
+                            hostname=normalized_hostname,
+                            ip_address=ip_address,
+                            port=port,
+                            protocol='tcp',
+                        )
+                    )
+
+        if not targets and scope.scope_type in {'ip', 'network'}:
+            for ip_address in ip_addresses:
+                for port in common_tls_ports:
+                    key = (None, ip_address, port)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    targets.append(
+                        TLSScanTarget(
+                            hostname=None,
+                            ip_address=ip_address,
+                            port=port,
+                            protocol='tcp',
+                        )
+                    )
+
+        if not targets:
+            return []
+
+        self._add_runtime_event(
+            scan_id,
+            (
+                "Port scanning yielded 0 open findings; "
+                "attempting direct TLS fallback on common HTTPS ports (443, 8443)."
+            ),
+            kind='degraded',
+            stage='probing_tls',
+        )
+
+        results = await asyncio.gather(
+            *(self.tls_probe.probe(target) for target in targets),
+            return_exceptions=True,
+        )
+
+        tls_results: list[TLSProbeResult] = []
+        for target, result in zip(targets, results, strict=True):
+            if isinstance(result, Exception):
+                continue
+            if not result.cipher_suite or not result.tls_version:
+                continue
+            tls_results.append(result)
+
+        if tls_results:
+            self._add_runtime_event(
+                scan_id,
+                (
+                    "TLS fallback recovered "
+                    f"{len(tls_results)} successful handshake result(s) after empty port-scan output."
+                ),
+                kind='success',
+                stage='probing_tls',
+            )
+
+        return tls_results
+
     @staticmethod
     def _build_ip_hostname_index(
         scope: AuthorizedScope,
@@ -860,7 +1094,7 @@ class PipelineOrchestrator:
                         service_type=asset.service_type,
                         server_software=asset.server_software,
                         open_ports=open_ports,
-                        asset_metadata=dict(asset.metadata) if asset.metadata else None,
+                        asset_metadata=await self._build_asset_metadata(asset),
                         discovery_source=(
                             "dnsx"
                             if normalized_asset_hostname is not None
@@ -876,6 +1110,259 @@ class PipelineOrchestrator:
                 )
             await session.commit()
             return persisted_assets
+
+    async def _build_asset_metadata(self, asset: AggregatedAsset) -> dict[str, Any] | None:
+        metadata = dict(asset.metadata) if asset.metadata else {}
+        metadata["service_type"] = asset.service_type.value
+
+        network_enrichment = await self._enrich_ip(asset.ip_address)
+        if network_enrichment:
+            metadata["network_enrichment"] = network_enrichment
+
+        if asset.hostname:
+            domain_enrichment = await self._enrich_domain(asset.hostname)
+            if domain_enrichment:
+                metadata["domain_enrichment"] = domain_enrichment
+
+        return metadata or None
+
+    async def _enrich_ip(self, ip_address: str) -> dict[str, Any]:
+        normalized = ip_address.strip()
+        if normalized in self._ip_enrichment_cache:
+            return self._ip_enrichment_cache[normalized]
+
+        enrichment: dict[str, Any] = {}
+        try:
+            parsed_ip = ipaddress.ip_address(normalized)
+            if isinstance(parsed_ip, ipaddress.IPv4Address):
+                enrichment["subnet"] = str(ipaddress.ip_network(f"{normalized}/24", strict=False))
+            else:
+                enrichment["subnet"] = str(ipaddress.ip_network(f"{normalized}/64", strict=False))
+        except ValueError:
+            enrichment["subnet"] = None
+
+        reverse_dns = await asyncio.to_thread(self._safe_reverse_dns, normalized)
+        if reverse_dns:
+            enrichment["reverse_dns"] = reverse_dns
+
+        asn_payload = await asyncio.to_thread(self._lookup_asn_cymru, normalized)
+        if asn_payload:
+            enrichment.update(asn_payload)
+
+        if not enrichment.get("city") or not enrichment.get("country"):
+            geo_payload = await asyncio.to_thread(self._lookup_ip_geolocation, normalized)
+            if geo_payload:
+                for key, value in geo_payload.items():
+                    if value and not enrichment.get(key):
+                        enrichment[key] = value
+
+        self._ip_enrichment_cache[normalized] = enrichment
+        return enrichment
+
+    async def _enrich_domain(self, hostname: str) -> dict[str, Any]:
+        normalized = hostname.strip().lower().rstrip(".")
+        if normalized in self._domain_enrichment_cache:
+            return self._domain_enrichment_cache[normalized]
+
+        labels = normalized.split(".")
+        root_domain = ".".join(labels[-2:]) if len(labels) >= 2 else normalized
+        payload = {
+            "hostname": normalized,
+            "root_domain": root_domain,
+            "registrar": None,
+            "registration_date": None,
+            "expiry_date": None,
+            "nameservers": [],
+        }
+        rdap_enrichment = await asyncio.to_thread(self._lookup_domain_rdap, root_domain)
+        if rdap_enrichment:
+            payload.update(rdap_enrichment)
+        self._domain_enrichment_cache[normalized] = payload
+        return payload
+
+    def _lookup_domain_rdap(self, domain: str) -> dict[str, Any] | None:
+        endpoints = (
+            f"https://rdap.org/domain/{domain}",
+            f"https://rdap-bootstrap.arin.net/bootstrap/domain/{domain}",
+        )
+        headers = {
+            "Accept": "application/rdap+json, application/json",
+            "User-Agent": "Aegis-RDAP/1.0",
+        }
+
+        for url in endpoints:
+            try:
+                request = Request(url, headers=headers)
+                with urlopen(request, timeout=3.5) as response:
+                    if response.status >= 400:
+                        continue
+                    body = response.read().decode("utf-8", errors="ignore")
+                rdap = json.loads(body)
+            except (TimeoutError, URLError, HTTPError, json.JSONDecodeError):
+                continue
+            except Exception:
+                continue
+
+            parsed = self._parse_rdap_payload(rdap)
+            if parsed:
+                return parsed
+
+        return None
+
+    def _parse_rdap_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        registration_date: str | None = None
+        expiry_date: str | None = None
+        registrar: str | None = None
+        nameservers: list[str] = []
+
+        for event in payload.get("events", []):
+            if not isinstance(event, dict):
+                continue
+            action = str(event.get("eventAction", "")).strip().lower()
+            event_date = self._normalize_rdap_date(event.get("eventDate"))
+            if event_date is None:
+                continue
+            if registration_date is None and action in {"registration", "created"}:
+                registration_date = event_date
+            if expiry_date is None and action in {"expiration", "expiry", "expired"}:
+                expiry_date = event_date
+
+        entities = payload.get("entities", [])
+        if isinstance(entities, list):
+            for entity in entities:
+                if not isinstance(entity, dict):
+                    continue
+                roles = entity.get("roles", [])
+                if not isinstance(roles, list):
+                    continue
+                normalized_roles = {str(role).strip().lower() for role in roles}
+                if "registrar" in normalized_roles:
+                    registrar = self._extract_rdap_entity_name(entity)
+                    if registrar:
+                        break
+
+        raw_nameservers = payload.get("nameservers", [])
+        if isinstance(raw_nameservers, list):
+            for entry in raw_nameservers:
+                if not isinstance(entry, dict):
+                    continue
+                candidate = entry.get("ldhName") or entry.get("unicodeName")
+                if isinstance(candidate, str) and candidate.strip():
+                    nameservers.append(candidate.strip().lower())
+
+        if not registration_date and not expiry_date and not registrar and not nameservers:
+            return {}
+
+        return {
+            "registrar": registrar,
+            "registration_date": registration_date,
+            "expiry_date": expiry_date,
+            "nameservers": sorted(set(nameservers)),
+        }
+
+    @staticmethod
+    def _extract_rdap_entity_name(entity: dict[str, Any]) -> str | None:
+        vcard_array = entity.get("vcardArray")
+        if (
+            not isinstance(vcard_array, list)
+            or len(vcard_array) != 2
+            or not isinstance(vcard_array[1], list)
+        ):
+            return None
+
+        for field in vcard_array[1]:
+            if (
+                not isinstance(field, list)
+                or len(field) < 4
+                or str(field[0]).strip().lower() != "fn"
+            ):
+                continue
+            value = field[3]
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        return None
+
+    @staticmethod
+    def _normalize_rdap_date(value: Any) -> str | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+
+        normalized = value.strip()
+        if normalized.endswith("Z"):
+            normalized = normalized[:-1] + "+00:00"
+        try:
+            return datetime.fromisoformat(normalized).date().isoformat()
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _safe_reverse_dns(ip_address: str) -> str | None:
+        try:
+            host, _, _ = socket.gethostbyaddr(ip_address)
+            return host.rstrip(".").lower()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _lookup_asn_cymru(ip_address: str) -> dict[str, Any] | None:
+        query = f"begin\nverbose\n{ip_address}\nend\n".encode("utf-8")
+        try:
+            with socket.create_connection(("whois.cymru.com", 43), timeout=2.5) as sock:
+                sock.sendall(query)
+                response = sock.recv(8192).decode("utf-8", errors="ignore")
+        except Exception:
+            return None
+
+        lines = [line.strip() for line in response.splitlines() if line.strip()]
+        if len(lines) < 2:
+            return None
+
+        # Expected pipe-separated format:
+        # AS | IP | BGP Prefix | CC | Registry | Allocated | AS Name
+        parts = [part.strip() for part in lines[-1].split("|")]
+        if len(parts) < 7:
+            return None
+
+        asn = parts[0] if parts[0] and parts[0].isdigit() else None
+        as_name = parts[6] or None
+        return {
+            "asn": f"AS{asn}" if asn else None,
+            "netname": as_name,
+            "isp": as_name,
+            "city": None,
+            "country": None,
+        }
+
+    @staticmethod
+    def _lookup_ip_geolocation(ip_address: str) -> dict[str, Any] | None:
+        endpoint = f"https://ipapi.co/{ip_address}/json/"
+        request = Request(
+            endpoint,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "Aegis-IP-Enrichment/1.0",
+            },
+        )
+        try:
+            with urlopen(request, timeout=2.5) as response:
+                if response.status >= 400:
+                    return None
+                payload = json.loads(response.read().decode("utf-8", errors="ignore"))
+        except (TimeoutError, URLError, HTTPError, json.JSONDecodeError):
+            return None
+        except Exception:
+            return None
+
+        if not isinstance(payload, dict):
+            return None
+
+        return {
+            "city": payload.get("city") or None,
+            "country": payload.get("country_name") or None,
+            "asn": payload.get("asn") or None,
+            "isp": payload.get("org") or None,
+        }
 
     async def _process_tls_asset(
         self,
@@ -1305,8 +1792,20 @@ class PipelineOrchestrator:
             )
 
         parsed = parse_tls12_cipher_suite(tls_result.cipher_suite)
+        metadata = dict(tls_result.metadata)
+        metadata_kex = self._first_non_unknown(
+            metadata.get("kex_algorithm"),
+            metadata.get("negotiated_group"),
+            metadata.get("group_name"),
+            metadata.get("key_exchange"),
+            metadata.get("curve_name"),
+        )
+        resolved_kex_algorithm = parsed.kex_algorithm
+        if self._is_unknown_token(resolved_kex_algorithm) and metadata_kex is not None:
+            resolved_kex_algorithm = canonicalize_algorithm("kex", str(metadata_kex))
+
         risk = calculate_risk_score(
-            kex_vulnerability=parsed.kex_vulnerability,
+            kex_vulnerability=self._safe_lookup_vulnerability("kex", resolved_kex_algorithm),
             sig_vulnerability=parsed.sig_vulnerability,
             sym_vulnerability=parsed.sym_vulnerability,
             tls_version=tls_result.tls_version,
@@ -1314,11 +1813,11 @@ class PipelineOrchestrator:
         return _AssessmentInputs(
             tls_version=tls_result.tls_version,
             cipher_suite=tls_result.cipher_suite,
-            kex_algorithm=parsed.kex_algorithm,
+            kex_algorithm=resolved_kex_algorithm,
             auth_algorithm=parsed.auth_algorithm,
             enc_algorithm=parsed.enc_algorithm,
             mac_algorithm=parsed.mac_algorithm,
-            kex_vulnerability=parsed.kex_vulnerability,
+            kex_vulnerability=risk.kex_vulnerability,
             sig_vulnerability=parsed.sig_vulnerability,
             sym_vulnerability=parsed.sym_vulnerability,
             tls_vulnerability=risk.tls_vulnerability,
@@ -1350,19 +1849,23 @@ class PipelineOrchestrator:
             resolved = resolve_tls13_handshake_metadata(metadata)
             kex_algorithm = resolved.kex_algorithm
             auth_algorithm = resolved.auth_algorithm
+            if self._is_unknown_token(kex_algorithm) or self._is_unknown_token(auth_algorithm):
+                raise HandshakeMetadataResolutionError(
+                    "Resolved TLS 1.3 metadata contains unusable UNKNOWN values."
+                )
         except HandshakeMetadataResolutionError:
             auth_algorithm = canonicalize_algorithm(
                 "sig",
                 getattr(leaf_certificate, "public_key_algorithm", None)
                 or getattr(leaf_certificate, "signature_algorithm", None),
             )
-            group_name = (
-                metadata.get("kex_algorithm")
-                or metadata.get("negotiated_group")
-                or metadata.get("group_name")
-                or metadata.get("key_exchange")
-                or metadata.get("curve_name")
-                or "X25519"
+            group_name = self._first_non_unknown(
+                metadata.get("kex_algorithm"),
+                metadata.get("negotiated_group"),
+                metadata.get("group_name"),
+                metadata.get("key_exchange"),
+                metadata.get("curve_name"),
+                "X25519",
             )
             kex_algorithm = canonicalize_algorithm("kex", str(group_name))
 
@@ -1408,6 +1911,24 @@ class PipelineOrchestrator:
             return lookup_vulnerability(category, algorithm)
         except KeyError:
             return 1.0
+
+    @staticmethod
+    def _is_unknown_token(value: str | None) -> bool:
+        if value is None:
+            return True
+        normalized = str(value).strip().upper()
+        return normalized in {"", "UNKNOWN", "N/A", "NONE", "NULL"}
+
+    @classmethod
+    def _first_non_unknown(cls, *candidates: object) -> str | None:
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            as_text = str(candidate).strip()
+            if cls._is_unknown_token(as_text):
+                continue
+            return as_text
+        return None
 
 
 class ScanReadService:
@@ -1456,7 +1977,10 @@ class ScanReadService:
                     "assessment": serialize_assessment(bundle["assessments"].get(asset.id)),
                     "cbom": serialize_cbom(bundle["cboms"].get(asset.id)),
                     "remediation": serialize_remediation(bundle["remediations"].get(asset.id)),
-                    "certificate": serialize_certificate(
+                    "certificate": serialize_asset_certificate(
+                        bundle["leaf_certificates"].get(asset.id)
+                    ),
+                    "compliance_certificate": serialize_certificate(
                         bundle["certificates"].get(asset.id),
                         include_pem=False,
                     ),
@@ -1563,6 +2087,234 @@ class ScanReadService:
         return {
             "items": [self._serialize_recent_scan(bundle) for bundle in bundles],
         }
+
+    async def get_recent_activity(
+        self,
+        *,
+        limit: int = 25,
+    ) -> dict[str, Any]:
+        async with self.session_factory() as session:
+            rows = (
+                await session.execute(
+                    select(ScanEvent, ScanJob)
+                    .join(ScanJob, ScanEvent.scan_id == ScanJob.id)
+                    .order_by(ScanEvent.timestamp.desc(), ScanEvent.id.desc())
+                    .limit(limit)
+                )
+            ).all()
+
+        items: list[dict[str, Any]] = []
+        for event, scan in rows:
+            message = event.message
+            lowered = message.lower()
+            route = None
+            if "cbom" in lowered:
+                route = "/dashboard/cbom"
+            elif "certificate" in lowered:
+                route = "/dashboard/discovery?tab=ssl"
+            elif "remediation" in lowered or "vulnerable" in lowered:
+                route = "/dashboard/remediation/action-plan"
+            elif "discovered" in lowered or "dns" in lowered:
+                route = "/dashboard/discovery"
+
+            items.append(
+                {
+                    "timestamp": event.timestamp,
+                    "kind": event.kind,
+                    "message": message,
+                    "stage": event.stage,
+                    "scan_id": scan.id,
+                    "target": scan.target,
+                    "status": scan.status,
+                    "route": route,
+                }
+            )
+
+        return {"items": items}
+
+    async def get_network_graph(
+        self,
+        *,
+        scan_id: uuid.UUID | None = None,
+        limit: int = 150,
+    ) -> dict[str, list[Any]]:
+        async with self.session_factory() as session:
+            if scan_id is not None:
+                scan_row = (
+                    await session.execute(select(ScanJob).where(ScanJob.id == scan_id))
+                ).scalar_one_or_none()
+                if scan_row is None:
+                    raise ScanNotFoundError(f"Scan {scan_id} does not exist.")
+                selected_scan_id = scan_row.id
+            else:
+                selected_scan_id = (
+                    await session.execute(
+                        select(ScanJob.id)
+                        .where(ScanJob.status == ScanStatus.COMPLETED)
+                        .order_by(
+                            ScanJob.completed_at.desc().nullslast(),
+                            ScanJob.created_at.desc(),
+                        )
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+
+            if selected_scan_id is None:
+                return {"nodes": [], "edges": []}
+
+            assets = (
+                await session.execute(
+                    select(DiscoveredAsset)
+                    .where(DiscoveredAsset.scan_id == selected_scan_id)
+                    .order_by(DiscoveredAsset.hostname.asc(), DiscoveredAsset.port.asc())
+                    .limit(limit)
+                )
+            ).scalars().all()
+            if not assets:
+                return {"nodes": [], "edges": []}
+
+            asset_ids = [asset.id for asset in assets]
+            assessments = (
+                await session.execute(
+                    select(CryptoAssessment).where(
+                        CryptoAssessment.asset_id.in_(asset_ids)
+                    )
+                )
+            ).scalars().all()
+            assessments_by_asset_id = {
+                assessment.asset_id: assessment for assessment in assessments
+            }
+
+        status_rank = {
+            "critical": 4,
+            "unknown": 3,
+            "vulnerable": 2,
+            "transitioning": 1,
+            "elite-pqc": 0,
+        }
+
+        def combine_status(current: str | None, incoming: str) -> str:
+            if current is None:
+                return incoming
+            return incoming if status_rank[incoming] > status_rank[current] else current
+
+        def map_asset_status(assessment: CryptoAssessment | None) -> str:
+            if assessment is None:
+                return "unknown"
+            if assessment.compliance_tier is ComplianceTier.FULLY_QUANTUM_SAFE:
+                return "elite-pqc"
+            if assessment.compliance_tier is ComplianceTier.PQC_TRANSITIONING:
+                return "transitioning"
+            risk_score = assessment.risk_score or 0.0
+            if risk_score >= 70:
+                return "critical"
+            if risk_score >= 40:
+                return "vulnerable"
+            return "transitioning"
+
+        domain_to_ips: dict[str, list[str]] = {}
+        ip_to_ports: dict[str, list[tuple[str, str]]] = {}
+        domain_statuses: dict[str, str] = {}
+        ip_statuses: dict[str, str] = {}
+        port_statuses: dict[str, str] = {}
+
+        for asset in assets:
+            domain = (asset.hostname or asset.ip_address or "unknown").strip().lower()
+            ip = (asset.ip_address or domain).strip().lower()
+            port = str(asset.port)
+            port_id = f"{ip}:{port}"
+            status = map_asset_status(assessments_by_asset_id.get(asset.id))
+
+            domain_to_ips.setdefault(domain, [])
+            if ip not in domain_to_ips[domain]:
+                domain_to_ips[domain].append(ip)
+
+            ip_to_ports.setdefault(ip, [])
+            port_tuple = (port_id, port)
+            if port_tuple not in ip_to_ports[ip]:
+                ip_to_ports[ip].append(port_tuple)
+
+            domain_statuses[domain] = combine_status(domain_statuses.get(domain), status)
+            ip_statuses[ip] = combine_status(ip_statuses.get(ip), status)
+            port_statuses[port_id] = combine_status(port_statuses.get(port_id), status)
+
+        nodes: list[dict[str, Any]] = []
+        edges: list[list[str]] = []
+        seen_edges: set[tuple[str, str]] = set()
+
+        domain_positions: dict[str, float] = {}
+        ip_positions: dict[str, float] = {}
+        port_positions: dict[str, tuple[float, str]] = {}
+
+        sorted_domains = sorted(domain_to_ips.keys())
+        domain_y_step = 320 / max(len(sorted_domains), 1)
+        for domain_index, domain in enumerate(sorted_domains):
+            domain_positions[domain] = 20 + domain_y_step * (domain_index + 0.5)
+
+        sorted_ips = sorted(ip_to_ports.keys())
+        ip_y_step = 320 / max(len(sorted_ips), 1)
+        for ip_index, ip in enumerate(sorted_ips):
+            ip_positions[ip] = 20 + ip_y_step * (ip_index + 0.5)
+
+        for ip in sorted_ips:
+            ip_y = ip_positions[ip]
+            ports = sorted(ip_to_ports.get(ip, []), key=lambda item: int(item[1]))
+            for port_index, (port_id, port_label) in enumerate(ports):
+                if port_id not in port_positions:
+                    port_y = max(16.0, min(344.0, ip_y - 12 + (port_index * 12)))
+                    port_positions[port_id] = (port_y, port_label)
+
+        for domain in sorted_domains:
+            nodes.append(
+                {
+                    "id": domain,
+                    "label": domain,
+                    "status": domain_statuses.get(domain, "unknown"),
+                    "x": 120,
+                    "y": round(domain_positions[domain], 2),
+                    "r": 18,
+                }
+            )
+
+        for ip in sorted_ips:
+            nodes.append(
+                {
+                    "id": ip,
+                    "label": ip,
+                    "status": ip_statuses.get(ip, "unknown"),
+                    "x": 320,
+                    "y": round(ip_positions[ip], 2),
+                    "r": 14,
+                }
+            )
+
+        for port_id, (port_y, port_label) in sorted(port_positions.items()):
+            nodes.append(
+                {
+                    "id": port_id,
+                    "label": port_label,
+                    "status": port_statuses.get(port_id, "unknown"),
+                    "x": 500,
+                    "y": round(port_y, 2),
+                    "r": 9,
+                }
+            )
+
+        for domain in sorted_domains:
+            for ip in sorted(domain_to_ips[domain]):
+                edge = (domain, ip)
+                if edge not in seen_edges:
+                    seen_edges.add(edge)
+                    edges.append([domain, ip])
+
+        for ip in sorted_ips:
+            for port_id, _port_label in sorted(ip_to_ports.get(ip, []), key=lambda item: int(item[1])):
+                edge = (ip, port_id)
+                if edge not in seen_edges:
+                    seen_edges.add(edge)
+                    edges.append([ip, port_id])
+
+        return {"nodes": nodes, "edges": edges}
 
     async def get_latest_cbom(self, *, asset_id: uuid.UUID) -> dict[str, Any]:
         async with self.session_factory() as session:
@@ -2002,6 +2754,43 @@ def serialize_leaf_certificate(certificate_chain: CertificateChain | None) -> di
         "not_before": certificate_chain.not_before,
         "not_after": not_after,
         "days_remaining": (not_after - now).days if not_after is not None else None,
+    }
+
+
+def serialize_asset_certificate(certificate_chain: CertificateChain | None) -> dict[str, Any] | None:
+    """Build frontend-facing TLS certificate summary from the leaf certificate row."""
+    if certificate_chain is None:
+        return None
+
+    summary = serialize_leaf_certificate(certificate_chain)
+    if summary is None:
+        return None
+
+    public_key_algorithm = (summary.get("public_key_algorithm") or "").upper()
+    if "ML-DSA" in public_key_algorithm:
+        key_type = "ML-DSA"
+    elif "SLH-DSA" in public_key_algorithm:
+        key_type = "SLH-DSA"
+    elif "ECDSA" in public_key_algorithm or "EC" in public_key_algorithm:
+        key_type = "ECDSA"
+    else:
+        key_type = "RSA"
+
+    subject_cn = summary.get("subject_cn") or "unknown"
+    issuer = summary.get("issuer") or "Unknown"
+
+    return {
+        "subject_cn": subject_cn,
+        "subject_alt_names": [subject_cn] if subject_cn != "unknown" else [],
+        "issuer": issuer,
+        "certificate_authority": issuer,
+        "signature_algorithm": summary.get("signature_algorithm") or "unknown",
+        "key_type": key_type,
+        "key_size": summary.get("key_size_bits") or 0,
+        "valid_from": summary.get("not_before"),
+        "valid_until": summary.get("not_after"),
+        "days_remaining": summary.get("days_remaining"),
+        "sha256_fingerprint": "",
     }
 
 

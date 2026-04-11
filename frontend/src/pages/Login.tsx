@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Shield, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 
 const cryptoFragments = [
   'ML-KEM-768', 'RSA-2048', 'ECDHE-P384', 'SHA-256', 'AES-256-GCM',
@@ -34,16 +33,10 @@ const Login = () => {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (localStorage.getItem('aegis-auth') === 'true') {
-      navigate('/dashboard', { replace: true });
-    }
-  }, [navigate]);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if ((email.includes('aegis') || email.includes('pnb')) && password === 'aegis2026') {
+    if (email.includes('aegis') && password === 'aegis2026') {
       localStorage.setItem('aegis-auth', 'true');
       navigate('/dashboard');
     } else {
@@ -60,10 +53,10 @@ const Login = () => {
         ))}
         <div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-12">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-            <Shield className="w-16 h-16 text-accent-amber fill-accent-amber/20 mb-6 mx-auto" />
+            <img src="/logo.jpeg" alt="Aegis" className="w-16 h-16 rounded-xl mb-6 mx-auto" />
             <h2 className="font-display text-4xl italic text-white text-center mb-3">Quantum-Safe Banking</h2>
             <p className="font-body text-sm text-white/50 text-center max-w-sm">
-              Protecting India's financial infrastructure against quantum computing threats with NIST-compliant post-quantum cryptography.
+              Protecting financial infrastructure against quantum computing threats with NIST-compliant post-quantum cryptography.
             </p>
           </motion.div>
         </div>
@@ -73,7 +66,7 @@ const Login = () => {
       <div className="flex-1 lg:max-w-[520px] flex flex-col" style={{ background: 'hsl(258 38% 12%)' }}>
         {/* Institution strip */}
         <div className="px-8 py-3 text-center border-b border-white/5">
-          <span className="font-mono text-[10px] text-white/30 tracking-wider">PNB · IIT Kanpur · Department of Financial Services</span>
+          <span className="font-mono text-[10px] text-white/30 tracking-wider">AEGIS · Quantum Cryptographic Intelligence Platform</span>
         </div>
 
         <div className="flex-1 flex items-center justify-center px-8">
@@ -81,12 +74,8 @@ const Login = () => {
             {/* Logo + Tagline */}
             <div className="text-center mb-8">
               <div className="flex items-center justify-center gap-2 mb-3">
-                <Shield className="w-8 h-8 text-accent-amber fill-accent-amber/20" />
+                <img src="/logo.jpeg" alt="Aegis" className="w-8 h-8 rounded" />
                 <h1 className="font-mono text-3xl font-bold text-white tracking-wide">AEGIS</h1>
-              </div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-accent-amber/30 bg-accent-amber/5 mb-4">
-                <Shield className="w-3 h-3 text-accent-amber" />
-                <span className="font-mono text-[10px] text-accent-amber font-semibold">PQC-Ready</span>
               </div>
               <p className="font-body text-xs text-white/40 leading-relaxed">
                 Quantum Cryptographic Intelligence for Indian Banking Infrastructure
@@ -121,8 +110,24 @@ const Login = () => {
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Switch checked={remember} onCheckedChange={setRemember} className="scale-75" />
-                  <span className="font-body text-xs text-white/40">Remember me</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={remember}
+                    onClick={() => setRemember((value) => !value)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
+                      remember
+                        ? 'bg-[hsl(var(--brand-primary))] border-[hsl(var(--brand-primary))]'
+                        : 'bg-white/10 border-white/20'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                        remember ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                  <span className="font-body text-xs text-white/70">Remember me</span>
                 </div>
                 <button type="button" className="font-body text-xs text-accent-amber/70 hover:text-accent-amber">
                   Forgot Password?
@@ -152,7 +157,7 @@ const Login = () => {
 
         {/* Bottom strip */}
         <div className="px-8 py-3 text-center border-t border-white/5">
-          <span className="font-mono text-[10px] text-white/20">PNB Cybersecurity Hackathon 2026 · NIST FIPS 203/204/205 Compliant</span>
+          <span className="font-mono text-[10px] text-white/20">AEGIS Platform · NIST FIPS 203/204/205 Compliant</span>
         </div>
       </div>
     </div>

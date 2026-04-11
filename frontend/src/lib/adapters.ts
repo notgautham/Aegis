@@ -20,7 +20,8 @@ function mapStatus(raw: AssetResultResponse): Asset['status'] {
   const tier = raw.assessment?.compliance_tier;
   const risk = raw.assessment?.risk_score ?? 50;
   if (tier === 'FULLY_QUANTUM_SAFE') return 'elite-pqc';
-  if (tier === 'PQC_TRANSITIONING') return 'safe';
+  if (tier === 'PQC_TRANSITIONING') return 'transitioning';
+  if (tier === 'QUANTUM_VULNERABLE') return risk > 70 ? 'critical' : 'vulnerable';
   if (risk > 70) return 'critical';
   if (risk >= 40) return 'vulnerable';
   return 'standard';
@@ -30,9 +31,28 @@ function mapTier(raw: AssetResultResponse): Asset['tier'] {
   const tier = raw.assessment?.compliance_tier;
   const risk = raw.assessment?.risk_score ?? 50;
   if (tier === 'FULLY_QUANTUM_SAFE') return 'elite_pqc';
-  if (tier === 'PQC_TRANSITIONING') return 'standard';
-  if (risk > 40) return 'critical';
-  return 'legacy';
+  if (tier === 'PQC_TRANSITIONING') return 'transitioning';
+  if (tier === 'QUANTUM_VULNERABLE') return risk > 70 ? 'critical' : 'legacy';
+  if (risk > 70) return 'critical';
+  if (risk >= 40) return 'legacy';
+  return 'standard';
+}
+
+function mapBusinessCriticality(raw: AssetResultResponse): Asset['businessCriticality'] {
+  const metadata = raw.asset_metadata;
+  if (!metadata || typeof metadata !== 'object') return 'internal';
+  const candidate = metadata['business_criticality'];
+  if (candidate === 'customer_facing' || candidate === 'internal' || candidate === 'compliance_critical') {
+    return candidate;
+  }
+  return 'internal';
+}
+
+function mapOwnerTeam(raw: AssetResultResponse): string {
+  const metadata = raw.asset_metadata;
+  if (!metadata || typeof metadata !== 'object') return 'Unassigned';
+  const candidate = metadata['owner_team'];
+  return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : 'Unassigned';
 }
 
 function mapType(serviceType: string): Asset['type'] {
@@ -152,6 +172,7 @@ export function adaptAsset(raw: AssetResultResponse): Asset {
     certInfo: buildCertInfo(raw),
     qScore,
     status: mapStatus(raw),
+    complianceTier: raw.assessment?.compliance_tier ?? null,
     tier: mapTier(raw),
     ip: raw.ip_address ?? '',
     ipv6: '',
@@ -161,8 +182,8 @@ export function adaptAsset(raw: AssetResultResponse): Asset {
     dimensionScores: buildDimensionScores(raw),
     forwardSecrecy: hasForwardSecrecy(raw.assessment?.kex_algorithm),
     hstsEnabled: false,
-    ownerTeam: 'Unassigned',
-    businessCriticality: 'internal',
+    ownerTeam: mapOwnerTeam(raw),
+    businessCriticality: mapBusinessCriticality(raw),
     lastScanned: new Date().toISOString(),
     software: buildSoftware(raw),
     remediation: (raw.remediation_actions ?? []).map((item) => ({
@@ -196,12 +217,16 @@ function formatDate(iso: string): string {
 }
 
 function computeDuration(start: string, end: string | null): string {
-  if (!end) return '—';
+  if (!end) return '--';
   const ms = new Date(end).getTime() - new Date(start).getTime();
   const totalSec = Math.round(ms / 1000);
   const mins = Math.floor(totalSec / 60);
   const secs = totalSec % 60;
   return `${mins}m ${String(secs).padStart(2, '0')}s`;
+}
+
+function formatScanStatus(status: string): string {
+  return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
 }
 
 function computeFallbackScanQScore(summary: ScanHistoryResponse['items'][number]['summary']): number {
@@ -255,7 +280,7 @@ export function adaptScanHistory(response: ScanHistoryResponse): ScanHistoryEntr
       assetsFound: summary.total_assets ?? item.progress?.assets_discovered ?? 0,
       qScore,
       criticalFindings: summary.critical_assets ?? summary.vulnerable_assets ?? 0,
-      status: item.status === 'completed' ? 'Completed' : item.status,
+      status: formatScanStatus(item.status),
       fullyQuantumSafeAssets: summary.fully_quantum_safe_assets ?? 0,
       transitioningAssets: summary.transitioning_assets ?? 0,
       vulnerableAssets: summary.vulnerable_assets ?? 0,

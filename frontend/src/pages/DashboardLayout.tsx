@@ -14,38 +14,28 @@ import RainingLetters from '@/components/ui/raining-letters';
 import { GradientText } from '@/components/ui/gradient-text';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { X, Maximize2, Minimize2, CheckCircle2, Loader2, Clock, XCircle, Upload, StopCircle } from 'lucide-react';
+import { X, Maximize2, Minimize2, CheckCircle2, Loader2, Clock, XCircle, StopCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 const scanProfiles = ['Quick', 'Standard', 'Deep', 'PQC Focus'] as const;
-const exampleChips = ['pnb.co.in', 'vpn.pnb.co.in', 'netbanking.pnb.co.in', 'auth.pnb.co.in'];
+const exampleChips = ['aegis.com', 'api.aegis.com', 'auth.aegis.com', 'vpn.aegis.com'];
 
 type DashboardLocationState = {
   bypassPrompt?: boolean;
 } | null;
-
-const TargetChip = ({ value, onRemove }: { value: string; onRemove: () => void }) => (
-  <span className="group inline-flex items-center gap-1 font-mono text-xs bg-[hsl(var(--bg-sunken))] text-foreground px-2.5 py-1.5 rounded-lg border border-[hsl(var(--border-default))] transition-colors">
-    {value}
-    <button onClick={onRemove} className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 p-0.5 rounded hover:bg-[hsl(var(--status-critical)/0.15)]">
-      <X className="w-3 h-3 text-muted-foreground hover:text-[hsl(var(--status-critical))]" />
-    </button>
-  </span>
-);
 
 const DashboardLayout = () => {
   const [hasScanned, setHasScanned] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { setScannedDomain } = useScanContext();
-  const { queue, isRunning, minimized, setMinimized, toggleMinimize, cancelQueue, removeQueueItem, startQueue, logs, queueComplete } = useScanQueue();
+  const { queue, isRunning, minimized, setMinimized, toggleMinimize, cancelQueue, removeQueueItem, startQueue, logs, queueComplete, latestCompletedScanId } = useScanQueue();
   const { setSelectedScanId } = useSelectedScan();
   const [cancelConfirm, setCancelConfirm] = useState(false);
-  const [targets, setTargets] = useState<string[]>([]);
-  const [inputValue, setInputValue] = useState('');
+  const [targetInput, setTargetInput] = useState('');
   const [scanProfile, setScanProfile] = useState<string>('Standard');
-  const [fileMsg, setFileMsg] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [fullPortScanEnabled, setFullPortScanEnabled] = useState(false);
+  const [subdomainEnumerationEnabled, setSubdomainEnumerationEnabled] = useState(true);
   const lastSyncedCompletedScanId = useRef<string | null>(null);
 
   const pathname = location.pathname;
@@ -104,82 +94,43 @@ const DashboardLayout = () => {
     navigate(route);
   };
 
+  const resolveScanProfile = () => {
+    const segments = [scanProfile];
+    segments.push(fullPortScanEnabled ? 'Full Port Scan' : 'Bounded Port Scan');
+    segments.push(subdomainEnumerationEnabled ? 'Full Enumeration' : 'No Enumeration');
+    return segments.join(' + ');
+  };
+
   const handleScan = (domain: string) => {
     const trimmedDomain = domain.trim();
     if (!trimmedDomain) return;
     setScannedDomain(trimmedDomain);
     setHasScanned(true);
-    startQueue([trimmedDomain], scanProfile);
+    startQueue([trimmedDomain], resolveScanProfile());
   };
 
-  const handleDemoScan = () => {
-    setScannedDomain('pnb.co.in');
+  const startSingleTargetScan = () => {
+    const target = targetInput.trim();
+    if (!target) return;
+    setScannedDomain(target);
     setHasScanned(true);
-  };
-
-  const addChip = (domain: string) => {
-    const d = domain.trim();
-    if (d && !targets.includes(d)) {
-      setTargets((prev) => [...prev, d]);
-    }
-  };
-
-  const removeChip = (domain: string) => {
-    setTargets((prev) => prev.filter((target) => target !== domain));
+    startQueue([target], resolveScanProfile());
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === ',' || e.key === 'Enter') {
+    if (e.key === 'Enter') {
       e.preventDefault();
-      const val = inputValue.replace(/,/g, '').trim();
-      if (val) {
-        addChip(val);
-        setInputValue('');
-      }
-    } else if (e.key === 'Backspace' && !inputValue && targets.length > 0) {
-      setTargets((prev) => prev.slice(0, -1));
+      startSingleTargetScan();
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    if (val.includes(',')) {
-      const parts = val.split(',').map((part) => part.trim()).filter(Boolean);
-      parts.forEach((part) => addChip(part));
-      setInputValue('');
-    } else {
-      setInputValue(val);
-    }
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const lines = text.split(/[\r\n,]+/).map((line) => line.trim()).filter(Boolean);
-      setTargets((prev) => [...new Set([...prev, ...lines])]);
-      setFileMsg(`Loaded ${lines.length} targets from file`);
-      setTimeout(() => setFileMsg(''), 3000);
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  const handleStartQueue = () => {
-    const parsed = [...new Set(targets)];
-    if (parsed.length === 0) return;
-    setScannedDomain(parsed[0]);
-    setHasScanned(true);
-    startQueue(parsed, scanProfile);
-  };
+  const handleStartQueue = () => startSingleTargetScan();
 
   const handleRunDemo = () => {
-    setTargets(['pnb.co.in']);
-    setScannedDomain('pnb.co.in');
+    setTargetInput('aegis.com');
+    setScannedDomain('aegis.com');
     setHasScanned(true);
-    startQueue(['pnb.co.in'], 'Standard');
+    startQueue(['aegis.com'], resolveScanProfile());
   };
 
   useEffect(() => {
@@ -189,13 +140,12 @@ const DashboardLayout = () => {
   }, [shouldBypassPrompt]);
 
   useEffect(() => {
-    const latestCompletedScan = [...queue].reverse().find((item) => item.status === 'done' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.scanId));
-    if (!latestCompletedScan) return;
-    if (lastSyncedCompletedScanId.current === latestCompletedScan.scanId) return;
+    if (!latestCompletedScanId) return;
+    if (lastSyncedCompletedScanId.current === latestCompletedScanId) return;
 
-    lastSyncedCompletedScanId.current = latestCompletedScan.scanId;
-    setSelectedScanId(latestCompletedScan.scanId);
-  }, [queue, setSelectedScanId]);
+    lastSyncedCompletedScanId.current = latestCompletedScanId;
+    setSelectedScanId(latestCompletedScanId);
+  }, [latestCompletedScanId, setSelectedScanId]);
 
   const isHome = pathname === '/dashboard';
   const showPrompt = isHome && !hasScanned && !shouldBypassPrompt;
@@ -227,41 +177,30 @@ const DashboardLayout = () => {
               <RainingLetters />
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="relative z-10 text-center mb-8 bg-background px-6 py-4 rounded-xl">
                 <GradientText as="h1" className="font-body font-bold text-3xl lg:text-5xl mb-4">Quantum Readiness Scanner</GradientText>
-                <p className="font-body text-base text-muted-foreground max-w-md mx-auto">Enter target domains to generate a complete Cryptographic Bill of Materials and quantum risk assessment.</p>
+                <p className="font-body text-base text-muted-foreground max-w-md mx-auto">Enter a single target domain to generate a complete Cryptographic Bill of Materials and quantum risk assessment.</p>
               </motion.div>
 
               <div className="relative z-10 w-full max-w-2xl space-y-4">
                 <div className="w-full rounded-xl border border-[hsl(var(--border-default))] bg-background px-3 py-2.5 focus-within:ring-2 focus-within:ring-[hsl(var(--accent-amber))] transition-shadow">
-                  <div className="flex flex-wrap gap-2 items-center">
-                    {targets.map((target) => (
-                      <TargetChip key={target} value={target} onRemove={() => removeChip(target)} />
-                    ))}
-                    <input
-                      value={inputValue}
-                      onChange={handleInputChange}
-                      onKeyDown={handleInputKeyDown}
-                      placeholder={targets.length === 0 ? 'Enter targets separated by comma...' : 'Add more...'}
-                      className="flex-1 min-w-[160px] bg-transparent font-mono text-sm text-foreground placeholder:text-muted-foreground outline-none py-1"
-                    />
-                  </div>
+                  <input
+                    value={targetInput}
+                    onChange={(event) => setTargetInput(event.target.value)}
+                    onKeyDown={handleInputKeyDown}
+                    placeholder="Enter a single target domain (e.g. aegis.com)"
+                    className="w-full bg-transparent font-mono text-sm text-foreground placeholder:text-muted-foreground outline-none py-1"
+                  />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[10px] font-body text-muted-foreground">Examples:</span>
                   {exampleChips.map((domain) => (
-                    <button key={domain} onClick={() => addChip(domain)} className="font-mono text-xs text-muted-foreground px-3 py-1.5 rounded-lg border border-[hsl(var(--border-default))] hover:border-[hsl(var(--border-strong))] hover:text-foreground transition-colors">
+                    <button key={domain} onClick={() => setTargetInput(domain)} className="font-mono text-xs text-muted-foreground px-3 py-1.5 rounded-lg border border-[hsl(var(--border-default))] hover:border-[hsl(var(--border-strong))] hover:text-foreground transition-colors">
                       {domain}
                     </button>
                   ))}
                 </div>
 
                 <div className="flex items-center gap-3 flex-wrap">
-                  <input ref={fileRef} type="file" accept=".txt,.csv" className="hidden" onChange={handleFileUpload} />
-                  <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => fileRef.current?.click()}>
-                    <Upload className="w-3 h-3" /> Upload .txt / .csv
-                  </Button>
-                  {fileMsg && <span className="text-xs font-body text-[hsl(var(--status-safe))] animate-in fade-in">{fileMsg}</span>}
-                  <div className="h-4 w-px bg-border mx-1" />
                   <span className="text-xs font-body text-muted-foreground">Profile:</span>
                   <div className="flex gap-1 p-1 rounded-xl bg-[hsl(var(--bg-sunken))]">
                     {scanProfiles.map((profile) => (
@@ -276,12 +215,52 @@ const DashboardLayout = () => {
                   </div>
                 </div>
 
+                <div className="rounded-xl border border-[hsl(var(--border-default))] bg-[hsl(var(--bg-sunken))] px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-body font-semibold text-foreground">Full Port Scan</p>
+                      <p className="text-[11px] font-body text-muted-foreground">
+                        Scans all TCP ports (1-65535) instead of the bounded default set. Slower, but finds hidden services.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant={fullPortScanEnabled ? 'default' : 'outline'}
+                      size="sm"
+                      className="text-xs whitespace-nowrap"
+                      onClick={() => setFullPortScanEnabled((value) => !value)}
+                    >
+                      {fullPortScanEnabled ? 'Enabled' : 'Disabled'}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-[hsl(var(--border-default))] bg-[hsl(var(--bg-sunken))] px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-body font-semibold text-foreground">Subdomain Enumeration</p>
+                      <p className="text-[11px] font-body text-muted-foreground">
+                        Enabled uses full Amass enumeration (api/mail/vpn/etc). Disabled checks only root and www hostnames.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant={subdomainEnumerationEnabled ? 'default' : 'outline'}
+                      size="sm"
+                      className="text-xs whitespace-nowrap"
+                      onClick={() => setSubdomainEnumerationEnabled((value) => !value)}
+                    >
+                      {subdomainEnumerationEnabled ? 'Enabled' : 'Disabled'}
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="flex gap-3 pt-2">
                   <Button variant="outline" onClick={handleRunDemo} className="text-sm">
                     Run Demo Scan
                   </Button>
-                  <Button onClick={handleStartQueue} className="flex-1 text-sm" disabled={targets.length === 0}>
-                    Start Scan Queue
+                  <Button onClick={handleStartQueue} className="flex-1 text-sm" disabled={!targetInput.trim()}>
+                    Start Scan
                   </Button>
                 </div>
               </div>
@@ -338,7 +317,7 @@ const DashboardLayout = () => {
                 </div>
               ))}
             </div>
-            <div className="bg-[hsl(var(--bg-sunken))] rounded-lg p-3 max-h-48 overflow-y-auto">
+            <div className="bg-[hsl(var(--bg-sunken))] rounded-lg p-3 max-h-72 overflow-y-auto">
               <p className="text-[10px] font-mono text-muted-foreground uppercase mb-2">Live Log</p>
               {logs.map((line, index) => (
                 <p key={index} className="text-[10px] font-mono text-foreground/80">{line}</p>

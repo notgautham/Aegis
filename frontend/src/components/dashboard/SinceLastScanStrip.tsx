@@ -8,10 +8,11 @@ const SinceLastScanStrip = () => {
   const { selectedAssets } = useSelectedScan();
   const { data: scanHistory } = useQuery({
     queryKey: ['dashboard-since-last-scan'],
-    queryFn: async () => adaptScanHistory(await api.getScanHistory()),
+    queryFn: async () => adaptScanHistory(await api.getScanHistory({ limit: 10 })),
   });
-  const current = scanHistory?.[0];
-  const prev = scanHistory?.[1];
+  const completedScans = (scanHistory ?? []).filter((scan) => scan.status.toLowerCase() === 'completed');
+  const current = completedScans[0];
+  const prev = completedScans[1];
   if (!current || !prev) return null;
 
   const assetDelta = current.assetsFound - prev.assetsFound;
@@ -20,8 +21,13 @@ const SinceLastScanStrip = () => {
   const expiringSoon = selectedAssets.filter((asset) => asset.certInfo.days_remaining <= 7).length;
 
   const items = [
-    assetDelta !== 0 ? { text: `${assetDelta > 0 ? '+' : ''}${assetDelta} new assets discovered`, link: '/dashboard/discovery' } : null,
+    assetDelta > 0
+      ? { text: `+${assetDelta} new assets discovered`, link: '/dashboard/discovery' }
+      : assetDelta < 0
+        ? { text: `${Math.abs(assetDelta)} fewer assets discovered in latest scan`, link: '/dashboard/discovery' }
+        : null,
     critDelta > 0 ? { text: `${critDelta} new critical finding${critDelta > 1 ? 's' : ''}`, link: '/dashboard/remediation/action-plan' } : null,
+    critDelta < 0 ? { text: `${Math.abs(critDelta)} critical finding${Math.abs(critDelta) > 1 ? 's' : ''} resolved`, link: '/dashboard/remediation/action-plan' } : null,
     scoreDelta !== 0 ? { text: `Q-Score ${scoreDelta > 0 ? 'improved' : 'decreased'} ${scoreDelta > 0 ? '+' : ''}${scoreDelta}`, link: '/dashboard/rating/enterprise' } : null,
     expiringSoon > 0 ? { text: `${expiringSoon} certificate${expiringSoon > 1 ? 's' : ''} now expiring in <7 days`, link: '/dashboard/inventory' } : null,
   ].filter(Boolean);

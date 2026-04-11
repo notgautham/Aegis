@@ -1,18 +1,17 @@
 # Documentation
 
-This directory holds local project documentation and supporting reference material.
+This directory contains project documentation assets that are used directly by the local intelligence pipeline.
 
 ## Structure
 
 - `docs/nist/`
-  - Approved local Phase 6 intelligence corpus used for remediation retrieval and Qdrant ingestion
+  - Approved local corpus used by remediation retrieval and Qdrant ingestion.
 
-## Phase 6 Corpus
+## Corpus Documentation
 
-The actual remediation corpus guidance lives in [docs/nist/README.md](/c:/Gautham/VSCode%20projects/Aegis/docs/nist/README.md).
+Use [docs/nist/README.md](docs/nist/README.md) for:
 
-Use that file for:
-- accepted corpus formats
+- supported source file formats
 - ingestion commands
 - validation commands
-- corpus-specific notes
+- corpus maintenance notes

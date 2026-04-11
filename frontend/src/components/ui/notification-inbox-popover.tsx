@@ -26,10 +26,10 @@ interface Notification {
 }
 
 const initialNotifications: Notification[] = [
-  { id: 1, user: "AEGIS Scanner", action: "completed scan for", target: "vpn.pnb.co.in", timestamp: "10 minutes ago", unread: true, icon: GitMerge },
+  { id: 1, user: "AEGIS Scanner", action: "completed scan for", target: "vpn.aegis.com", timestamp: "10 minutes ago", unread: true, icon: GitMerge },
   { id: 2, user: "System", action: "generated", target: "CBOM Report v2.1", timestamp: "30 minutes ago", unread: true, icon: FileText },
   { id: 3, user: "PQC Engine", action: "flagged vulnerability in", target: "TLS 1.2 RSA-2048", timestamp: "2 hours ago", unread: false, icon: ClipboardCheck },
-  { id: 4, user: "AEGIS Scanner", action: "queued scan for", target: "netbanking.pnb.co.in", timestamp: "5 hours ago", unread: false, icon: Mail },
+  { id: 4, user: "AEGIS Scanner", action: "queued scan for", target: "portal.aegis.com", timestamp: "5 hours ago", unread: false, icon: Mail },
   { id: 5, user: "System", action: "updated", target: "NIST compliance matrix", timestamp: "1 day ago", unread: false, icon: MessageSquareQuote },
   { id: 6, user: "System", action: "alert:", target: "Certificate expiry in 30 days", timestamp: "3 days ago", unread: false, icon: AlertCircle },
 ];

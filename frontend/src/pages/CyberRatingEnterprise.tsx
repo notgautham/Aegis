@@ -17,10 +17,10 @@ const ratingTabs = [
 ];
 
 const tierThresholds = [
-  { status: 'Critical', range: '0-39', desc: 'Immediate remediation required', color: 'hsl(var(--status-critical))' },
+  { status: 'Critical', range: 'less than 40', desc: 'Immediate remediation required', color: 'hsl(var(--status-critical))' },
   { status: 'Legacy', range: '40-59', desc: 'Basic modernization required', color: 'hsl(var(--accent-amber))' },
-  { status: 'Standard', range: '60-79', desc: 'Stable but still transitioning to stronger PQC posture', color: 'hsl(210, 70%, 50%)' },
-  { status: 'Elite-PQC', range: '80-100', desc: 'PQC-ready, maintain and monitor', color: 'hsl(var(--status-safe))' },
+  { status: 'Standard', range: '60-79', desc: 'Stable but still transitioning to stronger PQC posture', color: 'hsl(var(--status-warn))' },
+  { status: 'Elite-PQC', range: '80 and above', desc: 'PQC-ready, maintain and monitor', color: 'hsl(var(--status-safe))' },
 ];
 
 const tiers = [
@@ -28,6 +28,11 @@ const tiers = [
     id: 'elite_pqc', label: 'Tier 1 - Elite-PQC', icon: Shield, color: 'hsl(var(--status-safe))', bgColor: 'hsl(var(--status-safe)/0.08)',
     criteria: ['TLS 1.3 only + strong ciphers', 'ML-KEM-768 or ML-DSA-65 implemented', 'ECDHE/ML-KEM + cert >=2048-bit', 'HSTS enabled + no weak protocols'],
     action: 'Maintain configuration and periodically monitor',
+  },
+  {
+    id: 'transitioning', label: 'Tier 2 - Transitioning', icon: Shield, color: 'hsl(var(--status-warn))', bgColor: 'hsl(var(--status-warn)/0.08)',
+    criteria: ['Partial PQC rollout in place', 'Hybrid key exchange appears on some assets', 'Classical dependencies still active', 'PQC migration not yet complete'],
+    action: 'Accelerate migration to Elite-PQC',
   },
   {
     id: 'standard', label: 'Tier 2 - Standard', icon: Shield, color: 'hsl(210, 70%, 50%)', bgColor: 'hsl(210, 70%, 50%/0.08)',
@@ -78,6 +83,11 @@ function getNextTier(score: number): { label: string; threshold: number } | null
   if (score < 60) return { label: 'Standard', threshold: 60 };
   if (score < 80) return { label: 'Elite-PQC', threshold: 80 };
   return null;
+}
+
+function isAssetInTierBucket(assetTier: Asset['tier'], bucket: string): boolean {
+  if (bucket === 'standard') return assetTier === 'standard' || assetTier === 'transitioning';
+  return assetTier === bucket;
 }
 
 const CyberRatingEnterprise = () => {
@@ -195,7 +205,7 @@ const CyberRatingEnterprise = () => {
             <div className="space-y-4 mt-4">
               {tiers.map((tier) => {
                 const TierIcon = tier.icon;
-                const tierAssets = selectedAssets.filter((asset) => asset.tier === tier.id);
+                const tierAssets = selectedAssets.filter((asset) => isAssetInTierBucket(asset.tier, tier.id));
                 return (
                   <div key={tier.id} className="p-4 rounded-lg border" style={{ borderLeftWidth: 4, borderLeftColor: tier.color }}>
                     <div className="flex items-center gap-2 mb-2">

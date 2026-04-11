@@ -177,6 +177,11 @@ Important columns:
 - `scan_profile` - optional scan-profile label
 - `initiated_by` - optional actor/source label
 
+Notes:
+
+- `scan_profile` is free-form text persisted as submitted by clients.
+- dashboard full-port mode is activated by profile text containing `full port`, `full-port`, `all ports`, or `all-ports`.
+
 Key relationships:
 
 - one-to-many `discovered_assets`
@@ -218,6 +223,24 @@ Key relationships:
 - one-to-many `remediation_actions`
 - one-to-many `compliance_certificates`
 
+`asset_metadata` JSON conventions used by current frontend-facing APIs:
+
+- `service_type` - normalized service type string
+- `domain_enrichment` (object, when hostname is available):
+  - `hostname`
+  - `root_domain`
+  - `registrar`
+  - `registration_date` (`YYYY-MM-DD` when available)
+  - `expiry_date` (`YYYY-MM-DD` when available)
+  - `nameservers` (array of strings)
+- `network_enrichment` (object, when IP enrichment resolves):
+  - `subnet`
+  - `reverse_dns`
+  - `asn`
+  - `netname`
+  - `isp`
+  - `city`
+
 ### `crypto_assessments`
 
 Model: [backend/models/crypto_assessment.py](./backend/models/crypto_assessment.py)
@@ -248,6 +271,7 @@ Notes:
 
 - vulnerability values are normalized floats in the `0.0` to `1.0` range
 - `risk_score` is a `0` to `100` score produced by the deterministic rules/scoring pipeline
+- frontend `q_score` is derived as `100 - risk_score` (higher is better)
 
 ### `certificate_chains`
 
@@ -438,6 +462,8 @@ The frontend does not query tables directly. The backend read service assembles:
 - compiled scan results
 - latest artifact per asset
 - mission-control overview
+- mission-control recent activity
+- mission-control network graph
 - scan history
 
 The main compiled payload comes from:

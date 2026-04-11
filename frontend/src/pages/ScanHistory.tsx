@@ -24,7 +24,7 @@ const ScanHistory = () => {
 
   const { data: liveScanHistory, isLoading } = useQuery({
     queryKey: ['scan-history'],
-    queryFn: async () => adaptScanHistory(await api.getScanHistory()),
+    queryFn: async () => adaptScanHistory(await api.getScanHistory({ limit: 200 })),
   });
 
   const scanHistory = useMemo(() => {
@@ -32,29 +32,42 @@ const ScanHistory = () => {
     return demoData.scanHistory;
   }, [liveScanHistory]);
 
+  const terminalScanHistory = useMemo(
+    () => scanHistory.filter((scan) => !['running', 'pending'].includes(scan.status.toLowerCase())),
+    [scanHistory],
+  );
+
   useEffect(() => {
-    if (scanHistory.length === 0) {
+    if (terminalScanHistory.length === 0) {
       setScanA('');
       setScanB('');
       return;
     }
 
-    if (!scanHistory.some((scan) => scan.id === scanA)) {
-      setScanA(scanHistory[0]?.id ?? '');
+    if (!terminalScanHistory.some((scan) => scan.id === scanA)) {
+      setScanA(terminalScanHistory[0]?.id ?? '');
     }
 
-    if (!scanHistory.some((scan) => scan.id === scanB)) {
-      setScanB(scanHistory[1]?.id ?? scanHistory[0]?.id ?? '');
+    if (!terminalScanHistory.some((scan) => scan.id === scanB)) {
+      setScanB(terminalScanHistory[1]?.id ?? terminalScanHistory[0]?.id ?? '');
     }
-  }, [scanA, scanB, scanHistory]);
+  }, [scanA, scanB, terminalScanHistory]);
 
-  const trendData = [...scanHistory].reverse().map(s => ({
+  const trendData = [...terminalScanHistory].reverse().map(s => ({
     date: s.started.split(',')[0],
     score: s.qScore,
   }));
 
-  const a = scanHistory.find(s => s.id === scanA);
-  const b = scanHistory.find(s => s.id === scanB);
+  const a = terminalScanHistory.find(s => s.id === scanA);
+  const b = terminalScanHistory.find(s => s.id === scanB);
+
+  const getStatusBadgeClassName = (status: string) => {
+    const normalizedStatus = status.toLowerCase();
+    if (normalizedStatus === 'completed') return 'bg-[hsl(var(--status-safe))] text-white';
+    if (normalizedStatus === 'running') return 'bg-[hsl(var(--accent-amber))] text-[hsl(var(--brand-primary))]';
+    if (normalizedStatus === 'failed') return 'bg-[hsl(var(--status-critical))] text-white';
+    return 'bg-[hsl(var(--status-unknown))] text-white';
+  };
 
   const openInDashboard = (scanId: string) => {
     setSelectedScanId(scanId);
@@ -101,7 +114,7 @@ const ScanHistory = () => {
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Actions</th>
               </tr></thead>
               <tbody>
-                {scanHistory.map((s, i) => (
+                {terminalScanHistory.map((s, i) => (
                   <tr
                     key={s.id}
                     className={`border-b border-border/50 hover:bg-[hsl(var(--bg-sunken))] cursor-pointer ${i % 2 === 0 ? 'bg-[hsl(var(--bg-sunken)/0.3)]' : ''}`}
@@ -117,7 +130,7 @@ const ScanHistory = () => {
                     <td className="px-3 py-2 font-mono">{s.assetsFound}</td>
                     <td className="px-3 py-2 font-mono font-bold">{s.qScore}</td>
                     <td className="px-3 py-2"><Badge variant="destructive" className="text-[10px]">{s.criticalFindings}</Badge></td>
-                    <td className="px-3 py-2"><Badge className="bg-[hsl(var(--status-safe))] text-white text-[10px]">{s.status}</Badge></td>
+                    <td className="px-3 py-2"><Badge className={`${getStatusBadgeClassName(s.status)} text-[10px]`}>{s.status}</Badge></td>
                     <td className="px-3 py-2 flex gap-1" onClick={e => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0" title="Open in Dashboard" onClick={() => openInDashboard(s.id)}><LayoutDashboard className="w-3.5 h-3.5" /></Button>
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { setScanA(s.id); setShowCompare(true); }}><GitCompareArrows className="w-3.5 h-3.5" /></Button>
@@ -155,12 +168,12 @@ const ScanHistory = () => {
           <div className="flex items-center gap-3 mb-4">
             <Select value={scanA} onValueChange={setScanA}>
               <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>{scanHistory.map(s => <SelectItem key={s.id} value={s.id}>{s.id}</SelectItem>)}</SelectContent>
+              <SelectContent>{terminalScanHistory.map(s => <SelectItem key={s.id} value={s.id}>{s.id}</SelectItem>)}</SelectContent>
             </Select>
             <span className="text-muted-foreground text-xs">vs</span>
             <Select value={scanB} onValueChange={setScanB}>
               <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>{scanHistory.map(s => <SelectItem key={s.id} value={s.id}>{s.id}</SelectItem>)}</SelectContent>
+              <SelectContent>{terminalScanHistory.map(s => <SelectItem key={s.id} value={s.id}>{s.id}</SelectItem>)}</SelectContent>
             </Select>
             <Button size="sm" className="h-8 text-xs" onClick={() => setShowCompare(true)}>Compare</Button>
           </div>

@@ -81,6 +81,12 @@ Common error types:
 - `PQC_TRANSITIONING`
 - `QUANTUM_VULNERABLE`
 
+### Score semantics
+
+- `risk_score` (0-100): higher is worse
+- `q_score` (0-100): higher is better
+- relation: `q_score = 100 - risk_score`
+
 ## Endpoints
 
 ### 1. `GET /health`
@@ -103,7 +109,9 @@ Request body:
 
 ```json
 {
-  "target": "example.com"
+  "target": "example.com",
+  "scan_profile": "quick",
+  "initiated_by": "frontend_scan_queue"
 }
 ```
 
@@ -133,10 +141,16 @@ Response shape:
 }
 ```
 
-Current limitations:
+Request field notes:
 
-- the backend currently accepts only `target`
-- scan profile, notes, and priority metadata shown in the UI are still frontend-local unless separately persisted
+- `target` is required
+- `scan_profile` is optional and persisted to `scan_jobs.scan_profile`
+- `initiated_by` is optional and persisted to `scan_jobs.initiated_by`
+
+`scan_profile` behavior currently used by the dashboard:
+
+- values containing `full port`, `full-port`, `all ports`, or `all-ports` enable full TCP scan mode
+- full mode is additive: bounded scan first, then full TCP sweep (1-65535)
 
 ### 3. `GET /api/v1/scan/{scan_id}`
 
@@ -288,9 +302,28 @@ Each asset contains:
 - `cbom`
 - `remediation`
 - `certificate`
+- `compliance_certificate`
 - `leaf_certificate`
 - `remediation_actions`
 - `asset_fingerprint`
+
+`asset_metadata` currently includes enrichment keys when available:
+
+- `service_type`
+- `domain_enrichment`:
+  - `hostname`
+  - `root_domain`
+  - `registrar`
+  - `registration_date`
+  - `expiry_date`
+  - `nameservers`
+- `network_enrichment`:
+  - `subnet`
+  - `reverse_dns`
+  - `asn`
+  - `netname`
+  - `isp`
+  - `city`
 
 #### `assessment`
 
@@ -332,6 +365,26 @@ Fields:
 
 #### `certificate`
 
+TLS certificate summary for frontend asset views.
+
+Fields:
+
+- `subject_cn`
+- `subject_alt_names`
+- `issuer`
+- `certificate_authority`
+- `signature_algorithm`
+- `key_type`
+- `key_size`
+- `valid_from`
+- `valid_until`
+- `days_remaining`
+- `sha256_fingerprint`
+
+#### `compliance_certificate`
+
+Persisted Aegis compliance certificate summary.
+
 Fields:
 
 - `id`
@@ -341,7 +394,7 @@ Fields:
 - `valid_until`
 - `extensions_json`
 - `remediation_bundle_id`
-- `certificate_pem`
+- `certificate_pem` (omitted in `scan/{id}/results`, present in `assets/{asset_id}/certificate`)
 
 #### `leaf_certificate`
 
@@ -510,7 +563,69 @@ Each item contains:
 - `tier`
 - `risk_score`
 
-### 9. `GET /api/v1/scan/history`
+### 9. `GET /api/v1/mission-control/activity`
+
+Return persisted recent scan events for dashboard activity feeds.
+
+Query parameters:
+
+- `limit` - optional integer, default `25`, min `1`, max `100`
+
+Response shape:
+
+```json
+{
+  "items": [
+    {
+      "timestamp": "2026-04-11T03:00:00Z",
+      "kind": "info",
+      "message": "Persisted 4 discovered assets.",
+      "stage": "discovering_assets",
+      "scan_id": "uuid",
+      "target": "example.com",
+      "status": "completed",
+      "route": "/dashboard/discovery"
+    }
+  ]
+}
+```
+
+### 10. `GET /api/v1/mission-control/graph`
+
+Return network graph nodes and edges derived from persisted scan assets.
+
+Query parameters:
+
+- `scan_id` - optional UUID; when omitted, uses latest completed scan
+- `limit` - optional integer, default `150`, min `1`, max `500`
+
+Response shape:
+
+```json
+{
+  "nodes": [
+    {
+      "id": "cloudflare.com",
+      "label": "cloudflare.com",
+      "status": "standard",
+      "x": 120,
+      "y": 180.0,
+      "r": 18
+    }
+  ],
+  "edges": [["cloudflare.com", "104.16.132.229"]]
+}
+```
+
+`status` values are one of:
+
+- `critical`
+- `unknown`
+- `standard`
+- `safe`
+- `elite-pqc`
+
+### 11. `GET /api/v1/scan/history`
 
 Return the scan-history timeline used by the frontend.
 
@@ -601,7 +716,7 @@ curl http://localhost:8000/health
 ```bash
 curl -X POST http://localhost:8000/api/v1/scan \
   -H "Content-Type: application/json" \
-  -d '{"target":"testssl.sh"}'
+  -d '{"target":"testssl.sh","scan_profile":"quick","initiated_by":"frontend_scan_queue"}'
 ```
 
 ## Current API Gaps
@@ -613,7 +728,6 @@ These are important missing capabilities, not hidden routes:
 - no report-generation/download endpoints
 - no scheduled-report CRUD endpoints
 - no notification APIs
-- no graph/relationship APIs
 
 ## Related Files
 

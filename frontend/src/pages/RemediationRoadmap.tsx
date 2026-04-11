@@ -99,7 +99,12 @@ const RemediationRoadmap = () => {
   const remediationBundleCount = selectedAssetResults.filter((asset) => asset.remediation).length;
   const certificateCount = selectedAssetResults.filter((asset) => asset.certificate).length;
   const hndlCount = selectedAssetResults.filter((asset) => asset.remediation?.hndl_timeline?.entries?.length).length;
-  const pqcReadyCount = selectedAssets.filter((asset) => asset.status === 'safe' || asset.status === 'elite-pqc').length;
+  const pqcReadyCount = selectedAssets.filter((asset) =>
+    asset.status === 'elite-pqc' ||
+    asset.status === 'transitioning' ||
+    asset.status === 'safe' ||
+    asset.complianceTier === 'PQC_TRANSITIONING'
+  ).length;
   const eliteCount = selectedAssets.filter((asset) => asset.status === 'elite-pqc').length;
   const criticalCount = selectedAssets.filter((asset) => asset.tier === 'critical').length;
   const openHighPriorityCount = openActions.filter((action) => action.priority === 'P1' || action.priority === 'P2').length;

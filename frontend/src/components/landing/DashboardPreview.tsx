@@ -9,10 +9,10 @@ const DashboardPreview = () => {
   ];
 
   const tableRows = [
-    { asset: 'vpn.pnb.co.in', tls: 'TLS 1.2', qScore: 24, status: 'CRITICAL', statusColor: 'var(--status-critical)' },
-    { asset: 'netbanking.pnb.co.in', tls: 'TLS 1.2', qScore: 71, status: 'VULNERABLE', statusColor: 'var(--status-vuln)' },
-    { asset: 'auth.pnb.co.in', tls: 'TLS 1.3', qScore: 85, status: 'STANDARD', statusColor: 'var(--status-warn)' },
-    { asset: 'pqc-api.pnb.co.in', tls: 'TLS 1.3+', qScore: 100, status: 'ELITE-PQC', statusColor: 'var(--status-safe)' },
+    { asset: 'vpn.aegis.com', tls: 'TLS 1.2', qScore: 24, status: 'CRITICAL', statusColor: 'var(--status-critical)' },
+    { asset: 'portal.aegis.com', tls: 'TLS 1.2', qScore: 71, status: 'VULNERABLE', statusColor: 'var(--status-vuln)' },
+    { asset: 'auth.aegis.com', tls: 'TLS 1.3', qScore: 85, status: 'STANDARD', statusColor: 'var(--status-warn)' },
+    { asset: 'pqc-api.aegis.com', tls: 'TLS 1.3+', qScore: 100, status: 'ELITE-PQC', statusColor: 'var(--status-safe)' },
   ];
 
   const sidebarItems = ['🏠 Overview', '🔍 Discovery', '📦 Inventory', '📋 CBOM', '🛡 PQC Posture', '⭐ Cyber Rating', '🔧 Remediation'];

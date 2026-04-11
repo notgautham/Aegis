@@ -28,7 +28,7 @@ const Navbar = () => {
         <img src="/logo.jpeg" alt="Aegis" className="w-6 h-6 rounded" />
         <div className="flex flex-col">
           <span className="font-body font-bold text-lg text-brand-primary leading-tight tracking-tight">AEGIS</span>
-          <span className="font-mono text-[10px] text-muted-foreground leading-none">by Punjab National Bank</span>
+          <span className="font-mono text-[10px] text-muted-foreground leading-none">for modern banking security</span>
         </div>
       </div>
 

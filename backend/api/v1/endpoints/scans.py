@@ -42,6 +42,8 @@ async def create_scan(
     scan_job = await repository.create(
         target=payload.target,
         status=ScanStatus.PENDING,
+        scan_profile=payload.scan_profile,
+        initiated_by=payload.initiated_by,
     )
     await session.commit()
 

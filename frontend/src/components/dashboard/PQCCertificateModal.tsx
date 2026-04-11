@@ -14,7 +14,10 @@ interface PQCCertificateModalProps {
 const PQCCertificateModal = ({ open, onOpenChange, asset }: PQCCertificateModalProps) => {
   const [copied, setCopied] = useState(false);
   const isElite = asset.status === 'elite-pqc';
-  const isTransitioning = asset.status === 'safe';
+  const isTransitioning =
+    asset.complianceTier === 'PQC_TRANSITIONING' ||
+    asset.status === 'transitioning' ||
+    asset.status === 'safe';
   const certId = `AEGIS-PQC-2026-${String(parseInt(asset.id.replace('a', '')) + 41).padStart(5, '0')}`;
   const issueDate = '2026-04-01';
   const expiryDate = '2027-04-01';
@@ -76,7 +79,7 @@ const PQCCertificateModal = ({ open, onOpenChange, asset }: PQCCertificateModalP
 
           {/* Verify URL */}
           <p className="text-[10px] font-mono text-muted-foreground">
-            Verify at: <span className="text-brand-primary">aegis.pnb.co.in/verify/{certId}</span>
+            Verify at: <span className="text-brand-primary">aegis.com/verify/{certId}</span>
           </p>
 
           {/* Actions */}

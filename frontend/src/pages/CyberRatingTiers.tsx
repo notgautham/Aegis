@@ -20,6 +20,12 @@ const tiers = [
     configs: { nginx: 'ssl_protocols TLSv1.3;\nssl_ecdh_curve X25519MLKEM768;\nssl_certificate /etc/ssl/ml-dsa-65.crt;', apache: 'SSLProtocol -all +TLSv1.3\nSSLOpenSSLConfCmd Curves X25519MLKEM768' },
   },
   {
+    id: 'transitioning', label: 'Tier 2 — Transitioning', icon: Shield, color: 'hsl(var(--status-warn))', bgColor: 'hsl(var(--status-warn)/0.08)',
+    criteria: ['Hybrid cryptography is partially deployed', 'Some assets advertise PQC-capable key exchange', 'Classical dependencies remain for compatibility', 'Migration in progress but not complete'],
+    action: 'Accelerate full PQC migration and remove classical fallback dependencies',
+    configs: {},
+  },
+  {
     id: 'standard', label: 'Tier 2 — Standard', icon: Shield, color: 'hsl(210, 70%, 50%)', bgColor: 'hsl(210, 70%, 50%/0.08)',
     criteria: ['TLS 1.2/1.3 supported', 'ECDHE key exchange + ≥2048-bit keys', 'Strong ciphers (AES-256-GCM)', 'Forward secrecy enabled'],
     action: 'Gradual Improvement — Disable legacy protocols, standardise cipher suites',

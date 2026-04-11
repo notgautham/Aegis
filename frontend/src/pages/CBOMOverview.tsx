@@ -4,6 +4,7 @@ import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { cn } from '@/lib/utils';
+import { isPqcReadyAsset } from '@/lib/status';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
 import IntelligencePanel from '@/components/dashboard/IntelligencePanel';
 import { FileText, Cpu, Package } from 'lucide-react';
@@ -71,7 +72,7 @@ const CBOMOverview = () => {
     { label: 'Sites Surveyed', value: displayAssets.filter((asset) => asset.type === 'web').length, color: 'var(--brand-primary)' },
     { label: 'Active Certificates', value: displayAssets.filter((asset) => asset.certInfo.days_remaining > 0).length, color: 'var(--status-safe)' },
     { label: 'Weak Crypto Instances', value: displayAssets.filter((asset) => asset.qScore <= 40).length, color: 'var(--status-critical)' },
-    { label: 'PQC-Ready (%)', value: `${displayAssets.length > 0 ? Math.round((displayAssets.filter((asset) => asset.status === 'elite-pqc' || asset.status === 'safe').length / displayAssets.length) * 100) : 0}%`, color: 'var(--status-safe)' },
+    { label: 'PQC-Ready (%)', value: `${displayAssets.length > 0 ? Math.round((displayAssets.filter(isPqcReadyAsset).length / displayAssets.length) * 100) : 0}%`, color: 'var(--status-safe)' },
   ];
 
   const weakCount = displayAssets.filter((asset) => asset.qScore <= 40).length;

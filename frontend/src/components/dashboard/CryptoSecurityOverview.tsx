@@ -7,16 +7,17 @@ interface CryptoSecurityOverviewProps {
 }
 
 const CryptoSecurityOverview = ({ selectedAssets }: CryptoSecurityOverviewProps) => {
-  const rows = selectedAssets.slice(0, 5);
+  const rows = selectedAssets;
 
   return (
     <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
       <CardHeader className="pb-2"><CardTitle className="text-sm font-body">Crypto & Security Overview</CardTitle></CardHeader>
       <CardContent className="p-0">
+        <div className="max-h-[22rem] overflow-y-auto">
         <table className="w-full text-xs font-body">
           <thead><tr className="border-b border-border bg-[hsl(var(--bg-sunken))]">
             <th className="text-left px-3 py-2 font-medium text-muted-foreground">Asset</th>
-            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Key</th>
+            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Key Exchange</th>
             <th className="text-left px-3 py-2 font-medium text-muted-foreground">Cipher Suite</th>
             <th className="text-left px-3 py-2 font-medium text-muted-foreground">TLS</th>
             <th className="text-left px-3 py-2 font-medium text-muted-foreground">CA</th>
@@ -32,7 +33,7 @@ const CryptoSecurityOverview = ({ selectedAssets }: CryptoSecurityOverviewProps)
                   isPqcRow && "border-l-2 border-l-[hsl(var(--status-safe))]"
                 )}>
                   <td className="px-3 py-2 font-mono font-medium">{a.domain}</td>
-                  <td className="px-3 py-2 font-mono text-muted-foreground">{a.certificate}</td>
+                  <td className="px-3 py-2 font-mono text-muted-foreground">{a.keyExchange}</td>
                   <td className={cn("px-3 py-2 font-mono text-[10px]", isWeak && "text-[hsl(var(--status-critical))] font-semibold")}>{a.cipher}</td>
                   <td className="px-3 py-2 font-mono text-muted-foreground">{a.tls}</td>
                   <td className="px-3 py-2 text-muted-foreground">{a.certInfo.certificate_authority}</td>
@@ -41,6 +42,7 @@ const CryptoSecurityOverview = ({ selectedAssets }: CryptoSecurityOverviewProps)
             })}
           </tbody>
         </table>
+        </div>
       </CardContent>
     </Card>
   );

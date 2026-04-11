@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,11 @@ import PQCCertificateModal from '@/components/dashboard/PQCCertificateModal';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
 function buildAssetScoreReason(asset: ReturnType<typeof useSelectedScan>['selectedAssets'][number]): string {
+  const isTransitionAsset =
+    asset.complianceTier === 'PQC_TRANSITIONING' ||
+    asset.status === 'transitioning' ||
+    asset.status === 'safe';
+
   const weakestDimensions = [
     { label: 'TLS version', value: asset.dimensionScores.tls_version },
     { label: 'key exchange', value: asset.dimensionScores.key_exchange },
@@ -31,7 +36,7 @@ function buildAssetScoreReason(asset: ReturnType<typeof useSelectedScan>['select
     return `AEGIS rates this asset as critical mainly because ${weakestDimensions.join(' and ')} remain weak, which keeps the quantum-readiness score depressed.`;
   }
 
-  if (asset.status === 'safe') {
+  if (isTransitionAsset) {
     return `AEGIS rates this asset as transition-ready because its baseline crypto is solid, but ${weakestDimensions.join(' and ')} still need improvement before it reaches elite PQC posture.`;
   }
 
@@ -53,11 +58,27 @@ function formatHistoryPointLabel(iso: string | null, index: number): string {
 
 const AssetDetail = () => {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [certModalOpen, setCertModalOpen] = useState(false);
   const { selectedAssets, selectedAssetResults } = useSelectedScan();
-  const asset = selectedAssets.find(a => a.domain.replace(/\./g, '-') === id);
+  const requestedPort = Number(searchParams.get('port'));
+  const asset = selectedAssets.find((candidate) => {
+    const sameDomain = candidate.domain.replace(/\./g, '-') === id;
+    if (!sameDomain) return false;
+    if (!Number.isFinite(requestedPort)) return true;
+    return candidate.port === requestedPort;
+  });
   const rawAsset = selectedAssetResults.find((candidate) => candidate.asset_id === asset?.id);
+  const relatedIps = useMemo(() => {
+    if (!asset) return [];
+    return [...new Set(
+      selectedAssets
+        .filter((candidate) => candidate.domain === asset.domain && candidate.port === asset.port)
+        .map((candidate) => candidate.ip)
+        .filter((value) => Boolean(value)),
+    )];
+  }, [asset, selectedAssets]);
   const history = useMemo(() => {
     if (!asset) {
       return [];
@@ -113,6 +134,10 @@ const AssetDetail = () => {
   });
 
   const isPqc = asset.status === 'elite-pqc';
+  const isTransitionAsset =
+    asset.complianceTier === 'PQC_TRANSITIONING' ||
+    asset.status === 'transitioning' ||
+    asset.status === 'safe';
   const isQuantumVuln = asset.certInfo.key_type === 'RSA' || asset.certInfo.key_type === 'ECDSA';
 
   const certChain = [
@@ -154,7 +179,7 @@ const AssetDetail = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          {(asset.status === 'elite-pqc' || asset.status === 'safe') ? (
+          {(asset.status === 'elite-pqc' || isTransitionAsset) ? (
             <Button variant="outline" className="gap-1.5 text-xs" onClick={() => setCertModalOpen(true)}>
               <Download className="w-3.5 h-3.5" /> Download Certificate
             </Button>
@@ -178,11 +203,11 @@ const AssetDetail = () => {
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-xs font-body">
             {[
-              ['Asset Name', asset.domain], ['URL', asset.url], ['IPv4', asset.ip], ['IPv6', asset.ipv6 || '—'],
+              ['Asset Name', asset.domain], ['URL', asset.url], ['IPv4', asset.ip], ['Observed IPv4s', relatedIps.join(', ') || asset.ip], ['IPv6', asset.ipv6 || '—'],
               ['Type', asset.type], ['Owner', asset.ownerTeam], ['Criticality', asset.businessCriticality.replace('_', ' ')], ['Tags', asset.type],
               ['First Seen', '2025-06-01'], ['Last Scanned', new Date(asset.lastScanned).toLocaleDateString()],
             ].map(([label, value]) => (
-              <div key={label as string}><span className="text-muted-foreground">{label}</span><p className="font-mono font-medium mt-0.5 truncate">{value}</p></div>
+              <div key={label as string}><span className="text-muted-foreground">{label}</span><p className="font-mono font-medium mt-0.5 whitespace-normal break-all">{value}</p></div>
             ))}
           </div>
         </CardContent>
@@ -217,6 +242,9 @@ const AssetDetail = () => {
       <Card className="shadow-sm">
         <CardHeader className="pb-2"><CardTitle className="text-sm font-body">Certificate Chain</CardTitle></CardHeader>
         <CardContent>
+          <p className="text-[10px] font-body text-muted-foreground mb-3">
+            Leaf certificate fields are sourced from scan data. Intermediate and root entries are rendered from available issuer metadata when a full persisted chain is not present.
+          </p>
           <div className="space-y-0">
             {certChain.map((node, i) => (
               <div key={node.label}>
@@ -233,10 +261,10 @@ const AssetDetail = () => {
                       {node.vuln ? <Badge variant="destructive" className="text-[9px]">Quantum Vulnerable</Badge> : <Badge className="bg-[hsl(var(--status-safe))] text-white text-[9px]">Quantum Safe</Badge>}
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-1.5 text-[11px] font-body">
-                      <div><span className="text-muted-foreground">CN</span><p className="font-mono truncate">{node.cn}</p></div>
-                      <div><span className="text-muted-foreground">Issuer</span><p className="font-mono truncate">{node.issuer}</p></div>
-                      <div><span className="text-muted-foreground">Algorithm</span><p className="font-mono">{node.algo}</p></div>
-                      <div><span className="text-muted-foreground">Key</span><p className="font-mono">{node.keySize}</p></div>
+                      <div><span className="text-muted-foreground">CN</span><p className="font-mono whitespace-normal break-all">{node.cn}</p></div>
+                      <div><span className="text-muted-foreground">Issuer</span><p className="font-mono whitespace-normal break-all">{node.issuer}</p></div>
+                      <div><span className="text-muted-foreground">Algorithm</span><p className="font-mono whitespace-normal break-all">{node.algo}</p></div>
+                      <div><span className="text-muted-foreground">Key</span><p className="font-mono whitespace-normal break-all">{node.keySize}</p></div>
                     </div>
                   </div>
                 </div>

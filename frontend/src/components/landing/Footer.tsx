@@ -6,11 +6,9 @@ const Footer = () => {
         <div>
           <div className="font-body font-extrabold text-xl text-accent-amber mb-1">AEGIS</div>
           <p className="font-body text-[13px] text-white/50">
-            Quantum-Aware Cryptographic Intelligence for Indian Banking
+            Quantum-Aware Cryptographic Intelligence for Banking Infrastructure
           </p>
-          <p className="font-mono text-[11px] text-white/30 mt-2">
-            PNB Cybersecurity Hackathon 2026
-          </p>
+          <p className="font-mono text-[11px] text-white/30 mt-2">Production-ready cryptographic posture platform</p>
         </div>
 
         {/* Right */}

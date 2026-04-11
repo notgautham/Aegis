@@ -1,9 +1,9 @@
 const LiveRiskMatrix = () => {
   const miniAssets = [
-    { domain: 'vpn.pnb.co.in', status: 'CRITICAL', color: 'var(--status-critical)' },
-    { domain: 'netbanking.pnb.co.in', status: 'VULNERABLE', color: 'var(--status-vuln)' },
-    { domain: 'auth.pnb.co.in', status: 'PQC TRANSITION', color: 'var(--status-warn)' },
-    { domain: 'pqc-api.pnb.co.in', status: 'QUANTUM SAFE', color: 'var(--status-safe)' },
+    { domain: 'vpn.aegis.com', status: 'CRITICAL', color: 'var(--status-critical)' },
+    { domain: 'portal.aegis.com', status: 'VULNERABLE', color: 'var(--status-vuln)' },
+    { domain: 'auth.aegis.com', status: 'PQC TRANSITION', color: 'var(--status-warn)' },
+    { domain: 'pqc-api.aegis.com', status: 'QUANTUM SAFE', color: 'var(--status-safe)' },
   ];
 
   return (

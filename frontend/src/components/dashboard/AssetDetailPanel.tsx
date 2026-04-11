@@ -47,7 +47,7 @@ const AssetDetailPanel = ({ asset, open, onClose }: AssetDetailPanelProps) => {
                 <SheetTitle className="font-mono text-sm truncate">{asset.domain}</SheetTitle>
                 <p className="font-mono text-[10px] text-muted-foreground">{asset.ip} • Port {asset.port}</p>
               </div>
-              <Badge className={`font-mono text-[10px] ${asset.status === 'critical' ? 'bg-status-critical/10 text-status-critical' : asset.status === 'safe' || asset.status === 'elite-pqc' ? 'bg-status-safe/10 text-status-safe' : 'bg-accent-amber/10 text-accent-amber'}`}>
+              <Badge className={`font-mono text-[10px] ${asset.status === 'critical' ? 'bg-status-critical/10 text-status-critical' : asset.status === 'safe' || asset.status === 'transitioning' || asset.status === 'elite-pqc' ? 'bg-status-safe/10 text-status-safe' : 'bg-accent-amber/10 text-accent-amber'}`}>
                 {getStatusLabel(asset.status)}
               </Badge>
             </div>

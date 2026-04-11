@@ -26,7 +26,7 @@ const Hero = () => {
 
         {/* Sub */}
         <p className="font-body text-base text-white/65 max-w-[380px] leading-relaxed mb-10">
-          The sovereign standard for post-quantum institutional risk. Automate your Cryptography Bill of Materials and protect India's financial infrastructure before quantum computers arrive.
+          The sovereign standard for post-quantum institutional risk. Automate your Cryptography Bill of Materials and protect financial infrastructure before quantum computers arrive.
         </p>
 
         {/* CTAs */}

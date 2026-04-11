@@ -3,12 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import KPIStrip from '@/components/dashboard/KPIStrip';
 import NetworkGraph from '@/components/dashboard/NetworkGraph';
 import CyberRating from '@/components/dashboard/CyberRating';
-import AssetTable from '@/components/dashboard/AssetTable';
 import QScoreOverview from '@/components/dashboard/QScoreOverview';
 import IntelligencePanel from '@/components/dashboard/IntelligencePanel';
 import CertExpiryTimeline from '@/components/dashboard/CertExpiryTimeline';
 import AssetRiskDistribution from '@/components/dashboard/AssetRiskDistribution';
-import CryptoSecurityOverview from '@/components/dashboard/CryptoSecurityOverview';
 import RecentActivityFeed from '@/components/dashboard/RecentActivityFeed';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import SinceLastScanStrip from '@/components/dashboard/SinceLastScanStrip';
@@ -20,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Shield, FileText, AlertTriangle, Wrench, CheckCircle2, FileBarChart, ExternalLink } from 'lucide-react';
-import { assets, getStatusColor, getStatusLabel, getQScoreColor } from '@/data/demoData';
+import { getStatusColor, getStatusLabel, getQScoreColor } from '@/data/demoData';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 
@@ -32,11 +30,42 @@ const DashboardHome = () => {
   const navigate = useNavigate();
   const [activeRole, setActiveRole] = useState<ViewRole>('analyst');
   const [complianceModalOpen, setComplianceModalOpen] = useState(false);
+  const [scanDetailSearch, setScanDetailSearch] = useState('');
   const isExec = activeRole === 'executive';
   const { selectedScanId, selectedScan, selectedAssets } = useSelectedScan();
 
   // Scan detail data
   const scanAssets = selectedAssets;
+  const groupedScanAssets = Object.values(
+    scanAssets.reduce<Record<string, { primary: (typeof scanAssets)[number]; uniqueIps: Set<string> }>>((acc, asset) => {
+      const groupKey = `${asset.domain}:${asset.port}`;
+      if (!acc[groupKey]) {
+        acc[groupKey] = {
+          primary: asset,
+          uniqueIps: new Set(asset.ip ? [asset.ip] : []),
+        };
+        return acc;
+      }
+
+      if (asset.ip) {
+        acc[groupKey].uniqueIps.add(asset.ip);
+      }
+
+      return acc;
+    }, {}),
+  ).map((group) => ({
+    ...group,
+    totalIpCount: group.uniqueIps.size,
+    extraIpCount: Math.max(group.uniqueIps.size - 1, 0),
+  }));
+  const filteredGroupedScanAssets = groupedScanAssets.filter(({ primary }) =>
+    `${primary.domain}:${primary.port}`.toLowerCase().includes(scanDetailSearch.toLowerCase()),
+  );
+  const securityOverviewRows = filteredGroupedScanAssets.map(({ primary: asset }) => ({
+    asset: `${asset.domain}:${asset.port}`,
+    certificateAuthority:
+      asset.certInfo.certificate_authority || asset.certInfo.issuer || 'Unavailable',
+  }));
   const prevScan = null;
   const allFindings = scanAssets.flatMap(a => a.remediation.map(r => ({ ...r, assetDomain: a.domain, assetId: a.id })));
   const newAssets = [] as typeof scanAssets;
@@ -68,19 +97,15 @@ const DashboardHome = () => {
             <NetworkGraph />
             <CyberRating selectedAssets={selectedAssets} />
           </div>
-          <div className="mb-5">
-            <AssetTable selectedAssets={selectedAssets} />
-          </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
             <QScoreOverview selectedAssets={selectedAssets} />
-            <IntelligencePanel assets={assets} />
+            <IntelligencePanel assets={selectedAssets} />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
             <CertExpiryTimeline selectedAssets={selectedAssets} />
             <AssetRiskDistribution selectedAssets={selectedAssets} />
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-            <CryptoSecurityOverview selectedAssets={selectedAssets} />
+          <div className="mb-5">
             <RecentActivityFeed />
           </div>
 
@@ -88,20 +113,33 @@ const DashboardHome = () => {
           <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-sm font-body">Scan Detail — {selectedScanId}</CardTitle>
-              <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => navigate(`/dashboard/scans/${selectedScanId}`)}>
-                <FileBarChart className="w-3.5 h-3.5" /> Full Report →
-              </Button>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={scanDetailSearch}
+                  onChange={(event) => setScanDetailSearch(event.target.value)}
+                  placeholder="Search assets..."
+                  className="font-mono text-xs bg-sunken border border-[hsl(var(--border-default))] rounded-lg px-3 py-1.5 w-56 focus:outline-none focus:border-brand-accent/50"
+                />
+                <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => navigate(`/dashboard/scans/${selectedScanId}`)}>
+                  <FileBarChart className="w-3.5 h-3.5" /> Full Report →
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="assets" className="w-full">
-                <TabsList className="grid grid-cols-4 w-full">
-                  <TabsTrigger value="assets" className="text-xs">Assets ({scanAssets.length})</TabsTrigger>
+                <TabsList className="grid grid-cols-5 w-full">
+                  <TabsTrigger value="assets" className="text-xs">Assets ({filteredGroupedScanAssets.length})</TabsTrigger>
                   <TabsTrigger value="findings" className="text-xs">Findings ({allFindings.length})</TabsTrigger>
+                  <TabsTrigger value="security" className="text-xs">Security Overview</TabsTrigger>
                   <TabsTrigger value="cbom" className="text-xs">CBOM Snapshot</TabsTrigger>
                   <TabsTrigger value="delta" className="text-xs">Delta vs Previous</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="assets">
+                  <p className="mb-2 text-[10px] font-body text-muted-foreground">
+                    Q-Score is derived from deterministic cryptographic algorithm risk. Certificate expiry is shown separately in the CERT EXPIRY column.
+                  </p>
                   <Table>
                     <TableHeader>
                       <TableRow className="border-border">
@@ -110,7 +148,8 @@ const DashboardHome = () => {
                         <TableHead className="font-mono text-[10px]">TYPE</TableHead>
                         <TableHead className="font-mono text-[10px]">TLS</TableHead>
                         <TableHead className="font-mono text-[10px]">CIPHER</TableHead>
-                        <TableHead className="font-mono text-[10px]">KEY</TableHead>
+                        <TableHead className="font-mono text-[10px]">KEY EXCHANGE</TableHead>
+                        <TableHead className="font-mono text-[10px]">CERT</TableHead>
                         <TableHead className="font-mono text-[10px]">Q-SCORE</TableHead>
                         <TableHead className="font-mono text-[10px]">PQC</TableHead>
                         <TableHead className="font-mono text-[10px]">CERT EXPIRY</TableHead>
@@ -118,13 +157,23 @@ const DashboardHome = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {scanAssets.map(a => (
-                        <TableRow key={a.id} className="border-border hover:bg-[hsl(var(--bg-sunken))] cursor-pointer" onClick={() => navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}`)}>
-                          <TableCell className="font-mono text-xs text-brand-primary">{a.domain}</TableCell>
-                          <TableCell className="font-mono text-xs text-muted-foreground">{a.ip}</TableCell>
+                      {filteredGroupedScanAssets.map(({ primary: a, extraIpCount, totalIpCount }) => (
+                        <TableRow key={`${a.domain}:${a.port}:${a.ip || 'no-ip'}`} className="border-border hover:bg-[hsl(var(--bg-sunken))] cursor-pointer" onClick={() => navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}?port=${a.port}`)}>
+                          <TableCell className="font-mono text-xs text-brand-primary">{a.domain}:{a.port}</TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1.5">
+                              <span>{a.ip || 'unknown ip'}</span>
+                              {extraIpCount > 0 && (
+                                <span className="inline-flex items-center rounded border border-[hsl(var(--border-default))] bg-sunken px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                  {totalIpCount} IPs
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell><Badge variant="secondary" className="text-[10px]">{a.type}</Badge></TableCell>
                           <TableCell className="font-mono text-xs">{a.tls}</TableCell>
-                          <TableCell className="font-mono text-[10px] max-w-[120px] truncate">{a.cipher}</TableCell>
+                          <TableCell className="font-mono text-[10px] max-w-[260px] whitespace-normal break-all">{a.cipher}</TableCell>
+                          <TableCell className="font-mono text-xs">{a.keyExchange}</TableCell>
                           <TableCell className="font-mono text-xs">{a.certificate}</TableCell>
                           <TableCell><span className="font-mono text-xs font-bold" style={{ color: getQScoreColor(a.qScore) }}>{a.qScore}</span></TableCell>
                           <TableCell><span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ color: getStatusColor(a.status), backgroundColor: `${getStatusColor(a.status)}15` }}>{getStatusLabel(a.status)}</span></TableCell>
@@ -136,7 +185,7 @@ const DashboardHome = () => {
                               className="h-7 gap-1.5 text-[10px] font-mono"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}`);
+                                navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}?port=${a.port}`);
                               }}
                             >
                               <ExternalLink className="w-3 h-3" /> View
@@ -181,6 +230,30 @@ const DashboardHome = () => {
                       ))}
                     </TableBody>
                   </Table>
+                </TabsContent>
+
+                <TabsContent value="security">
+                  <p className="mb-2 text-[10px] font-body text-muted-foreground">
+                    Focused certificate inventory for the selected scan.
+                  </p>
+                  <div className="max-h-[24rem] overflow-y-auto rounded-lg border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-border">
+                          <TableHead className="font-mono text-[10px]">ASSET</TableHead>
+                          <TableHead className="font-mono text-[10px]">CERTIFICATE AUTHORITY (CA)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {securityOverviewRows.map((row) => (
+                          <TableRow key={`${row.asset}:${row.certificateAuthority}`} className="border-border hover:bg-[hsl(var(--bg-sunken))]">
+                            <TableCell className="font-mono text-xs text-brand-primary">{row.asset}</TableCell>
+                            <TableCell className="font-body text-xs">{row.certificateAuthority}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="cbom">
@@ -276,11 +349,11 @@ const DashboardHome = () => {
                           <CardContent>
                             <div className="flex items-center gap-2 py-1.5 text-xs font-body">
                               <AlertTriangle className="w-3.5 h-3.5 text-[hsl(var(--status-critical))]" />
-                              TLS 1.0 re-enabled on staging.pnb.co.in
+                              TLS 1.0 re-enabled on staging.aegis.com
                             </div>
                             <div className="flex items-center gap-2 py-1.5 text-xs font-body">
                               <CheckCircle2 className="w-3.5 h-3.5 text-[hsl(var(--status-safe))]" />
-                              Certificate renewed on auth.pnb.co.in (resolved)
+                              Certificate renewed on auth.aegis.com (resolved)
                             </div>
                           </CardContent>
                         </Card>

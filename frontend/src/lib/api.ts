@@ -78,6 +78,17 @@ export interface CertificateResponse {
   sha256_fingerprint: string;
 }
 
+export interface ComplianceCertificateResponse {
+  id: string;
+  tier: string;
+  signing_algorithm: string;
+  valid_from: string;
+  valid_until: string;
+  extensions_json?: Record<string, unknown> | null;
+  remediation_bundle_id?: string | null;
+  certificate_pem?: string | null;
+}
+
 export interface LeafCertificate {
   subject_cn: string | null;
   issuer: string | null;
@@ -142,6 +153,7 @@ export interface AssetResultResponse {
   remediation: RemediationResponse | null;
   cbom: CbomResponse | null;
   certificate: CertificateResponse | null;
+  compliance_certificate?: ComplianceCertificateResponse | null;
   leaf_certificate: LeafCertificate | null;
   remediation_actions: RemediationActionItem[];
   asset_fingerprint: AssetFingerprintResponse | null;
@@ -221,11 +233,47 @@ export interface MissionControlResponse {
   [key: string]: unknown;
 }
 
+export interface MissionControlActivityItem {
+  timestamp: string;
+  kind: string;
+  message: string;
+  stage: string | null;
+  scan_id: string;
+  target: string;
+  status: string;
+  route: string | null;
+}
+
+export interface MissionControlActivityResponse {
+  items: MissionControlActivityItem[];
+}
+
+export interface MissionControlGraphNode {
+  id: string;
+  label: string;
+  status: string;
+  x: number;
+  y: number;
+  r: number;
+}
+
+export interface MissionControlGraphResponse {
+  nodes: MissionControlGraphNode[];
+  edges: Array<[string, string]>;
+}
+
 // ========== API Object ==========
 
 export const api = {
-  createScan: (target: string) =>
-    request<{ scan_id: string }>('POST', '/api/v1/scan', { target }),
+  createScan: (
+    target: string,
+    options?: { scan_profile?: string; initiated_by?: string },
+  ) =>
+    request<{ scan_id: string }>('POST', '/api/v1/scan', {
+      target,
+      scan_profile: options?.scan_profile ?? null,
+      initiated_by: options?.initiated_by ?? null,
+    }),
 
   getScanStatus: (scanId: string) =>
     request<ScanStatusResponse>('GET', `/api/v1/scan/${scanId}`),
@@ -248,8 +296,19 @@ export const api = {
     request<RemediationResponse>('GET', `/api/v1/assets/${assetId}/remediation`),
 
   getAssetCertificate: (assetId: string) =>
-    request<CertificateResponse>('GET', `/api/v1/assets/${assetId}/certificate`),
+    request<ComplianceCertificateResponse>('GET', `/api/v1/assets/${assetId}/certificate`),
 
   getMissionControl: () =>
     request<MissionControlResponse>('GET', '/api/v1/mission-control/overview'),
+
+  getMissionControlActivity: (limit = 25) =>
+    request<MissionControlActivityResponse>('GET', `/api/v1/mission-control/activity?limit=${limit}`),
+
+  getMissionControlGraph: (params?: { scanId?: string; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.scanId) search.set('scan_id', params.scanId);
+    if (params?.limit !== undefined) search.set('limit', String(params.limit));
+    const suffix = search.toString() ? `?${search.toString()}` : '';
+    return request<MissionControlGraphResponse>('GET', `/api/v1/mission-control/graph${suffix}`);
+  },
 };

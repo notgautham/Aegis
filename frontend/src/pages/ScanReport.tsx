@@ -13,6 +13,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import { api } from '@/lib/api';
 import { adaptScanHistory, adaptScanResults } from '@/lib/adapters';
+import { isPqcReadyAsset } from '@/lib/status';
 
 function isUUID(id: string | undefined): id is string {
   return !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -61,6 +62,30 @@ const ScanReport = () => {
   }, [scan]);
 
   const scanAssets = isUUID(scanId) ? currentAssets : demoCurrentAssets;
+  const groupedScanAssets = useMemo(
+    () => Object.values(
+      scanAssets.reduce<Record<string, { primary: Asset; uniqueIps: Set<string> }>>((acc, asset) => {
+        const groupKey = `${asset.domain}:${asset.port}`;
+        if (!acc[groupKey]) {
+          acc[groupKey] = {
+            primary: asset,
+            uniqueIps: new Set(asset.ip ? [asset.ip] : []),
+          };
+          return acc;
+        }
+
+        if (asset.ip) {
+          acc[groupKey].uniqueIps.add(asset.ip);
+        }
+
+        return acc;
+      }, {}),
+    ).map((group) => ({
+      ...group,
+      extraIpCount: Math.max(group.uniqueIps.size - 1, 0),
+    })),
+    [scanAssets],
+  );
 
   const prevScan = useMemo(() => {
     if (!scan) return undefined;
@@ -106,7 +131,7 @@ const ScanReport = () => {
 
   const criticalFindings = scanAssets.flatMap((asset) => asset.remediation.filter((finding) => finding.priority === 'P1'));
   const allFindings = scanAssets.flatMap((asset) => asset.remediation.map((finding) => ({ ...finding, assetDomain: asset.domain, assetId: asset.id })));
-  const pqcReady = scanAssets.filter((asset) => asset.status === 'elite-pqc' || asset.status === 'safe').length;
+  const pqcReady = scanAssets.filter(isPqcReadyAsset).length;
   const prevAssetKeys = new Set(prevAssets.map(assetKey));
   const newAssets = scanAssets.filter((asset) => !prevAssetKeys.has(assetKey(asset)));
 
@@ -179,7 +204,7 @@ const ScanReport = () => {
 
       <Tabs defaultValue="assets" className="w-full">
         <TabsList className="grid grid-cols-4 w-full">
-          <TabsTrigger value="assets" className="text-xs">Assets ({scanAssets.length})</TabsTrigger>
+          <TabsTrigger value="assets" className="text-xs">Assets ({groupedScanAssets.length})</TabsTrigger>
           <TabsTrigger value="findings" className="text-xs">Findings ({allFindings.length})</TabsTrigger>
           <TabsTrigger value="cbom" className="text-xs">CBOM Snapshot</TabsTrigger>
           <TabsTrigger value="delta" className="text-xs">Delta vs Previous</TabsTrigger>
@@ -196,20 +221,31 @@ const ScanReport = () => {
                     <TableHead className="font-mono text-[10px]">TYPE</TableHead>
                     <TableHead className="font-mono text-[10px]">TLS</TableHead>
                     <TableHead className="font-mono text-[10px]">CIPHER</TableHead>
-                    <TableHead className="font-mono text-[10px]">KEY</TableHead>
+                    <TableHead className="font-mono text-[10px]">KEY EXCHANGE</TableHead>
+                    <TableHead className="font-mono text-[10px]">CERT</TableHead>
                     <TableHead className="font-mono text-[10px]">Q-SCORE</TableHead>
                     <TableHead className="font-mono text-[10px]">PQC</TableHead>
                     <TableHead className="font-mono text-[10px]">CERT EXPIRY</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {scanAssets.map((asset) => (
-                    <TableRow key={asset.id} className="border-border">
-                      <TableCell className="font-mono text-xs text-brand-primary">{asset.domain}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{asset.ip}</TableCell>
+                  {groupedScanAssets.map(({ primary: asset, extraIpCount }) => (
+                    <TableRow key={`${asset.domain}:${asset.port}:${asset.ip || 'no-ip'}`} className="border-border">
+                      <TableCell className="font-mono text-xs text-brand-primary">{asset.domain}:{asset.port}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <span>{asset.ip || 'unknown ip'}</span>
+                          {extraIpCount > 0 && (
+                            <span className="inline-flex items-center rounded border border-[hsl(var(--border-default))] bg-sunken px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                              +{extraIpCount} IPs
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell><Badge variant="secondary" className="text-[10px]">{asset.type}</Badge></TableCell>
                       <TableCell className="font-mono text-xs">{asset.tls}</TableCell>
                       <TableCell className="font-mono text-[10px] max-w-[120px] truncate">{asset.cipher}</TableCell>
+                      <TableCell className="font-mono text-xs">{asset.keyExchange}</TableCell>
                       <TableCell className="font-mono text-xs">{asset.certificate}</TableCell>
                       <TableCell><span className="font-mono text-xs font-bold" style={{ color: getQScoreColor(asset.qScore) }}>{asset.qScore}</span></TableCell>
                       <TableCell><span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ color: getStatusColor(asset.status), backgroundColor: `${getStatusColor(asset.status)}15` }}>{getStatusLabel(asset.status)}</span></TableCell>

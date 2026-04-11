@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 export interface QueueItem {
   id: string;
   target: string;
+  profile: string;
   status: 'queued' | 'scanning' | 'done' | 'failed' | 'cancelled';
   scanId: string;
   progress: number;
@@ -24,6 +25,7 @@ interface ScanQueueContextType {
   scanProfile: string;
   notifications: ScanNotification[];
   logs: string[];
+  latestCompletedScanId: string | null;
   startQueue: (targets: string[], profile: string) => void;
   cancelQueue: () => void;
   removeQueueItem: (itemId: string) => void;
@@ -60,6 +62,7 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
   const [scanProfile, setScanProfile] = useState('standard');
   const [notifications, setNotifications] = useState<ScanNotification[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
+  const [latestCompletedScanId, setLatestCompletedScanId] = useState<string | null>(null);
   const [queueComplete, setQueueComplete] = useState(false);
 
   const queueRef = useRef<QueueItem[]>([]);
@@ -71,7 +74,10 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
   const queueCompleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addLog = useCallback((msg: string) => {
-    setLogs((prev) => [...prev.slice(-11), `[${new Date().toLocaleTimeString()}] ${msg}`]);
+    setLogs((prev) => {
+      const next = [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`];
+      return next.length > 1000 ? next.slice(next.length - 1000) : next;
+    });
   }, []);
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -101,13 +107,14 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [addLog, updateQueue]);
 
-  const buildQueueItems = useCallback((targets: string[]): QueueItem[] => {
+  const buildQueueItems = useCallback((targets: string[], profile: string): QueueItem[] => {
     return targets.map((target) => {
       queueItemCounterRef.current += 1;
       const id = `queue-item-${queueItemCounterRef.current}`;
       return {
         id,
         target,
+        profile,
         status: 'queued',
         scanId: `pending-${id}`,
         progress: 0,
@@ -139,7 +146,10 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
       let scanId = nextItem.scanId;
 
       try {
-        const { scan_id } = await api.createScan(nextItem.target);
+        const { scan_id } = await api.createScan(nextItem.target, {
+          scan_profile: nextItem.profile,
+          initiated_by: 'frontend_scan_queue',
+        });
         scanId = scan_id;
 
         if (cancelledRef.current || cancelledItemsRef.current.has(nextItem.id)) {
@@ -177,6 +187,7 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
                   ? { ...item, status: 'done', progress: 100, currentPhase: 'Complete' }
                   : item
               )));
+              setLatestCompletedScanId(scanId);
               addLog(`Scan complete: ${nextItem.target}`);
 
               const assetsFound = status.progress?.assets_discovered ?? 0;
@@ -256,7 +267,7 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    const items = buildQueueItems(freshTargets);
+    const items = buildQueueItems(freshTargets, profile);
 
     if (!runningRef.current) {
       runningRef.current = true;
@@ -316,6 +327,7 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
         scanProfile,
         notifications,
         logs,
+        latestCompletedScanId,
         startQueue,
         cancelQueue,
         removeQueueItem,

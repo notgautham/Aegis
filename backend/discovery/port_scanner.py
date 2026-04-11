@@ -35,11 +35,20 @@ class PortScanner:
         self.host_timeout_seconds = max(1, int(host_timeout_seconds))
         self.max_retries = max(0, int(max_retries))
 
-    async def scan_host(self, ip_address: str) -> list[PortFinding]:
+    async def scan_host(
+        self,
+        ip_address: str,
+        *,
+        full_tcp_scan: bool = False,
+    ) -> list[PortFinding]:
         """Scan a single IP for relevant TCP and UDP ports."""
-        return await asyncio.to_thread(self._scan_host_sync, ip_address)
+        return await asyncio.to_thread(
+            self._scan_host_sync,
+            ip_address,
+            full_tcp_scan,
+        )
 
-    def _scan_host_sync(self, ip_address: str) -> list[PortFinding]:
+    def _scan_host_sync(self, ip_address: str, full_tcp_scan: bool) -> list[PortFinding]:
         """Run the actual nmap scans synchronously."""
         try:
             import nmap
@@ -50,12 +59,25 @@ class PortScanner:
         findings: dict[tuple[str, int, str], PortFinding] = {}
 
         if self.tcp_ports:
+            # Always run bounded scan first so critical TLS ports are captured quickly.
             tcp_arguments = self._build_scan_arguments(
                 scan_type="-sS",
                 ports=self.tcp_ports,
+                full_scan=False,
             )
             self._run_scan(scanner, ip_address, tcp_arguments)
             self._collect_findings(scanner, ip_address, "tcp", findings)
+
+            # Full mode augments (does not replace) bounded scan findings.
+            if full_tcp_scan:
+                tcp_full_arguments = self._build_scan_arguments(
+                    scan_type="-sS",
+                    ports=self.tcp_ports,
+                    full_scan=True,
+                    host_timeout_seconds_override=self.host_timeout_seconds * 4,
+                )
+                self._run_scan(scanner, ip_address, tcp_full_arguments)
+                self._collect_findings(scanner, ip_address, "tcp", findings)
 
         if self.udp_ports:
             udp_arguments = self._build_scan_arguments(
@@ -72,9 +94,12 @@ class PortScanner:
         *,
         scan_type: str,
         ports: tuple[int, ...],
+        full_scan: bool = False,
+        host_timeout_seconds_override: int | None = None,
     ) -> str:
-        host_timeout = f"{self.host_timeout_seconds}s"
-        ports_arg = ",".join(str(port) for port in ports)
+        timeout_seconds = host_timeout_seconds_override or self.host_timeout_seconds
+        host_timeout = f"{max(1, int(timeout_seconds))}s"
+        ports_arg = "-" if full_scan and scan_type == "-sS" else ",".join(str(port) for port in ports)
         return (
             f"-Pn -n -T4 --max-retries {self.max_retries} "
             f"--host-timeout {host_timeout} {scan_type} -p {ports_arg}"

@@ -74,7 +74,9 @@ def _resolve_kex(metadata: Mapping[str, object]) -> tuple[str | None, str]:
             "tmp_key",
         )
         if value:
-            return canonicalize_algorithm("kex", str(value)), source
+            resolved = canonicalize_algorithm("kex", str(value))
+            if _is_usable_resolved_value(resolved):
+                return resolved, source
     return None, "unresolved"
 
 
@@ -105,7 +107,9 @@ def _resolve_auth(metadata: Mapping[str, object]) -> tuple[str | None, str]:
             "public_key_algorithm",
         )
         if value:
-            return canonicalize_algorithm("sig", str(value)), source
+            resolved = canonicalize_algorithm("sig", str(value))
+            if _is_usable_resolved_value(resolved):
+                return resolved, source
     return None, "unresolved"
 
 
@@ -113,3 +117,10 @@ def _mapping_child(metadata: Mapping[str, object], key: str) -> Mapping[str, obj
     """Return a nested mapping child if it exists."""
     value = metadata.get(key)
     return value if isinstance(value, Mapping) else None
+
+
+def _is_usable_resolved_value(value: str | None) -> bool:
+    if value is None:
+        return False
+    normalized = value.strip().upper()
+    return normalized not in {"", "UNKNOWN", "N/A", "NONE", "NULL"}

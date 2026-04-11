@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type { Asset } from '@/data/demoData';
+import { isTransitionAsset } from '@/lib/status';
 
 interface CountUpProps {
   end: number;
@@ -56,7 +57,7 @@ const KPIStrip = ({ execMode = false, selectedAssets }: KPIStripProps) => {
   const kpis = [
     { label: 'Total Assets', value: selectedAssets.length, color: 'text-brand-primary', dotColor: '' },
     { label: 'Fully Quantum Safe', value: selectedAssets.filter((asset) => asset.status === 'elite-pqc').length, color: 'text-status-safe', dotColor: '' },
-    { label: 'PQC Transition', value: selectedAssets.filter((asset) => asset.status === 'safe').length, color: 'text-blue-500', dotColor: '' },
+    { label: 'PQC Transition', value: selectedAssets.filter(isTransitionAsset).length, color: 'text-blue-500', dotColor: '' },
     { label: 'Quantum Vulnerable', value: selectedAssets.filter((asset) => asset.status === 'vulnerable' || asset.status === 'standard').length, color: 'text-status-vuln', dotColor: '' },
     { label: 'Critically Vulnerable', value: selectedAssets.filter((asset) => asset.status === 'critical').length, color: 'text-status-critical', dotColor: 'animate-pulse-dot' },
     { label: 'Unknown', value: selectedAssets.filter((asset) => asset.status === 'unknown').length, color: 'text-status-unknown', dotColor: '' },

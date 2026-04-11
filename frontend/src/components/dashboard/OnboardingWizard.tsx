@@ -23,7 +23,7 @@ const OnboardingWizard = () => {
   };
 
   const handleDemoScan = () => {
-    setScannedDomain('pnb.co.in');
+    setScannedDomain('aegis.com');
     setStep(3);
   };
 
@@ -53,7 +53,7 @@ const OnboardingWizard = () => {
             </p>
             <div className="p-4 rounded-lg bg-[hsl(var(--bg-sunken))] text-center">
               <p className="text-xs font-body text-muted-foreground mb-2">Try scanning:</p>
-              <code className="font-mono text-sm text-brand-primary">pnb.co.in</code>
+              <code className="font-mono text-sm text-brand-primary">aegis.com</code>
             </div>
             <div className="flex flex-col gap-2">
               <Button onClick={handleDemoScan} className="gap-1.5 text-sm">

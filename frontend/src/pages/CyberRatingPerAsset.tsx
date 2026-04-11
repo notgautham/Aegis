@@ -37,6 +37,7 @@ function buildWeaknessSummary(asset: Asset): string {
 const CyberRatingPerAsset = () => {
   const navigate = useNavigate();
   const { selectedAssets, selectedAssetResults } = useSelectedScan();
+  const useDemoTrendFallback = selectedAssetResults.length === 0;
 
   const resolvedTrendMap = useMemo<Record<string, { delta: number; direction: 'up' | 'down' | 'flat' }>>(() => {
     return Object.fromEntries(
@@ -113,10 +114,10 @@ const CyberRatingPerAsset = () => {
                 const chip = (v: number) => (
                   <span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ color: dimColor(v), backgroundColor: `${dimColor(v)}15` }}>{v}</span>
                 );
-                const trend = resolvedTrendMap[a.id] || assetTrends[a.domain] || { delta: 0, direction: 'flat' as const };
+                const trend = resolvedTrendMap[a.id] || (useDemoTrendFallback ? assetTrends[a.domain] : undefined) || { delta: 0, direction: 'flat' as const };
                 return (
                   <tr key={a.id} className={cn("border-b border-border/50 hover:bg-[hsl(var(--bg-sunken))]", i % 2 === 0 && "bg-[hsl(var(--bg-sunken)/0.3)]")}>
-                    <td className="px-3 py-2 cursor-pointer hover:text-brand-primary" onClick={() => navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}`)}>
+                    <td className="px-3 py-2 cursor-pointer hover:text-brand-primary" onClick={() => navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}?port=${a.port}`)}>
                       <div className="font-mono font-medium">{a.domain}</div>
                       <p className="mt-0.5 text-[10px] font-body text-muted-foreground">{buildWeaknessSummary(a)}</p>
                     </td>
@@ -152,7 +153,7 @@ const CyberRatingPerAsset = () => {
                         variant="outline"
                         size="sm"
                         className="h-7 gap-1.5 text-[10px] font-mono"
-                        onClick={() => navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}`)}
+                        onClick={() => navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}?port=${a.port}`)}
                       >
                         <ExternalLink className="h-3 w-3" />
                         View
