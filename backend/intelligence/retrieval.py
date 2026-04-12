@@ -10,6 +10,7 @@ import uuid
 import contextlib
 import os
 import hashlib
+import logging
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -39,6 +40,9 @@ class CorpusSetupError(RuntimeError):
 
 class RetrievalError(RuntimeError):
     """Raised when Qdrant retrieval or embedding generation fails."""
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,6 +321,50 @@ class RetrievalService:
                 )
             )
         return tuple(results)
+
+    def ensure_runtime_collection_compatibility(
+        self,
+        *,
+        source_dir: Path,
+        auto_recreate_on_mismatch: bool,
+    ) -> None:
+        """Ensure Qdrant collection dimensions match the active embedding provider.
+
+        If the collection is missing or incompatible, this can rebuild the corpus so
+        remediation retrieval does not fail at runtime.
+        """
+        try:
+            vector_size = len(self.embedding_provider.embed(["aegis-collection-healthcheck"])[0])
+        except Exception as exc:
+            logger.warning("Unable to compute embedding vector size for runtime compatibility check: %s", exc)
+            return
+
+        existing_size = self._get_collection_vector_size()
+        if existing_size == vector_size:
+            return
+
+        if existing_size is None:
+            logger.warning(
+                "Qdrant collection '%s' not found; ingesting corpus from %s.",
+                self.collection_name,
+                source_dir,
+            )
+            self.ingest_source_directory(source_dir, recreate_collection=True)
+            return
+
+        message = (
+            f"Qdrant collection '{self.collection_name}' vector size mismatch "
+            f"(collection={existing_size}, provider={vector_size})."
+        )
+        if not auto_recreate_on_mismatch:
+            raise RetrievalError(message)
+
+        logger.warning(
+            "%s Rebuilding collection from %s to restore compatibility.",
+            message,
+            source_dir,
+        )
+        self.ingest_source_directory(source_dir, recreate_collection=True)
 
     def load_documents(self, source_dir: Path) -> list[_LoadedDocument]:
         """Load supported local documents from the configured corpus directory."""

@@ -74,7 +74,7 @@ class PortScanner:
                     scan_type="-sS",
                     ports=self.tcp_ports,
                     full_scan=True,
-                    host_timeout_seconds_override=self.host_timeout_seconds * 4,
+                    host_timeout_seconds_override=min(self.host_timeout_seconds * 2, 60),
                 )
                 self._run_scan(scanner, ip_address, tcp_full_arguments)
                 self._collect_findings(scanner, ip_address, "tcp", findings)

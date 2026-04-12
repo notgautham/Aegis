@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     RAG_TOP_K: int = 5
     LLM_TIMEOUT_SECONDS: float = 15.0
     EMBEDDING_TIMEOUT_SECONDS: float = 15.0
+    RAG_AUTO_REBUILD_ON_VECTOR_MISMATCH: bool = True
 
     # Certificate issuer
     CERT_ISSUER_COMMON_NAME: str = "Aegis Compliance CA"

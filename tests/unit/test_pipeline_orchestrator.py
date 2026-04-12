@@ -324,3 +324,34 @@ async def test_runtime_store_records_degraded_amass_mode(tmp_path, session_facto
     assert snapshot is not None
     assert snapshot.degraded_modes
     assert any("root target only" in message.lower() for message in snapshot.degraded_modes)
+
+
+@pytest.mark.asyncio
+async def test_tls_sni_hostname_selection_caps_and_prioritizes_root_www(
+    tmp_path,
+    session_factory,
+    monkeypatch,
+) -> None:
+    root_domain = f"phase8-{uuid.uuid4().hex[:8]}.example.com"
+    ip_address = "198.51.100.99"
+    monkeypatch.setenv("AEGIS_MAX_TLS_SNI_PER_IP", "2")
+
+    orchestrator = build_phase8_orchestrator(
+        session_factory=session_factory,
+        tmp_path=tmp_path,
+        validated_hostnames=[ValidatedHostname(hostname=root_domain, ip_addresses=(ip_address,))],
+        port_findings_by_ip={},
+        tls_results_by_target={},
+    )
+
+    selected = orchestrator._select_tls_hostnames(
+        AuthorizedScope.from_target(root_domain),
+        {
+            root_domain,
+            f"www.{root_domain}",
+            f"api.{root_domain}",
+            f"status.{root_domain}",
+        },
+    )
+
+    assert selected == [root_domain, f"www.{root_domain}"]

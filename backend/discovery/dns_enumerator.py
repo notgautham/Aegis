@@ -25,7 +25,7 @@ class AmassEnumerator:
     def __init__(
         self,
         binary: str = "amass",
-        timeout_seconds: int = 120,
+        timeout_seconds: int = 45,
         fallback_max_hostnames: int = 300,
     ) -> None:
         self.binary = binary
@@ -58,7 +58,7 @@ class AmassEnumerator:
             "enum",
             "-passive",
             "-timeout",
-            "2",
+            "1",
             "-d",
             scope.domain,
             stdout=asyncio.subprocess.PIPE,

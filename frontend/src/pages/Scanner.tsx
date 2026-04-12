@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import { useScanContext } from '@/contexts/ScanContext';
 import { useScanQueue } from '@/contexts/ScanQueueContext';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import RainingLetters from '@/components/ui/raining-letters';
 import { GradientText } from '@/components/ui/gradient-text';
 import { Button } from '@/components/ui/button';
@@ -33,12 +35,16 @@ const exampleChips = ['example.com', 'iana.org', 'neverssl.com', 'www.gnu.org'];
 
 const Scanner = () => {
   const [targetInput, setTargetInput] = useState('');
-  const [scanProfile, setScanProfile] = useState<string>('Standard');
+  const [scanProfile, setScanProfile] = useState<string>('Quick');
   const [fullPortScanEnabled, setFullPortScanEnabled] = useState(false);
   const [subdomainEnumerationEnabled, setSubdomainEnumerationEnabled] = useState(false);
+  const startedFromScannerRef = useRef(false);
+  const lastRedirectedScanIdRef = useRef<string | null>(null);
 
+  const navigate = useNavigate();
   const { setScannedDomain } = useScanContext();
-  const { startQueue } = useScanQueue();
+  const { startQueue, latestCompletedScanId, isRunning } = useScanQueue();
+  const { setSelectedScanId } = useSelectedScan();
 
   const resolveScanProfile = () => {
     const segments = [scanProfile];
@@ -51,9 +57,22 @@ const Scanner = () => {
     const target = targetInput.trim();
     if (!target) return;
 
+    startedFromScannerRef.current = true;
     setScannedDomain(target);
     startQueue([target], resolveScanProfile());
   };
+
+  useEffect(() => {
+    if (!startedFromScannerRef.current) return;
+    if (isRunning) return;
+    if (!latestCompletedScanId) return;
+    if (lastRedirectedScanIdRef.current === latestCompletedScanId) return;
+
+    lastRedirectedScanIdRef.current = latestCompletedScanId;
+    startedFromScannerRef.current = false;
+    setSelectedScanId(latestCompletedScanId);
+    navigate('/dashboard', { state: { bypassPrompt: true } });
+  }, [isRunning, latestCompletedScanId, navigate, setSelectedScanId]);
 
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
@@ -103,7 +122,22 @@ const Scanner = () => {
               {scanProfiles.map((profile) => (
                 <button
                   key={profile.key}
-                  onClick={() => setScanProfile(profile.key)}
+                  onClick={() => {
+                    setScanProfile(profile.key);
+                    if (profile.key === 'Deep') {
+                      setFullPortScanEnabled(true);
+                      setSubdomainEnumerationEnabled(true);
+                      return;
+                    }
+                    if (profile.key === 'PQC Focus') {
+                      setFullPortScanEnabled(false);
+                      setSubdomainEnumerationEnabled(false);
+                      return;
+                    }
+                    // Quick and Standard default to bounded/no-enumeration for fast deterministic runs.
+                    setFullPortScanEnabled(false);
+                    setSubdomainEnumerationEnabled(false);
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-body transition-all ${scanProfile === profile.key ? 'bg-[hsl(var(--accent-amber))] text-white font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                 >
                   {profile.title}

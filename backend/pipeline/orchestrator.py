@@ -12,6 +12,7 @@ import os
 import re
 import socket
 import uuid
+from pathlib import Path
 from collections import defaultdict
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -21,6 +22,7 @@ from typing import Any, Callable, Sequence
 
 from qdrant_client import QdrantClient
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.analysis import (
@@ -310,6 +312,7 @@ class PipelineOrchestrator:
                 default_top_k=self.settings.RAG_TOP_K,
             )
         )
+        self._ensure_retrieval_runtime_compatibility()
         self._ip_enrichment_cache: dict[str, dict[str, Any]] = {}
         self._domain_enrichment_cache: dict[str, dict[str, Any]] = {}
         self.tls_probe_concurrency = max(
@@ -324,6 +327,25 @@ class PipelineOrchestrator:
             1,
             int(os.getenv("AEGIS_ASSET_PROCESSING_CONCURRENCY", "24")),
         )
+        self.max_tls_sni_targets_per_ip = max(
+            1,
+            int(os.getenv("AEGIS_MAX_TLS_SNI_PER_IP", "3")),
+        )
+
+    def _ensure_retrieval_runtime_compatibility(self) -> None:
+        retrieval_service = getattr(self.rag_orchestrator, "retrieval_service", None)
+        if retrieval_service is None:
+            return
+
+        try:
+            retrieval_service.ensure_runtime_collection_compatibility(
+                source_dir=Path(self.settings.DOCS_SOURCE_DIR),
+                auto_recreate_on_mismatch=self.settings.RAG_AUTO_REBUILD_ON_VECTOR_MISMATCH,
+            )
+        except Exception:
+            logger.exception(
+                "Failed retrieval runtime compatibility check; scans will continue with existing collection state."
+            )
 
     async def run_scan(self, *, scan_id: uuid.UUID, target: str) -> None:
         """Run the full Phase 3-to-7 pipeline for one existing scan job."""
@@ -454,8 +476,17 @@ class PipelineOrchestrator:
                 continue
 
             tls_result = tls_results_by_key.get(_artifact_key_from_asset(asset))
-            if tls_result is None or not tls_result.cipher_suite or not tls_result.tls_version:
-                continue
+            if tls_result is None:
+                tls_result = TLSProbeResult(
+                    hostname=asset.hostname,
+                    ip_address=asset.ip_address,
+                    port=asset.port,
+                    protocol=asset.protocol,
+                    tls_version="Handshake Failed",
+                    cipher_suite="BROKEN",
+                    certificate_chain_pem=(),
+                    metadata={"source": "orchestrator-fallback", "handshake_failed": True},
+                )
 
             tasks.append(asyncio.create_task(_run_asset(asset, tls_result)))
 
@@ -628,6 +659,31 @@ class PipelineOrchestrator:
             return True
         return self.settings.SKIP_ENUMERATION
 
+    def _select_tls_hostnames(self, scope: AuthorizedScope, hostnames: set[str]) -> list[str]:
+        if not hostnames:
+            return []
+
+        normalized = sorted({hostname.strip().lower().rstrip(".") for hostname in hostnames if hostname})
+        if len(normalized) <= self.max_tls_sni_targets_per_ip:
+            return normalized
+
+        prioritized: list[str] = []
+        if scope.domain:
+            root = scope.domain.strip().lower().rstrip(".")
+            www = f"www.{root}"
+            for candidate in (root, www):
+                if candidate in normalized and candidate not in prioritized:
+                    prioritized.append(candidate)
+
+        for hostname in normalized:
+            if hostname in prioritized:
+                continue
+            prioritized.append(hostname)
+            if len(prioritized) >= self.max_tls_sni_targets_per_ip:
+                break
+
+        return prioritized[: self.max_tls_sni_targets_per_ip]
+
     @staticmethod
     def _augment_hostname_candidates(base_domain: str, hostnames: set[str]) -> int:
         before = len(hostnames)
@@ -737,7 +793,6 @@ class PipelineOrchestrator:
         hostnames: set[str] = {scope.domain} if scope.domain else set()
         if scope.domain:
             hostnames.add(f"www.{scope.domain}")
-            self._augment_hostname_candidates(scope.domain, hostnames)
 
         validated_hostnames_stream: dict[str, ValidatedHostname] = {}
         ip_to_hostnames: dict[str, set[str]] = defaultdict(set)
@@ -752,6 +807,8 @@ class PipelineOrchestrator:
         lock = asyncio.Lock()
         tls_tasks: set[asyncio.Task[None]] = set()
         port_tasks: set[asyncio.Task[None]] = set()
+        port_stage_announced = False
+        tls_stage_announced = False
 
         async def _probe_tls_target(target_item: TLSScanTarget) -> None:
             async with tls_semaphore:
@@ -775,6 +832,7 @@ class PipelineOrchestrator:
                 tls_results.append(result)
 
         def _schedule_tls_target(target_item: TLSScanTarget) -> None:
+            nonlocal tls_stage_announced
             target_key = (
                 target_item.hostname,
                 target_item.ip_address,
@@ -784,11 +842,31 @@ class PipelineOrchestrator:
             if target_key in seen_tls_targets:
                 return
             seen_tls_targets.add(target_key)
+
+            if not tls_stage_announced:
+                self._set_runtime_stage(
+                    scan_id,
+                    stage="probing_tls",
+                    detail="streaming",
+                    message="Negotiating TLS handshakes for discovered endpoints.",
+                )
+                tls_stage_announced = True
+
             task = asyncio.create_task(_probe_tls_target(target_item))
             tls_tasks.add(task)
             task.add_done_callback(tls_tasks.discard)
 
         async def _scan_ip(ip_address: str) -> None:
+            nonlocal port_stage_announced
+            if not port_stage_announced:
+                self._set_runtime_stage(
+                    scan_id,
+                    stage="scanning_ports",
+                    detail="streaming",
+                    message="Running streaming port scans for discovered addresses.",
+                )
+                port_stage_announced = True
+
             async with port_semaphore:
                 try:
                     findings = await self._scan_host_with_profile(
@@ -806,7 +884,7 @@ class PipelineOrchestrator:
                     return
 
             async with lock:
-                known_hostnames = sorted(ip_to_hostnames.get(ip_address, set()))
+                known_hostnames = self._select_tls_hostnames(scope, ip_to_hostnames.get(ip_address, set()))
                 for finding in findings:
                     finding_key = (finding.ip_address, finding.port, finding.protocol)
                     if finding_key in seen_port_keys:
@@ -852,13 +930,26 @@ class PipelineOrchestrator:
             if not ip_addresses:
                 return
 
+            scan_ipv6 = os.getenv("AEGIS_SCAN_IPV6", "false").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            ipv4_addresses = tuple(
+                address
+                for address in ip_addresses
+                if ipaddress.ip_address(address).version == 4
+            )
+            selected_ip_addresses = ip_addresses if scan_ipv6 else (ipv4_addresses or ip_addresses)
+
             async with lock:
                 validated_hostnames_stream[normalized_hostname] = ValidatedHostname(
                     hostname=normalized_hostname,
-                    ip_addresses=ip_addresses,
+                    ip_addresses=selected_ip_addresses,
                     source=source,
                 )
-                for ip_address in ip_addresses:
+                for ip_address in selected_ip_addresses:
                     ip_to_hostnames[ip_address].add(normalized_hostname)
                     if ip_address in queued_ips:
                         continue
@@ -877,9 +968,15 @@ class PipelineOrchestrator:
                 # If this hostname arrived after ports were already found, immediately queue SNI probes.
                 for finding in port_findings:
                     if (
-                        finding.ip_address not in ip_addresses
+                        finding.ip_address not in selected_ip_addresses
                         or finding.service_type is not ServiceType.TLS
                     ):
+                        continue
+                    selected_hostnames = self._select_tls_hostnames(
+                        scope,
+                        ip_to_hostnames.get(finding.ip_address, set()),
+                    )
+                    if normalized_hostname not in selected_hostnames:
                         continue
                     _schedule_tls_target(
                         TLSScanTarget(
@@ -1092,18 +1189,6 @@ class PipelineOrchestrator:
                     f"Domain enumeration failed for {target}; continued with the root target only.",
                 )
 
-            heuristic_additions = self._augment_hostname_candidates(scope.domain, hostnames)
-            if heuristic_additions > 0:
-                self._add_runtime_event(
-                    scan_id,
-                    (
-                        "Expanded enumeration scope with "
-                        f"{heuristic_additions} deterministic hostname candidates."
-                    ),
-                    kind="info",
-                    stage="enumerating_domains",
-                )
-
         self._set_runtime_stage(
             scan_id,
             stage="validating_dns",
@@ -1151,18 +1236,27 @@ class PipelineOrchestrator:
         scope: AuthorizedScope,
         validated_hostnames: Sequence[ValidatedHostname],
     ) -> list[str]:
+        max_scan_ips = max(1, int(os.getenv("AEGIS_MAX_SCAN_IPS", "8")))
+
         if scope.scope_type == "domain":
-            return sorted(
+            unique_ips = sorted(
                 {
                     ip_address
                     for validated in validated_hostnames
                     for ip_address in validated.ip_addresses
                 }
             )
+            ipv4_candidates = [
+                ip_address
+                for ip_address in unique_ips
+                if ipaddress.ip_address(ip_address).version == 4
+            ]
+            preferred = ipv4_candidates if ipv4_candidates else unique_ips
+            return preferred[:max_scan_ips]
         if scope.scope_type == "ip" and scope.ip_address is not None:
             return [str(scope.ip_address)]
         if scope.scope_type == "network" and scope.network is not None:
-            return [str(ip_address) for ip_address in scope.network.hosts()]
+            return [str(ip_address) for ip_address in scope.network.hosts()][:max_scan_ips]
         return []
 
     async def _scan_ports(
@@ -1248,24 +1342,32 @@ class PipelineOrchestrator:
     ) -> list[TLSProbeResult]:
         ip_to_hostnames = self._build_ip_hostname_index(scope, validated_hostnames)
         tls_targets: list[TLSScanTarget] = []
+        seen_targets: set[tuple[str | None, str, int, str]] = set()
+
+        def _append_tls_target(target: TLSScanTarget) -> None:
+            key = (target.hostname, target.ip_address, target.port, target.protocol)
+            if key in seen_targets:
+                return
+            seen_targets.add(key)
+            tls_targets.append(target)
 
         for finding in port_findings:
             if finding.service_type is not ServiceType.TLS:
                 continue
 
-            hostnames = sorted(ip_to_hostnames.get(finding.ip_address, set()))
+            hostnames = self._select_tls_hostnames(scope, ip_to_hostnames.get(finding.ip_address, set()))
             if hostnames:
-                tls_targets.extend(
-                    TLSScanTarget(
-                        hostname=hostname,
-                        ip_address=finding.ip_address,
-                        port=finding.port,
-                        protocol=finding.protocol,
+                for hostname in hostnames:
+                    _append_tls_target(
+                        TLSScanTarget(
+                            hostname=hostname,
+                            ip_address=finding.ip_address,
+                            port=finding.port,
+                            protocol=finding.protocol,
+                        )
                     )
-                    for hostname in hostnames
-                )
             else:
-                tls_targets.append(
+                _append_tls_target(
                     TLSScanTarget(
                         hostname=None,
                         ip_address=finding.ip_address,
@@ -1856,17 +1958,22 @@ class PipelineOrchestrator:
                             latest_compliance_tier=evaluation.tier,
                         )
                     else:
-                        await fingerprint_repo.create(
-                            canonical_key=canonical_key,
-                            first_seen_scan_id=scan_id,
-                            last_seen_scan_id=scan_id,
-                            first_seen_at=now,
-                            last_seen_at=now,
-                            appearance_count=1,
-                            q_score_history=[score_snapshot],
-                            latest_q_score=q_score,
-                            latest_compliance_tier=evaluation.tier,
-                        )
+                        try:
+                            await fingerprint_repo.create(
+                                canonical_key=canonical_key,
+                                first_seen_scan_id=scan_id,
+                                last_seen_scan_id=scan_id,
+                                first_seen_at=now,
+                                last_seen_at=now,
+                                appearance_count=1,
+                                q_score_history=[score_snapshot],
+                                latest_q_score=q_score,
+                                latest_compliance_tier=evaluation.tier,
+                            )
+                        except IntegrityError:
+                            # Concurrent asset workers may race on first insert for the same canonical key.
+                            # Ignore duplicate insert in this transaction; canonical record already exists.
+                            pass
             except Exception:
                 logger.exception(
                     "Failed to persist asset fingerprint for asset %s.",

@@ -17,6 +17,8 @@ import type {
 // ========== Asset Adapter ==========
 
 function mapStatus(raw: AssetResultResponse): Asset['status'] {
+  if (!raw.assessment) return 'unknown';
+
   const tier = raw.assessment?.compliance_tier;
   const risk = raw.assessment?.risk_score;
   if (tier === 'FULLY_QUANTUM_SAFE') return 'elite-pqc';
@@ -28,6 +30,8 @@ function mapStatus(raw: AssetResultResponse): Asset['status'] {
 }
 
 function mapTier(raw: AssetResultResponse): Asset['tier'] {
+  if (!raw.assessment) return 'critical';
+
   const tier = raw.assessment?.compliance_tier;
   const risk = raw.assessment?.risk_score;
   if (tier === 'FULLY_QUANTUM_SAFE') return 'elite_pqc';

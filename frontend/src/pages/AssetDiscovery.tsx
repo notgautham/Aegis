@@ -153,6 +153,7 @@ const assetRiskScore = (asset: Asset): number => Math.max(0, Math.min(100, 100 -
 
 const assetRiskLevel = (asset: Asset): IPRecord['risk'] => {
   if (asset.status === 'critical') return 'critical';
+  if (asset.status === 'unknown') return 'high';
   if (asset.status === 'vulnerable') return 'high';
   if (
     asset.status === 'standard' ||
