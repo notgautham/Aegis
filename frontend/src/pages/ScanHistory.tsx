@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ const ScanHistory = () => {
   const [scanA, setScanA] = useState('');
   const [scanB, setScanB] = useState('');
   const [showCompare, setShowCompare] = useState(false);
+  const compareSectionRef = useRef<HTMLDivElement | null>(null);
 
   const { data: liveScanHistory, isLoading } = useQuery({
     queryKey: ['scan-history'],
@@ -72,6 +73,17 @@ const ScanHistory = () => {
   const openInDashboard = (scanId: string) => {
     setSelectedScanId(scanId);
     navigate('/dashboard', { state: { bypassPrompt: true } });
+  };
+
+  const openCompare = (scanId: string) => {
+    const alternate =
+      terminalScanHistory.find((scan) => scan.id !== scanId)?.id ?? scanId;
+    setScanA(scanId);
+    setScanB(alternate);
+    setShowCompare(true);
+    requestAnimationFrame(() => {
+      compareSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   if (isLoading) {
@@ -133,7 +145,7 @@ const ScanHistory = () => {
                     <td className="px-3 py-2"><Badge className={`${getStatusBadgeClassName(s.status)} text-[10px]`}>{s.status}</Badge></td>
                     <td className="px-3 py-2 flex gap-1" onClick={e => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0" title="Open in Dashboard" onClick={() => openInDashboard(s.id)}><LayoutDashboard className="w-3.5 h-3.5" /></Button>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { setScanA(s.id); setShowCompare(true); }}><GitCompareArrows className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" title="Compare Scan" onClick={() => openCompare(s.id)}><GitCompareArrows className="w-3.5 h-3.5" /></Button>
                     </td>
                   </tr>
                 ))}
@@ -144,7 +156,7 @@ const ScanHistory = () => {
       </Card>
 
       {/* Score Trend */}
-      <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
+      <Card ref={compareSectionRef} className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
         <CardHeader className="pb-2"><CardTitle className="text-sm font-body">Enterprise Q-Score Trend</CardTitle></CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={250}>

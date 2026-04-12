@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 
 const DashboardPreview = () => {
   const kpis = [
@@ -61,7 +62,7 @@ const DashboardPreview = () => {
             <span className="font-mono text-sm font-semibold text-accent-amber">AEGIS</span>
             <div className="flex items-center gap-3">
               <span className="font-body text-xs text-white/60">Export PDF · Export CBOM</span>
-              <span className="font-body text-xs font-bold bg-accent-amber text-brand-primary px-3 py-1 rounded">▶ RUN SCAN</span>
+              <Link to="/scanner" className="font-body text-xs font-bold bg-accent-amber text-brand-primary px-3 py-1 rounded hover:brightness-105 transition-all">▶ RUN SCAN</Link>
             </div>
           </div>
 

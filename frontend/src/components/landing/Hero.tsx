@@ -32,7 +32,7 @@ const Hero = () => {
         {/* CTAs */}
         <div className="flex flex-wrap gap-3">
           <Link
-            to="/dashboard"
+            to="/scanner"
             className="inline-flex items-center gap-2 font-body text-sm font-bold bg-accent-amber text-brand-primary px-7 py-3.5 rounded-lg hover:brightness-105 transition-all"
           >
             ▶ Initiate Pipeline

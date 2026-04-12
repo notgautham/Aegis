@@ -644,7 +644,8 @@ class PipelineOrchestrator:
         skip_enumeration: bool = False,
     ) -> _DiscoveryExecution:
         scope = AuthorizedScope.from_target(target)
-        if scope.scope_type == "domain" and not skip_enumeration:
+        supports_streaming_enumerator = callable(getattr(self.enumerator, "enumerate_stream", None))
+        if scope.scope_type == "domain" and not skip_enumeration and supports_streaming_enumerator:
             return await self._run_discovery_streaming(
                 target=target,
                 scope=scope,
@@ -846,13 +847,7 @@ class PipelineOrchestrator:
                 return
 
             ip_addresses = tuple(
-                sorted(
-                    {
-                        info[4][0]
-                        for info in resolved
-                        if info and len(info) >= 5 and info[4]
-                    }
-                )
+                sorted({info[4][0] for info in resolved if info and len(info) >= 5 and info[4]})
             )
             if not ip_addresses:
                 return
@@ -881,7 +876,10 @@ class PipelineOrchestrator:
 
                 # If this hostname arrived after ports were already found, immediately queue SNI probes.
                 for finding in port_findings:
-                    if finding.ip_address not in ip_addresses or finding.service_type is not ServiceType.TLS:
+                    if (
+                        finding.ip_address not in ip_addresses
+                        or finding.service_type is not ServiceType.TLS
+                    ):
                         continue
                     _schedule_tls_target(
                         TLSScanTarget(
@@ -977,11 +975,7 @@ class PipelineOrchestrator:
                 )
 
         ip_addresses = sorted(
-            {
-                ip
-                for validated in validated_hostnames
-                for ip in validated.ip_addresses
-            }
+            {ip for validated in validated_hostnames for ip in validated.ip_addresses}
             | set(queued_ips)
         )
 

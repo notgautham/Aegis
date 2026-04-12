@@ -30,7 +30,7 @@ const FinalCTA = () => {
 
         <div className="flex flex-wrap items-center justify-center gap-4">
           <Link
-            to="/login"
+            to="/scanner"
             className="font-body text-base font-bold bg-accent-amber text-brand-primary px-10 py-4 rounded-[10px] hover:brightness-105 transition-all"
           >
             ▶ Launch Demo Scan

@@ -35,10 +35,10 @@ const Navbar = () => {
       {/* Center: Nav links */}
       <div className="hidden md:flex items-center gap-8">
         {[
-          { label: 'Platform', id: 'capabilities' },
-          { label: 'Pipeline', id: 'pipeline' },
-          { label: 'Standards', id: 'standards' },
           { label: 'Security', id: 'problem' },
+          { label: 'Pipeline', id: 'pipeline' },
+          { label: 'Platform', id: 'capabilities' },
+          { label: 'Standards', id: 'standards' },
         ].map((item) => (
           <button
             key={item.id}
@@ -59,7 +59,7 @@ const Navbar = () => {
           Documentation
         </button>
         <Link
-          to="/login"
+          to="/scanner"
           className="font-body text-sm font-bold bg-accent-amber text-brand-primary px-4 py-2 rounded-lg hover:brightness-105 transition-all"
         >
           Sign In →

@@ -3,28 +3,28 @@ import { motion } from 'framer-motion';
 const phases = [
   {
     title: 'Asset Discovery',
-    desc: 'Discovers domains, subdomains, IPs, SSL certificates, and software across your bank\'s full attack surface.',
-    tag: 'DNS · Shodan · TLS',
+    desc: 'Discovers in-scope domains, hostnames, IPs, and exposed cryptographic services using deterministic scope enforcement.',
+    tag: 'DNSx · Amass · Nmap',
   },
   {
     title: 'Tri-Mode TLS Probing',
-    desc: 'Simulates three simultaneous client types: PQC-capable, classical TLS 1.3, and legacy TLS 1.2. Detects negotiation gaps.',
-    tag: 'TLS 1.2 · 1.3 · PQC Hybrid',
+    desc: 'Performs TLS handshake probing and metadata extraction to capture negotiated versions, ciphers, and certificate chains.',
+    tag: 'TLS Handshake · Certificate Chain',
   },
   {
     title: 'PQC Classification',
-    desc: 'Q-Score engine evaluates six dimensions: TLS version, key exchange, certificates, cipher strength, agility, and negotiation policy.',
-    tag: 'Q-Score Engine',
+    desc: 'Applies deterministic vulnerability mappings and weighted quantum risk scoring, then assigns compliance tiers.',
+    tag: 'Risk Engine · Rules Engine',
   },
   {
     title: 'CBOM Generation',
-    desc: 'CycloneDX 1.7 Cryptographic Bill of Materials generated with Ed25519-signed attestation for every scanned asset.',
-    tag: 'CycloneDX 1.7 · Ed25519',
+    desc: 'Builds CycloneDX 1.6 cryptographic inventories and persists auditable scan artifacts for each asset.',
+    tag: 'CycloneDX 1.6 · Persisted Artifacts',
   },
   {
     title: 'Certification Labeling',
-    desc: 'Issues Elite-PQC, Standard, or Legacy labels. Public verification endpoint for regulators and auditors.',
-    tag: 'Elite-PQC · Standard · Legacy',
+    desc: 'Issues three-tier compliance certificates and remediation bundles aligned with NIST FIPS 203/204/205 migration goals.',
+    tag: 'Fully Safe · Transitioning · Vulnerable',
   },
 ];
 
@@ -40,15 +40,14 @@ const PipelineSection = () => {
           className="mb-16"
         >
           <span className="font-mono text-[11px] text-muted-foreground tracking-wider uppercase">
-            5-Phase CBOM Pipeline
+            Solution Execution Pipeline
           </span>
           <h2 className="font-body font-bold text-3xl lg:text-[42px] text-foreground mt-3 leading-tight">
-            From attack surface<br />
-            to <span className="font-display italic text-brand-crimson">certified CBOM</span> — automatically.
+            From attack surface to <span className="font-display italic text-brand-crimson">certified CBOM</span> — automatically.
           </h2>
           <p className="font-body text-base text-[hsl(var(--text-secondary))] mt-4 max-w-xl leading-relaxed">
-            Every scan runs through a deterministic five-phase engine grounded in NIST FIPS 203, 204, and 205.
-            Fully auditable. Ed25519-signed at every step.
+            Every scan flows through a deterministic five-phase architecture described in the solution blueprint,
+            grounded in NIST FIPS 203, 204, and 205 with auditable outputs.
           </p>
         </motion.div>
 
