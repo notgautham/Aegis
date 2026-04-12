@@ -142,9 +142,16 @@ if os.path.isdir(frontend_dist):
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
-        # Serve exact file if it exists (e.g. favicon.ico, logo.jpeg)
-        file_path = os.path.join(frontend_dist, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
+        # Serve exact file if it exists and is safely within the dist directory
+        # (e.g. favicon.ico, logo.jpeg)
+        requested_path = os.path.abspath(os.path.join(frontend_dist, full_path))
+        
+        # Prevent directory traversal attacks
+        if not requested_path.startswith(os.path.abspath(frontend_dist)):
+            return FileResponse(os.path.join(frontend_dist, "index.html"))
+
+        if os.path.isfile(requested_path):
+            return FileResponse(requested_path)
+            
         # Otherwise, serve index.html for SPA routing
         return FileResponse(os.path.join(frontend_dist, "index.html"))
