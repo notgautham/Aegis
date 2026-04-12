@@ -12,6 +12,7 @@ Aegis uses two storage backends:
 - transactional scan records
 - deterministic analysis data
 - generated artifacts and history read models
+- **Apache AGE Graph Extension** for tracking complex network relationships (nodes and edges) inside `aegis_network_graph`
 
 2. Qdrant
 - vector corpus used for retrieval-backed remediation context

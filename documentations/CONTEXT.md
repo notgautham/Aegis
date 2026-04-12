@@ -125,11 +125,12 @@ q_score relation:
 
 score_explanation contains deterministic derivation details including:
 - formula text
-- input vulnerabilities and weights
+- inputs (weights, vulnerabilities, algorithm strings)
 - weighted component breakdown
-- penalties and reason
+- penalties and reason (e.g., "expired_certificate")
 - base_risk_score and final_risk_score
-- q_score and derivation text
+- q_score and mathematical derivation text
+- explicit component sentence explanations (kex, sig, sym, tls)
 
 ## 6. Compliance and Status Vocabulary
 

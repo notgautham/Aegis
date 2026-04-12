@@ -105,9 +105,9 @@ def generate_score_explanation(
 
     formula = "FinalRisk = min((0.45 x V_kex) + (0.35 x V_sig) + (0.10 x V_sym) + (0.10 x V_tls) + CertPenalty, 1.00)"
     derivation = (
-        f"BaseRisk = ({kex_expr}) + ({sig_expr}) + ({sym_expr}) + ({tls_expr}) = {effective_base_risk/100:.4f}; "
+        f"BaseRisk = ({kex_expr}) + ({sig_expr}) + ({sym_expr}) + ({tls_expr}) = {effective_base_risk / 100:.4f}; "
         f"CertPenalty = {certificate_penalty:.2f}; "
-        f"FinalRisk = min({effective_base_risk/100:.4f} + {certificate_penalty:.2f}, 1.00) = {risk_score/100:.4f}; "
+        f"FinalRisk = min({effective_base_risk / 100:.4f} + {certificate_penalty:.2f}, 1.00) = {risk_score / 100:.4f}; "
         f"Q-Score = 100 - ({risk_score:.2f}) = {qscore:.2f}."
     )
 
@@ -122,7 +122,12 @@ def generate_score_explanation(
     return {
         "formula": formula,
         "inputs": {
-            "weights": {"kex": WEIGHTS["kex"], "sig": WEIGHTS["sig"], "sym": WEIGHTS["sym"], "tls": WEIGHTS["tls"]},
+            "weights": {
+                "kex": WEIGHTS["kex"],
+                "sig": WEIGHTS["sig"],
+                "sym": WEIGHTS["sym"],
+                "tls": WEIGHTS["tls"],
+            },
             "vulnerabilities": {
                 "kex": round(kex_vulnerability or 0.0, 2),
                 "sig": round(sig_vulnerability or 0.0, 2),

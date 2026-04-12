@@ -1,93 +1,110 @@
 <p align="center">
-  <img src="./frontend/public/logo.jpeg" alt="Aegis" width="108" />
+  <img src="./frontend/public/logo.jpeg" alt="Aegis Logo" width="120" />
 </p>
 
 <h1 align="center">Aegis</h1>
 
 <p align="center">
-  Autonomous Quantum Cryptographic Intelligence Platform for Banking Infrastructure
+  <strong>Autonomous Quantum Cryptographic Intelligence Platform for Banking Infrastructure</strong>
 </p>
 
-## Overview
+<p align="center">
+  <img src="https://img.shields.io/badge/Python_3.11-14354C?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11" />
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/React_Vite-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/OQS_OpenSSL-FF5722?style=for-the-badge" alt="OQS OpenSSL" />
+  <img src="https://img.shields.io/badge/PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Apache_AGE-E22A25?style=for-the-badge&logo=apache&logoColor=white" alt="Apache AGE" />
+  <img src="https://img.shields.io/badge/Qdrant-E22A25?style=for-the-badge" alt="Qdrant" />
+</p>
 
-Aegis is a scan-centric platform for discovering internet-facing cryptographic assets and evaluating post-quantum readiness with deterministic scoring.
+---
 
-Primary outcomes:
-1. Discover assets and cryptographic surfaces.
-2. Assess TLS and certificate posture.
-3. Compute deterministic quantum risk.
-4. Generate CBOM and remediation artifacts.
-5. Expose scan results through API and dashboard.
+> **🚀 Want to run Aegis locally?**  
+> Everything is fully containerized. Please navigate to **[SETUP.md](./SETUP.md)** for the quick, 2-step installation guide. No API keys or local SDKs are required for the default local deterministic mode.
 
-## Deterministic Scoring Model
+---
 
-Risk is deterministic and weighted:
+## 🌊 Overview
 
-Risk = 100 × (0.45 × V<sub>KEX</sub> + 0.35 × V<sub>SIG</sub> + 0.10 × V<sub>SYM</sub> + 0.10 × V<sub>TLS</sub>) + P<sub>cert</sub>
+Aegis is a scan-centric platform engineered to defend internet-facing cryptographic assets against the **Harvest Now, Decrypt Later (HNDL)** threat. By merging low-level Post-Quantum Cryptography (PQC) handshake inspection with deterministic scoring and AI-grounded remediation, Aegis provides a clear bridge to a quantum-safe future.
 
-Certificate penalty:
-- `+10` when certificate is expired (`days_remaining <= 0`)
-- `+5` when certificate expires in `<= 30` days
-- final score is capped at `100`
+---
 
-Score semantics:
-- `risk_score` (backend): higher is worse
-- `q_score` (frontend): higher is better
-- relation: Q<sub>score</sub> = 100 - Risk
+## ⚙️ How It Works
 
-## Local Runtime Mode
+Aegis continuously discovers assets, evaluates their cryptographic posture, and builds actionable technical roadmaps based on NIST FIPS standards.
 
-This repository is configured for local deterministic mode by default.
+1. **Asset Discovery:** Identifies domains, IPs, and open ports (TLS, VPN, API).
+2. **OQS Handshake Probing:** Performs deep byte-level inspection using an Open-Quantum-Safe (OQS) patched OpenSSL engine to detect hybrid PQC key exchanges (e.g., `X25519MLKEM768`).
+3. **Graph Mapping:** Stores network topologies and relationships in an **Apache AGE** graph database for real-time interactive visualization.
+4. **Deterministic Scoring:** Calculates a precise quantum vulnerability risk score and compliance tier.
+5. **Artifact Generation:** Produces industry-standard CycloneDX 1.6 Cryptographic Bills of Materials (CBOMs) and technical remediation patches.
 
-Key points:
-- No cloud API keys are required for setup or scan execution.
-- Qdrant is used as local vector storage and can be preloaded from `docs/nist`.
-- Root `.env` is intentionally tracked for reproducible local setup.
-- `.env.example` remains as the template and optional cloud extension reference.
+---
 
-## Tech Stack
+## 🧮 Deterministic Scoring Model
 
-- Backend: FastAPI, SQLAlchemy async, Alembic, Python 3.11
-- Frontend: React 18, TypeScript, Vite, Tailwind
-- Data: PostgreSQL 15, Qdrant
-- Infra: Docker Compose
+Aegis relies on a strict, deterministic, and weighted formula to evaluate quantum risk, completely independent of AI hallucination. 
 
-## Quick Start
+**Risk Formula:**
+> **Risk = 100 × (0.45 × V<sub>KEX</sub> + 0.35 × V<sub>SIG</sub> + 0.10 × V<sub>SYM</sub> + 0.10 × V<sub>TLS</sub>) + P<sub>cert</sub>**
 
-See [SETUP.md](SETUP.md) for full setup.
+*Where:*
+- **V<sub>KEX</sub>** (45%): Key Exchange Vulnerability (Highly vulnerable to Shor's Algorithm).
+- **V<sub>SIG</sub>** (35%): Signature Vulnerability (Authentication risks).
+- **V<sub>SYM</sub>** (10%): Symmetric Cipher Vulnerability (Grover's Algorithm impact).
+- **V<sub>TLS</sub>** (10%): Protocol Version Vulnerability (Legacy TLS configurations).
 
-Short version:
+**Certificate Penalty (P<sub>cert</sub>):**
+- `+10` points if the certificate is expired (Days remaining ≤ 0).
+- `+5` points if the certificate expires within 30 days.
+*(Note: Final Risk Score is strictly capped at 100)*
 
-```bash
-docker compose up -d --build
+**Score Semantics:**
+- **Risk Score** (Backend): `0-100` scale. **Higher is more vulnerable.**
+- **Q-Score** (Frontend UI): `0-100` scale. **Higher is more secure.** *(Q-Score = 100 - Risk Score)*
+
+---
+
+## 🏗️ Repository Structure
+
+Aegis is built as a modular monolith. 
+
+```text
+Aegis/
+├── backend/             # FastAPI engine & Core PQC Scanning Logic
+│   ├── analysis/        # Risk scoring & handshake metadata resolution
+│   ├── discovery/       # Multi-protocol probing (TLS, VPN, API)
+│   ├── intelligence/    # RAG Orchestrator & NIST roadmap generators
+│   └── pipeline/        # Deterministic scan orchestration
+├── frontend/            # React + Vite UI with Tailwind CSS
+│   └── src/components/  # Interactive D3/Force-Graph visualizations
+├── docker/              # Infrastructure-as-Code (OQS builds, Graph DB init)
+├── docs/                # Intelligence corpus (NIST Standards, FIPS PDFs)
+├── documentations/      # Extended architectural & API references
+├── migrations/          # Alembic relational database migrations
+├── scripts/             # Data ingestion & validation utilities
+├── simulation/          # Standalone terminal-based scan testing utilities
+└── tests/               # Unit and Integration test suites
 ```
 
-Notes:
-- Backend startup now runs Alembic migrations automatically.
-- Qdrant corpus is expected to be preloaded for this repository runtime.
+---
 
-App URLs:
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:8000`
-- Swagger: `http://localhost:8000/docs`
+## 📚 Documentation Index
 
-## Repository Structure
+For detailed technical guides and references, please see the specific documentation files mapped below:
 
-- `backend/`: API, orchestrator, analysis, repositories, models
-- `frontend/`: dashboard pages, contexts, adapters, scanner UX
-- `documentations/`: API, database, context, and architecture references
-- `docs/`: NIST corpus used by retrieval pipeline
-- `migrations/`: Alembic migrations
-- `tests/`: unit and integration tests
+| Documentation | Purpose |
+| :--- | :--- |
+| 🛠️ [**SETUP.md**](./SETUP.md) | Universal installation, environment configuration, and startup guide for running Aegis. |
+| 📡 [**documentations/API.md**](./documentations/API.md) | Comprehensive backend REST endpoint documentation and cURL integration examples. |
+| 💾 [**documentations/DATABASE.md**](./documentations/DATABASE.md) | Detailed schema mapping for PostgreSQL, Apache AGE (Graph), and Qdrant. |
+| 🧠 [**documentations/CONTEXT.md**](./documentations/CONTEXT.md) | Technical context, core principles, and developer rules for the codebase. |
+| 🎯 [**documentations/SOLUTION.md**](./documentations/SOLUTION.md) | Strategic product framing, threat models, and business problem statement. |
 
-## Documentation Index
+---
 
-- [SETUP.md](SETUP.md)
-- [documentations/API.md](documentations/API.md)
-- [documentations/DATABASE.md](documentations/DATABASE.md)
-- [documentations/CONTEXT.md](documentations/CONTEXT.md)
-
-## Important Notes
-
-- Do not modify product-intent narrative in `SOLUTION.md`.
-- Deterministic scoring and compliance tiering must remain non-LLM logic.
+<p align="center">
+  Built for the future of cryptographic security.
+</p>

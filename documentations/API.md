@@ -183,7 +183,7 @@ Important fields:
 - kex_algorithm, auth_algorithm, enc_algorithm, mac_algorithm
 - kex_vulnerability, sig_vulnerability, sym_vulnerability, tls_vulnerability
 - risk_score
-- score_explanation (deterministic derivation payload)
+- score_explanation (deterministic derivation payload including `formula`, `inputs`, `weighted_components`, `penalties`, `base_risk_score`, `final_risk_score`, `q_score`, `derivation`, and explicit text explanations)
 - compliance_tier
 
 ## 5.2 AssetCertificateResponse

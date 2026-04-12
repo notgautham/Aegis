@@ -2184,7 +2184,7 @@ class PipelineOrchestrator:
         if tls_version and "1.3" in tls_version:
             return self._build_tls13_assessment_inputs(
                 tls_result=tls_result,
-                    extracted_certificates=extracted_certificates,
+                extracted_certificates=extracted_certificates,
                 analyzed_certificates=analyzed_certificates,
             )
 
@@ -2347,7 +2347,9 @@ class PipelineOrchestrator:
             return 1.0
 
     @staticmethod
-    def _extract_leaf_certificate_days_remaining(extracted_certificates: Sequence[Any]) -> int | None:
+    def _extract_leaf_certificate_days_remaining(
+        extracted_certificates: Sequence[Any],
+    ) -> int | None:
         if not extracted_certificates:
             return None
 
