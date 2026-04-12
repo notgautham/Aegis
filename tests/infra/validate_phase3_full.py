@@ -356,11 +356,23 @@ async def main() -> int:
     ]
 
     live_checks: list[tuple[str, CheckFn]] = [
-        (f"Live DNS validation against {args.target}", lambda: _check_live_dns_validation(args.target)),
-        (f"Live Amass enumeration against {args.target}", lambda: _check_live_amass_enumerator(args.target)),
+        (
+            f"Live DNS validation against {args.target}",
+            lambda: _check_live_dns_validation(args.target),
+        ),
+        (
+            f"Live Amass enumeration against {args.target}",
+            lambda: _check_live_amass_enumerator(args.target),
+        ),
         (f"Live port scan against {args.target}", lambda: _check_live_port_scan(args.target)),
-        (f"Live TLS probe and cert extraction against {args.target}", lambda: _check_live_tls_probe_and_certs(args.target)),
-        (f"Live end-to-end aggregation against {args.target}", lambda: _check_live_aggregator_end_to_end(args.target)),
+        (
+            f"Live TLS probe and cert extraction against {args.target}",
+            lambda: _check_live_tls_probe_and_certs(args.target),
+        ),
+        (
+            f"Live end-to-end aggregation against {args.target}",
+            lambda: _check_live_aggregator_end_to_end(args.target),
+        ),
     ]
 
     _print_header("Phase 3 Deterministic Checks")

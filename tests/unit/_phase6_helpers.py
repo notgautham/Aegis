@@ -87,9 +87,7 @@ def build_remediation_fixture(
         issuer="CN=Aegis Test Root",
         public_key_algorithm="RSA" if auth_algorithm == "RSA" else "ML-DSA-65",
         key_size_bits=2048 if auth_algorithm == "RSA" else None,
-        signature_algorithm="sha256WithRSAEncryption"
-        if auth_algorithm == "RSA"
-        else "ML-DSA-65",
+        signature_algorithm="sha256WithRSAEncryption" if auth_algorithm == "RSA" else "ML-DSA-65",
         quantum_safe=auth_algorithm != "RSA",
         not_before=datetime(2026, 1, 1, tzinfo=UTC),
         not_after=datetime(2026, 6, 1, tzinfo=UTC),

@@ -80,12 +80,12 @@ class DNSxValidator:
             except json.JSONDecodeError:
                 continue
 
-            hostname = str(
-                parsed.get("host")
-                or parsed.get("hostname")
-                or parsed.get("input")
-                or ""
-            ).strip().lower().rstrip(".")
+            hostname = (
+                str(parsed.get("host") or parsed.get("hostname") or parsed.get("input") or "")
+                .strip()
+                .lower()
+                .rstrip(".")
+            )
             answers = parsed.get("a") or parsed.get("answers") or parsed.get("ip") or []
             cnames = parsed.get("cname") or []
 
@@ -120,18 +120,14 @@ class DNSxValidator:
     async def _resolve_hostname(self, hostname: str) -> ValidatedHostname | None:
         """Resolve a single hostname in a worker thread."""
         try:
-            infos = await asyncio.to_thread(socket.getaddrinfo, hostname, None, proto=socket.IPPROTO_TCP)
+            infos = await asyncio.to_thread(
+                socket.getaddrinfo, hostname, None, proto=socket.IPPROTO_TCP
+            )
         except socket.gaierror:
             return None
-            
+
         ip_addresses = tuple(
-            sorted(
-                {
-                    info[4][0]
-                    for info in infos
-                    if info and len(info) >= 5 and info[4]
-                }
-            )
+            sorted({info[4][0] for info in infos if info and len(info) >= 5 and info[4]})
         )
         if not ip_addresses:
             return None

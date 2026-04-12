@@ -121,7 +121,7 @@ All scan-scoped dashboard/report pages must derive data from `SelectedScanContex
 ## 5. Scan Lifecycle and Selection Sync (Important)
 
 ### 5.1 Queue execution flow
-1. User submits target(s) from dashboard or scan console.
+1. User submits a target from `/scanner` (single-target scanner flow).
 2. `ScanQueueContext.startQueue()` creates queued items.
 3. `api.createScan()` returns backend `scan_id`.
 4. Poll loop uses `api.getScanStatus(scanId)`.
@@ -161,7 +161,7 @@ Validation performed:
 5. CBOM overview/per-asset flow.
 6. Per-asset and enterprise rating flows (with target-history limitations).
 7. Remediation action plan and roadmap (roadmap partly inferred).
-8. Scan history and scan console core paths.
+8. Scan history and scanner-first launch core paths.
 
 ### 6.2 Known intentionally demo or mixed areas (must be explicit)
 1. Some intelligence digest/presentation elements remain demo by product direction.
@@ -208,7 +208,7 @@ Observed validated behavior in prior checks:
 
 ### 9.2 Critical payload fragments used by UI
 1. `summary` posture counters.
-2. `stage` and runtime `events` for scan console/status visuals.
+2. `stage` and runtime `events` for scanner/dashboard status visuals.
 3. `assets[].assessment` and `assets[].certificate`.
 4. `assets[].remediation` + `remediation_actions`.
 5. `assets[].asset_fingerprint` for cross-scan trend continuity.

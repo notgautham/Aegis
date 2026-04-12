@@ -53,7 +53,9 @@ class RagOrchestrator:
         query = self._build_query(remediation_input)
         retrieved_chunks = self.retrieval_service.search(query, top_k=top_k)
         if not retrieved_chunks:
-            raise RagOrchestrationError("No retrieval context was found for remediation generation.")
+            raise RagOrchestrationError(
+                "No retrieval context was found for remediation generation."
+            )
 
         hndl_timeline = self.hndl_calculator.calculate(
             assessment=remediation_input.assessment,

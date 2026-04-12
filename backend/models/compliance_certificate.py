@@ -21,9 +21,7 @@ class ComplianceCertificate(Base):
 
     __tablename__ = "compliance_certificates"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     asset_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("discovered_assets.id", ondelete="CASCADE"),
@@ -38,12 +36,8 @@ class ComplianceCertificate(Base):
     signing_algorithm: Mapped[str] = mapped_column(Text, nullable=False)
 
     # ── Validity Period ─────────────────────────────────
-    valid_from: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-    valid_until: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Extension Data ──────────────────────────────────
     extensions_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

@@ -182,7 +182,9 @@ class CertificateSigner:
             except OQSSubprocessError as error:
                 logger.warning("Falling back to ECDSA because OQS subprocess failed: %s", error)
         else:
-            logger.info("OQS capability unavailable, using ECDSA fallback: %s", oqs_capability.reason)
+            logger.info(
+                "OQS capability unavailable, using ECDSA fallback: %s", oqs_capability.reason
+            )
 
         return self._issue_with_ecdsa(
             identity=identity,
@@ -385,9 +387,7 @@ class CertificateSigner:
                     serialization.NoEncryption(),
                 )
             )
-            cert_path.write_bytes(
-                issuer_cert.public_bytes(serialization.Encoding.PEM)
-            )
+            cert_path.write_bytes(issuer_cert.public_bytes(serialization.Encoding.PEM))
             return issuer_key, issuer_cert
 
     def _issue_with_oqs(
@@ -518,14 +518,18 @@ class CertificateSigner:
                 env=self._openssl_environment(),
             )
         except subprocess.TimeoutExpired as error:
-            raise OQSSubprocessError(f"OQS OpenSSL command timed out: {' '.join(command)}") from error
+            raise OQSSubprocessError(
+                f"OQS OpenSSL command timed out: {' '.join(command)}"
+            ) from error
         except subprocess.CalledProcessError as error:
             stderr = (error.stderr or "").strip()
             if "provider" in stderr.lower() or "unknown option" in stderr.lower():
                 raise OQSUnavailableError(stderr or "OQS provider is unavailable.") from error
             if "config" in stderr.lower():
                 raise OQSConfigError(stderr or "Generated OpenSSL config is invalid.") from error
-            raise OQSSubprocessError(stderr or f"OQS command failed: {' '.join(command)}") from error
+            raise OQSSubprocessError(
+                stderr or f"OQS command failed: {' '.join(command)}"
+            ) from error
 
     def _detect_oqs_capability(self) -> _OqsCapability:
         if CertificateSigner._oqs_capability_cache is not None:

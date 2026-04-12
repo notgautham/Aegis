@@ -245,6 +245,8 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
   const startQueue = useCallback((targets: string[], profile: string) => {
     const normalizedTargets = [...new Set(targets.map((target) => target.trim()).filter(Boolean))];
     if (normalizedTargets.length === 0) return;
+    const requestedTarget = normalizedTargets[0];
+    if (!requestedTarget) return;
 
     cancelledRef.current = false;
     setScanProfile(profile);
@@ -261,26 +263,25 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
         .map((item) => item.target.toLowerCase()),
     );
 
-    const freshTargets = normalizedTargets.filter((target) => !activeTargets.has(target.toLowerCase()));
-    if (freshTargets.length === 0) {
-      addLog('Requested targets are already in the queue');
+    if (activeTargets.has(requestedTarget.toLowerCase())) {
+      addLog('Requested target is already in the queue');
       return;
     }
 
-    const items = buildQueueItems(freshTargets, profile);
+    const items = buildQueueItems([requestedTarget], profile);
 
     if (!runningRef.current) {
       runningRef.current = true;
       setIsRunning(true);
       setLogs([]);
       updateQueue(items);
-      addLog(`Scan queue started with ${items.length} target${items.length === 1 ? '' : 's'} (${profile})`);
+      addLog(`Scan started (${profile})`);
       processNext();
       return;
     }
 
     updateQueue((prev) => [...prev, ...items]);
-    addLog(`Added ${items.length} target${items.length === 1 ? '' : 's'} to the queue`);
+    addLog(`Added scan request for ${requestedTarget}`);
     processNext();
   }, [addLog, buildQueueItems, processNext, updateQueue]);
 

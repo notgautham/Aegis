@@ -37,7 +37,9 @@ class APIInspector:
         async with httpx.AsyncClient(timeout=self.timeout_seconds, follow_redirects=True) as client:
             try:
                 response = await client.get(target.url)
-                mtls_required = response.status_code == 400 and "certificate" in response.text.lower()
+                mtls_required = (
+                    response.status_code == 400 and "certificate" in response.text.lower()
+                )
                 headers = {key.lower(): value for key, value in response.headers.items()}
                 return APIInspectionResult(
                     url=target.url,
@@ -46,7 +48,7 @@ class APIInspector:
                     status_code=response.status_code,
                     reachable=True,
                     headers=headers,
-                    metadata={"module_status": "optional"}
+                    metadata={"module_status": "optional"},
                 )
             except httpx.HTTPError:
                 return APIInspectionResult(
@@ -56,7 +58,7 @@ class APIInspector:
                     status_code=None,
                     reachable=False,
                     headers={},
-                    metadata={"module_status": "optional"}
+                    metadata={"module_status": "optional"},
                 )
 
     @staticmethod

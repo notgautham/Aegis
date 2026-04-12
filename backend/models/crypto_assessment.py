@@ -20,9 +20,7 @@ class CryptoAssessment(Base):
 
     __tablename__ = "crypto_assessments"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     asset_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("discovered_assets.id", ondelete="CASCADE"),
@@ -61,6 +59,5 @@ class CryptoAssessment(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<CryptoAssessment id={self.id} "
-            f"cipher={self.cipher_suite!r} score={self.risk_score}>"
+            f"<CryptoAssessment id={self.id} cipher={self.cipher_suite!r} score={self.risk_score}>"
         )

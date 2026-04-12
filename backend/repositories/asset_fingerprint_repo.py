@@ -33,8 +33,6 @@ class AssetFingerprintRepository(BaseRepository[AssetFingerprint]):
         normalized_keys = tuple(dict.fromkeys(key for key in keys if key))
         if not normalized_keys:
             return ()
-        stmt = select(AssetFingerprint).where(
-            AssetFingerprint.canonical_key.in_(normalized_keys)
-        )
+        stmt = select(AssetFingerprint).where(AssetFingerprint.canonical_key.in_(normalized_keys))
         result = await self.session.execute(stmt)
         return result.scalars().all()

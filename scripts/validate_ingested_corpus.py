@@ -26,8 +26,7 @@ def main() -> None:
     supported_files = [
         path
         for path in files
-        if path.suffix.lower() in SUPPORTED_SUFFIXES
-        and path.name.lower() not in IGNORED_FILENAMES
+        if path.suffix.lower() in SUPPORTED_SUFFIXES and path.name.lower() not in IGNORED_FILENAMES
     ]
 
     print(f"Corpus directory: {source_dir}")

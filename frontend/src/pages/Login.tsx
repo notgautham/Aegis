@@ -38,7 +38,7 @@ const Login = () => {
     setError('');
     if (email.includes('aegis') && password === 'aegis2026') {
       localStorage.setItem('aegis-auth', 'true');
-      navigate('/dashboard');
+      navigate('/scanner');
     } else {
       setError('Invalid credentials. Use the demo credentials below.');
     }

@@ -99,7 +99,9 @@ class PortScanner:
     ) -> str:
         timeout_seconds = host_timeout_seconds_override or self.host_timeout_seconds
         host_timeout = f"{max(1, int(timeout_seconds))}s"
-        ports_arg = "-" if full_scan and scan_type == "-sS" else ",".join(str(port) for port in ports)
+        ports_arg = (
+            "-" if full_scan and scan_type == "-sS" else ",".join(str(port) for port in ports)
+        )
         return (
             f"-Pn -n -T4 --max-retries {self.max_retries} "
             f"--host-timeout {host_timeout} {scan_type} -p {ports_arg}"

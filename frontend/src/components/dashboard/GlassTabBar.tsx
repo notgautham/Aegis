@@ -21,9 +21,10 @@ interface GlassTabBarProps {
   hasScanned: boolean;
   onScan?: (domain: string) => void;
   isLoading?: boolean;
+  showScannerPrompt?: boolean;
 }
 
-const GlassTabBar = ({ hasScanned, onScan, isLoading = false }: GlassTabBarProps) => {
+const GlassTabBar = ({ hasScanned, onScan, isLoading = false, showScannerPrompt = true }: GlassTabBarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { pinnedPages, removePin } = usePinnedPages();
@@ -124,7 +125,7 @@ const GlassTabBar = ({ hasScanned, onScan, isLoading = false }: GlassTabBarProps
           <div className="mx-1 w-px h-5 rounded-full" style={{ background: "rgba(255,255,255,0.12)" }} />
         )}
 
-        <ScanPromptBox compact onScan={onScan} isLoading={isLoading} />
+        {showScannerPrompt && <ScanPromptBox compact onScan={onScan} isLoading={isLoading} />}
       </div>
     </div>
   );

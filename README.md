@@ -122,6 +122,9 @@ All above rely on deterministic backend assessments and persisted artifacts.
 - Data: PostgreSQL 15 (Apache AGE image), Qdrant
 - Infra: Docker Compose
 
+Runtime version policy:
+- Python: 3.11 everywhere (container, CI, and local tooling)
+
 ## Repository Structure
 
 - `backend/`: API, deterministic analysis pipeline, repositories, models
@@ -132,6 +135,14 @@ All above rely on deterministic backend assessments and persisted artifacts.
 - `simulation/`: local pipeline run utility
 - `tests/`: unit, integration, and infrastructure tests
 
+## Scanner UX
+
+- Primary entry after login is `/scanner`.
+- Scanner accepts one target per run.
+- `Quick` / `Standard` / `Deep` / `PQC Focus` select analysis profile depth.
+- `Full Port Scan` and `Subdomain Enumeration` are independent coverage toggles layered on top of the selected profile.
+- After scan completion, dashboard pages consume the completed scan context.
+
 ## Repository and Setup
 
 - Repository Name: `Aegis`
@@ -141,8 +152,9 @@ All above rely on deterministic backend assessments and persisted artifacts.
 ## Documentation
 
 - Setup guide: [SETUP.md](SETUP.md)
-- API reference: [API.md](API.md)
-- Database reference: [DATABASE.md](DATABASE.md)
+- API reference: [documentations/API.md](documentations/API.md)
+- Database reference: [documentations/DATABASE.md](documentations/DATABASE.md)
+- Operational context: [documentations/CONTEXT.md](documentations/CONTEXT.md)
 - Corpus docs: [docs/README.md](docs/README.md)
 
 ## Notes

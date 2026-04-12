@@ -50,11 +50,11 @@ jobs:
 
       - name: Run tests (Unit & Integration)
         run: |
-          pytest tests/ -v
+          pytest tests/unit tests/integration -v
         env:
           PYTHONPATH: .
           DATABASE_URL: postgresql+asyncpg://aegis:aegis@localhost:5432/aegis
           QDRANT_URL: http://localhost:6333
-          # Enforce local mock modes in CI so tests don't fail without API keys
-          EMBEDDING_PROVIDER_MODE: cloud
-          LLM_PROVIDER_MODE: cloud
+          # Enforce local/offline modes in CI so tests don't require cloud API keys.
+          EMBEDDING_PROVIDER_MODE: local
+          LLM_PROVIDER_MODE: local

@@ -42,7 +42,9 @@ async def session_factory():
         await engine.dispose()
 
 
-async def _create_scan(session_factory, *, target: str, status: ScanStatus = ScanStatus.PENDING) -> uuid.UUID:
+async def _create_scan(
+    session_factory, *, target: str, status: ScanStatus = ScanStatus.PENDING
+) -> uuid.UUID:
     async with session_factory() as session:
         scan_job = ScanJob(target=target, status=status)
         session.add(scan_job)
@@ -62,7 +64,9 @@ async def test_happy_path_persists_tls_and_non_tls_assets(tmp_path, session_fact
         runtime_store=runtime_store,
         validated_hostnames=[ValidatedHostname(hostname=hostname, ip_addresses=(ip_address,))],
         port_findings_by_ip={ip_address: [make_tls_port(ip_address), make_vpn_port(ip_address)]},
-        tls_results_by_target={(hostname, ip_address, 443): build_tls_result(hostname=hostname, ip_address=ip_address)},
+        tls_results_by_target={
+            (hostname, ip_address, 443): build_tls_result(hostname=hostname, ip_address=ip_address)
+        },
         enumerated_hostnames=[hostname],
     )
     scan_id = await _create_scan(session_factory, target=hostname)
@@ -95,14 +99,18 @@ async def test_happy_path_persists_tls_and_non_tls_assets(tmp_path, session_fact
     assert any("ECDSA" in degraded for degraded in status_payload["degraded_modes"])
     assert len(results_payload["assets"]) == 3
     assert any(asset["service_type"].value == "vpn" for asset in results_payload["assets"])
-    tls_asset = next(asset for asset in results_payload["assets"] if asset["assessment"] is not None)
+    tls_asset = next(
+        asset for asset in results_payload["assets"] if asset["assessment"] is not None
+    )
     assert tls_asset["assessment"]["risk_score"] == 84.5
     assert tls_asset["remediation"] is not None
     assert tls_asset["certificate"] is not None
 
 
 @pytest.mark.asyncio
-async def test_tier_one_scan_skips_remediation_and_still_issues_certificate(tmp_path, session_factory) -> None:
+async def test_tier_one_scan_skips_remediation_and_still_issues_certificate(
+    tmp_path, session_factory
+) -> None:
     hostname = f"phase8-{uuid.uuid4().hex[:8]}.example.com"
     ip_address = "198.51.100.20"
     orchestrator = build_phase8_orchestrator(
@@ -125,7 +133,9 @@ async def test_tier_one_scan_skips_remediation_and_still_issues_certificate(tmp_
 
     await orchestrator.run_scan(scan_id=scan_id, target=hostname)
 
-    payload = await ScanReadService(session_factory=session_factory).get_scan_results(scan_id=scan_id)
+    payload = await ScanReadService(session_factory=session_factory).get_scan_results(
+        scan_id=scan_id
+    )
     tls_asset = payload["assets"][0]
     assert tls_asset["assessment"]["compliance_tier"].value == "FULLY_QUANTUM_SAFE"
     assert tls_asset["remediation"] is None
@@ -158,7 +168,9 @@ async def test_duplicate_run_guard_rejects_running_and_terminal_scans(
 
 
 @pytest.mark.asyncio
-async def test_per_asset_failure_isolated_while_other_assets_continue(tmp_path, session_factory) -> None:
+async def test_per_asset_failure_isolated_while_other_assets_continue(
+    tmp_path, session_factory
+) -> None:
     root_domain = f"phase8-{uuid.uuid4().hex[:8]}.example.com"
     good_hostname = f"good.{root_domain}"
     bad_hostname = f"bad.{root_domain}"
@@ -190,7 +202,9 @@ async def test_per_asset_failure_isolated_while_other_assets_continue(tmp_path, 
     delegate = orchestrator.certificate_signer
 
     class SelectiveFailSigner:
-        async def issue_and_persist(self, *, certificate_request, compliance_certificate_repository):
+        async def issue_and_persist(
+            self, *, certificate_request, compliance_certificate_repository
+        ):
             if certificate_request.asset.hostname == bad_hostname:
                 raise RuntimeError("intentional signing failure")
             return await delegate.issue_and_persist(
@@ -203,7 +217,9 @@ async def test_per_asset_failure_isolated_while_other_assets_continue(tmp_path, 
 
     await orchestrator.run_scan(scan_id=scan_id, target=root_domain)
 
-    status_payload = await ScanReadService(session_factory=session_factory).get_scan_status(scan_id=scan_id)
+    status_payload = await ScanReadService(session_factory=session_factory).get_scan_status(
+        scan_id=scan_id
+    )
     assert status_payload["status"] is ScanStatus.COMPLETED
     assert status_payload["progress"]["assets_discovered"] == 2
     assert status_payload["progress"]["assessments_created"] == 2
@@ -267,7 +283,8 @@ async def test_missing_amass_logs_warning_and_continues_with_root_target(
 
     assert resolved == validated_hostnames
     assert any(
-        "Domain enumeration unavailable" in record.message and "Amass binary not found" in record.message
+        "Domain enumeration unavailable" in record.message
+        and "Amass binary not found" in record.message
         for record in caplog.records
     )
     snapshot = runtime_store.get_snapshot(uuid.uuid4())

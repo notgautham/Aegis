@@ -5,13 +5,19 @@ Docker/runtime validation tests for Phase 7 certificate signing.
 from __future__ import annotations
 
 import asyncio
+import shutil
 import subprocess
+
+import pytest
 
 from backend.cert import CertificateRequest, CertificateSigner, load_certificate
 from tests.unit._phase7_helpers import build_certificate_fixture
 
 
 def test_runtime_signing_emits_parseable_certificate(tmp_path) -> None:
+    if shutil.which("openssl-oqs") is None:
+        pytest.skip("openssl-oqs binary is required for runtime certificate parsing test")
+
     _, asset, assessment, remediation_bundle = build_certificate_fixture()
     signer = CertificateSigner(runtime_dir=tmp_path)
 

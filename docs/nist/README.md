@@ -34,3 +34,4 @@ docker compose exec backend python scripts/validate_ingested_corpus.py
 - Keep only approved, project-relevant source material here.
 - Prefer stable filenames so ingestion behavior stays predictable across runs.
 - If you replace documents, rerun ingestion so Qdrant reflects the updated corpus.
+- This corpus supports remediation guidance only; deterministic risk/compliance calculations remain in the backend analysis/compliance pipeline.

@@ -4,6 +4,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Asset } from '@/data/demoData';
 import { getStatusLabel, getQScoreColor } from '@/data/demoData';
+import { buildHndlEstimateExplanation } from '@/lib/hndlModel';
 import { Shield, Globe, Lock, Clock, AlertTriangle, Server, Key } from 'lucide-react';
 
 interface AssetDetailPanelProps {
@@ -130,6 +131,9 @@ const AssetDetailPanel = ({ asset, open, onClose }: AssetDetailPanelProps) => {
                 </div>
                 <p className="font-body text-xs text-foreground">
                   Data intercepted today could be decrypted in <strong className="font-mono text-status-critical">{asset.hndlYears} years</strong> (by {asset.hndlBreakYear})
+                </p>
+                <p className="font-body text-[10px] text-muted-foreground mt-2 leading-relaxed">
+                  {buildHndlEstimateExplanation({ breakYear: asset.hndlBreakYear })}
                 </p>
               </div>
             )}

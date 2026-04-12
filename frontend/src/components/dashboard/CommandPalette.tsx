@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/command';
 import {
   Home, Search, Package, ClipboardList, ShieldCheck, Star,
-  Wrench, BarChart3, Terminal, Settings, Globe, Key, FileText,
+  Wrench, BarChart3, Settings, Globe, Key, FileText,
   Cpu, Lock, Sparkles, Map, Calendar, PenTool, Bell, Plug, Clock, HelpCircle,
 } from 'lucide-react';
 import { scanHistory as demoScanHistory, getStatusColor, getStatusLabel, getQScoreColor } from '@/data/demoData';
@@ -26,9 +26,9 @@ interface SearchRoute {
 
 const searchRoutes: SearchRoute[] = [
   { label: 'Dashboard Home', path: '/dashboard', icon: Home, group: 'Navigation', keywords: ['home', 'overview', 'main'] },
+  { label: 'Scanner', path: '/scanner', icon: ShieldCheck, group: 'Navigation', keywords: ['scan', 'scanner', 'start'] },
   { label: 'Asset Discovery', path: '/dashboard/discovery', icon: Search, group: 'Navigation', keywords: ['domains', 'discover', 'find'] },
   { label: 'Asset Inventory', path: '/dashboard/inventory', icon: Package, group: 'Navigation', keywords: ['assets', 'inventory', 'list'] },
-  { label: 'Scan Console', path: '/dashboard/scan-console', icon: Terminal, group: 'Navigation', keywords: ['scan', 'terminal', 'console'] },
   { label: 'Scan History', path: '/dashboard/history', icon: Clock, group: 'Navigation', keywords: ['scan', 'history', 'past', 'previous'] },
   { label: 'CBOM Overview', path: '/dashboard/cbom', icon: ClipboardList, group: 'CBOM', keywords: ['cbom', 'cryptographic', 'bill of materials'] },
   { label: 'CBOM Per-Asset', path: '/dashboard/cbom/per-asset', icon: Cpu, group: 'CBOM', keywords: ['cbom', 'asset', 'detail'] },

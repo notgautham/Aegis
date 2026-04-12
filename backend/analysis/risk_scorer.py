@@ -40,7 +40,11 @@ def _sig_threat_sentence(algorithm: str | None) -> str:
     normalized = (algorithm or "UNKNOWN").upper()
     if "MLDSA" in normalized or "ML-DSA" in normalized or "SLH" in normalized:
         return "Post-quantum signature algorithm detected; this is treated as quantum resistant in the current model."
-    if normalized in {"RSA", "ECDSA", "UNKNOWN", "NONE"} or "RSA" in normalized or "ECDSA" in normalized:
+    if (
+        normalized in {"RSA", "ECDSA", "UNKNOWN", "NONE"}
+        or "RSA" in normalized
+        or "ECDSA" in normalized
+    ):
         return "Classical signatures are vulnerable to Shor-type attacks and can enable future certificate forgery."
     return "Signature algorithm is treated as quantum-vulnerable unless explicitly recognized as PQC-safe."
 
@@ -128,7 +132,9 @@ def calculate_risk_score(
 ) -> RiskScoreBreakdown:
     """Calculate the 0-100 quantum risk score using the documented formula."""
     resolved_tls_vulnerability = (
-        tls_vulnerability if tls_vulnerability is not None else lookup_tls_vulnerability(tls_version or "")
+        tls_vulnerability
+        if tls_vulnerability is not None
+        else lookup_tls_vulnerability(tls_version or "")
     )
 
     kex_component = WEIGHTS["kex"] * kex_vulnerability

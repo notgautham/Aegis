@@ -12,6 +12,7 @@ import os
 import re
 import socket
 import uuid
+from collections import defaultdict
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from dataclasses import dataclass, field
@@ -311,6 +312,18 @@ class PipelineOrchestrator:
         )
         self._ip_enrichment_cache: dict[str, dict[str, Any]] = {}
         self._domain_enrichment_cache: dict[str, dict[str, Any]] = {}
+        self.tls_probe_concurrency = max(
+            1,
+            int(os.getenv("AEGIS_TLS_PROBE_CONCURRENCY", "50")),
+        )
+        self.port_scan_concurrency = max(
+            1,
+            int(os.getenv("AEGIS_PORT_SCAN_CONCURRENCY", "20")),
+        )
+        self.asset_processing_concurrency = max(
+            1,
+            int(os.getenv("AEGIS_ASSET_PROCESSING_CONCURRENCY", "24")),
+        )
 
     async def run_scan(self, *, scan_id: uuid.UUID, target: str) -> None:
         """Run the full Phase 3-to-7 pipeline for one existing scan job."""
@@ -349,38 +362,12 @@ class PipelineOrchestrator:
                     kind="success",
                 )
 
-            for asset in persisted_assets:
-                if asset.service_type is not ServiceType.TLS:
-                    continue
+            await self._process_tls_assets_for_scan(
+                scan_id=scan_id,
+                persisted_assets=persisted_assets,
+                tls_results_by_key=discovery.tls_results_by_key,
+            )
 
-                tls_result = discovery.tls_results_by_key.get(_artifact_key_from_asset(asset))
-                if tls_result is None or not tls_result.cipher_suite or not tls_result.tls_version:
-                    continue
-
-                try:
-                    await self._process_tls_asset(
-                        asset_id=asset.id,
-                        tls_result=tls_result,
-                        scan_id=scan_id,
-                    )
-                except Exception:
-                    if self.runtime_store is not None:
-                        self.runtime_store.add_event(
-                            scan_id,
-                            (
-                                f"Asset pipeline failed for {asset.hostname or asset.ip_address}:"
-                                f"{asset.port}; continuing with remaining assets."
-                            ),
-                            kind="error",
-                        )
-                    logger.exception(
-                        "Per-asset pipeline failure for scan %s asset %s (%s:%s).",
-                        scan_id,
-                        asset.id,
-                        asset.hostname or asset.ip_address,
-                        asset.port,
-                    )
-            
             # Update Graph DB
             await self._update_network_graph(target, persisted_assets)
 
@@ -444,23 +431,73 @@ class PipelineOrchestrator:
                         scan_id,
                     )
 
+    async def _process_tls_assets_for_scan(
+        self,
+        *,
+        scan_id: uuid.UUID,
+        persisted_assets: Sequence[DiscoveredAsset],
+        tls_results_by_key: dict[tuple[str | None, str, int, str, str], TLSProbeResult],
+    ) -> None:
+        semaphore = asyncio.Semaphore(self.asset_processing_concurrency)
+
+        async def _run_asset(asset: DiscoveredAsset, tls_result: TLSProbeResult) -> None:
+            async with semaphore:
+                await self._process_tls_asset(
+                    asset_id=asset.id,
+                    tls_result=tls_result,
+                    scan_id=scan_id,
+                )
+
+        tasks: list[asyncio.Task[None]] = []
+        for asset in persisted_assets:
+            if asset.service_type is not ServiceType.TLS:
+                continue
+
+            tls_result = tls_results_by_key.get(_artifact_key_from_asset(asset))
+            if tls_result is None or not tls_result.cipher_suite or not tls_result.tls_version:
+                continue
+
+            tasks.append(asyncio.create_task(_run_asset(asset, tls_result)))
+
+        if not tasks:
+            return
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for asset_task, result in zip(tasks, results, strict=True):
+            if not isinstance(result, Exception):
+                continue
+
+            # Pull the asset label from the task name context when available.
+            _ = asset_task
+            if self.runtime_store is not None:
+                self.runtime_store.add_event(
+                    scan_id,
+                    "Asset pipeline failed for one or more assets; continued with remaining assets.",
+                    kind="error",
+                )
+            logger.exception(
+                "Per-asset pipeline failure for scan %s.",
+                scan_id,
+                exc_info=result,
+            )
+
     async def _update_network_graph(self, target: str, assets: Sequence[DiscoveredAsset]) -> None:
         try:
             async with self.session_factory() as session:
                 await session.execute(text("LOAD 'age'"))
-                await session.execute(text("SET search_path = ag_catalog, \"$user\", public"))
-                
+                await session.execute(text('SET search_path = ag_catalog, "$user", public'))
+
                 query1 = f"SELECT * FROM cypher('aegis_network_graph', $$ MERGE (d:Domain {{name: '{target}'}}) $$) as (v agtype);"
                 await session.execute(text(query1))
-                
+
                 for asset in assets:
                     if not asset.ip_address:
                         continue
                     ip = asset.ip_address
                     port = asset.port
-                    service = asset.service_type.value if asset.service_type else 'unknown'
+                    service = asset.service_type.value if asset.service_type else "unknown"
                     hostname = asset.hostname or target
-                    
+
                     query2 = f"""
                         SELECT * FROM cypher('aegis_network_graph', $$
                             MATCH (d:Domain {{name: '{target}'}})
@@ -473,7 +510,7 @@ class PipelineOrchestrator:
                         $$) as (v agtype);
                     """
                     await session.execute(text(query2))
-                
+
                 await session.commit()
         except Exception:
             logger.exception("Failed to update network graph for %s.", target)
@@ -607,6 +644,14 @@ class PipelineOrchestrator:
         skip_enumeration: bool = False,
     ) -> _DiscoveryExecution:
         scope = AuthorizedScope.from_target(target)
+        if scope.scope_type == "domain" and not skip_enumeration:
+            return await self._run_discovery_streaming(
+                target=target,
+                scope=scope,
+                scan_id=scan_id,
+                full_port_scan_enabled=full_port_scan_enabled,
+            )
+
         validated_hostnames = await self._resolve_hostnames(
             target,
             scope,
@@ -641,20 +686,21 @@ class PipelineOrchestrator:
             )
             if fallback_tls_results:
                 tls_results.extend(fallback_tls_results)
-        
+
         # Call optional probes for VPN and API metadata
         vpn_results = []
         for pf in port_findings:
             if pf.service_type == ServiceType.VPN:
                 vpn_results.append(self.vpn_probe.probe(pf.ip_address, pf.port, pf.protocol))
-        
-        api_results = []
+
+        api_tasks = []
         # Check all discovered web-like ports for JWT/mTLS
         for pf in port_findings:
             if pf.port in {80, 443, 8080, 8443}:
                 scheme = "https" if pf.port in {443, 8443} else "http"
                 target_url = f"{scheme}://{pf.ip_address}:{pf.port}"
-                api_results.append(await self.api_inspector.inspect(URLProbeTarget(url=target_url)))
+                api_tasks.append(self.api_inspector.inspect(URLProbeTarget(url=target_url)))
+        api_results = await asyncio.gather(*api_tasks) if api_tasks else []
 
         aggregated_assets = aggregate_assets(
             target,
@@ -664,6 +710,313 @@ class PipelineOrchestrator:
             vpn_results,
             api_results,
         )
+        self._add_runtime_event(
+            scan_id,
+            f"Discovery produced {len(aggregated_assets)} aggregated asset candidate(s).",
+            kind="success",
+            stage="persisting_assets",
+        )
+        return _DiscoveryExecution(
+            aggregated_assets=tuple(aggregated_assets),
+            port_findings=tuple(port_findings),
+            validated_hostnames=tuple(validated_hostnames),
+            tls_results_by_key={
+                _artifact_key_from_tls_result(result): result for result in tls_results
+            },
+        )
+
+    async def _run_discovery_streaming(
+        self,
+        *,
+        target: str,
+        scope: AuthorizedScope,
+        scan_id: uuid.UUID | None,
+        full_port_scan_enabled: bool,
+    ) -> _DiscoveryExecution:
+        hostnames: set[str] = {scope.domain} if scope.domain else set()
+        if scope.domain:
+            hostnames.add(f"www.{scope.domain}")
+            self._augment_hostname_candidates(scope.domain, hostnames)
+
+        validated_hostnames_stream: dict[str, ValidatedHostname] = {}
+        ip_to_hostnames: dict[str, set[str]] = defaultdict(set)
+        queued_ips: set[str] = set()
+        port_findings: list[PortFinding] = []
+        tls_results: list[TLSProbeResult] = []
+        seen_port_keys: set[tuple[str, int, str]] = set()
+        seen_tls_targets: set[tuple[str | None, str, int, str]] = set()
+
+        tls_semaphore = asyncio.Semaphore(self.tls_probe_concurrency)
+        port_semaphore = asyncio.Semaphore(self.port_scan_concurrency)
+        lock = asyncio.Lock()
+        tls_tasks: set[asyncio.Task[None]] = set()
+        port_tasks: set[asyncio.Task[None]] = set()
+
+        async def _probe_tls_target(target_item: TLSScanTarget) -> None:
+            async with tls_semaphore:
+                try:
+                    result = await self.tls_probe.probe(target_item)
+                except Exception:
+                    logger.exception(
+                        "TLS probing failed for %s:%s.",
+                        target_item.server_name,
+                        target_item.port,
+                    )
+                    self._add_runtime_event(
+                        scan_id,
+                        f"TLS probing failed for {target_item.server_name}; continuing with remaining endpoints.",
+                        kind="error",
+                        stage="probing_tls",
+                    )
+                    return
+
+            async with lock:
+                tls_results.append(result)
+
+        def _schedule_tls_target(target_item: TLSScanTarget) -> None:
+            target_key = (
+                target_item.hostname,
+                target_item.ip_address,
+                target_item.port,
+                target_item.protocol,
+            )
+            if target_key in seen_tls_targets:
+                return
+            seen_tls_targets.add(target_key)
+            task = asyncio.create_task(_probe_tls_target(target_item))
+            tls_tasks.add(task)
+            task.add_done_callback(tls_tasks.discard)
+
+        async def _scan_ip(ip_address: str) -> None:
+            async with port_semaphore:
+                try:
+                    findings = await self._scan_host_with_profile(
+                        ip_address,
+                        full_port_scan_enabled,
+                    )
+                except Exception:
+                    logger.exception("Port scan failed for %s.", ip_address)
+                    self._add_runtime_event(
+                        scan_id,
+                        f"Port scan failed for {ip_address}; continuing with remaining addresses.",
+                        kind="error",
+                        stage="scanning_ports",
+                    )
+                    return
+
+            async with lock:
+                known_hostnames = sorted(ip_to_hostnames.get(ip_address, set()))
+                for finding in findings:
+                    finding_key = (finding.ip_address, finding.port, finding.protocol)
+                    if finding_key in seen_port_keys:
+                        continue
+                    seen_port_keys.add(finding_key)
+                    port_findings.append(finding)
+                    if finding.service_type is not ServiceType.TLS:
+                        continue
+
+                    if known_hostnames:
+                        for hostname in known_hostnames:
+                            _schedule_tls_target(
+                                TLSScanTarget(
+                                    hostname=hostname,
+                                    ip_address=finding.ip_address,
+                                    port=finding.port,
+                                    protocol=finding.protocol,
+                                )
+                            )
+                    else:
+                        _schedule_tls_target(
+                            TLSScanTarget(
+                                hostname=None,
+                                ip_address=finding.ip_address,
+                                port=finding.port,
+                                protocol=finding.protocol,
+                            )
+                        )
+
+        async def _resolve_hostname_streaming(hostname: str, source: str) -> None:
+            normalized_hostname = hostname.strip().lower().rstrip(".")
+            if not normalized_hostname or not scope.contains(hostname=normalized_hostname):
+                return
+
+            try:
+                resolved = await asyncio.to_thread(socket.getaddrinfo, normalized_hostname, None)
+            except socket.gaierror:
+                return
+
+            ip_addresses = tuple(
+                sorted(
+                    {
+                        info[4][0]
+                        for info in resolved
+                        if info and len(info) >= 5 and info[4]
+                    }
+                )
+            )
+            if not ip_addresses:
+                return
+
+            async with lock:
+                validated_hostnames_stream[normalized_hostname] = ValidatedHostname(
+                    hostname=normalized_hostname,
+                    ip_addresses=ip_addresses,
+                    source=source,
+                )
+                for ip_address in ip_addresses:
+                    ip_to_hostnames[ip_address].add(normalized_hostname)
+                    if ip_address in queued_ips:
+                        continue
+                    queued_ips.add(ip_address)
+                    scan_task = asyncio.create_task(_scan_ip(ip_address))
+                    port_tasks.add(scan_task)
+                    scan_task.add_done_callback(port_tasks.discard)
+
+                    self._add_runtime_event(
+                        scan_id,
+                        f"Discovered {normalized_hostname} -> {ip_address}; queued port scan.",
+                        kind="info",
+                        stage="scanning_ports",
+                    )
+
+                # If this hostname arrived after ports were already found, immediately queue SNI probes.
+                for finding in port_findings:
+                    if finding.ip_address not in ip_addresses or finding.service_type is not ServiceType.TLS:
+                        continue
+                    _schedule_tls_target(
+                        TLSScanTarget(
+                            hostname=normalized_hostname,
+                            ip_address=finding.ip_address,
+                            port=finding.port,
+                            protocol=finding.protocol,
+                        )
+                    )
+
+        self._set_runtime_stage(
+            scan_id,
+            stage="enumerating_domains",
+            detail=target,
+            message=f"Enumerating hostnames for {target} with streaming pipeline.",
+        )
+
+        hostname_tasks = [
+            asyncio.create_task(_resolve_hostname_streaming(candidate, "seed"))
+            for candidate in sorted(hostnames)
+        ]
+
+        try:
+            async for record in self.enumerator.enumerate_stream(target):
+                normalized = record.hostname.strip().lower().rstrip(".")
+                if not normalized or normalized in hostnames:
+                    continue
+                hostnames.add(normalized)
+                hostname_tasks.append(
+                    asyncio.create_task(_resolve_hostname_streaming(normalized, record.source))
+                )
+        except DNSEnumerationError as exc:
+            logger.warning(
+                "Domain enumeration unavailable for %s; continuing with streaming seeds. Reason: %s",
+                target,
+                exc,
+            )
+            self._add_degraded_mode(
+                scan_id,
+                f"Domain enumeration unavailable for {target}; continued with deterministic seeds.",
+            )
+        except Exception:
+            logger.exception(
+                "Domain enumeration failed for %s; continuing with streaming seeds.",
+                target,
+            )
+            self._add_degraded_mode(
+                scan_id,
+                f"Domain enumeration failed for {target}; continued with deterministic seeds.",
+            )
+
+        if hostname_tasks:
+            await asyncio.gather(*hostname_tasks, return_exceptions=True)
+        if port_tasks:
+            await asyncio.gather(*list(port_tasks), return_exceptions=True)
+        if tls_tasks:
+            await asyncio.gather(*list(tls_tasks), return_exceptions=True)
+
+        self._set_runtime_stage(
+            scan_id,
+            stage="validating_dns",
+            detail=f"{len(hostnames)} hostname(s)",
+            message="Validating DNS resolution for discovered hostnames.",
+        )
+        validated_hostnames = await self.dns_validator.validate(hostnames)
+
+        if scan_id is not None and validated_hostnames:
+            try:
+                async with self.session_factory() as session:
+                    dns_record_repository = DNSRecordRepository(session)
+                    for validated_hostname in validated_hostnames:
+                        try:
+                            async with session.begin_nested():
+                                await dns_record_repository.create(
+                                    scan_id=scan_id,
+                                    hostname=validated_hostname.hostname,
+                                    resolved_ips=list(validated_hostname.ip_addresses),
+                                    cnames=list(validated_hostname.cnames),
+                                    discovery_source=validated_hostname.source,
+                                    is_in_scope=True,
+                                )
+                        except Exception:
+                            logger.exception(
+                                "Failed to persist DNS record for scan %s hostname %s.",
+                                scan_id,
+                                validated_hostname.hostname,
+                            )
+                    await session.commit()
+            except Exception:
+                logger.exception(
+                    "Failed to persist DNS records for scan %s.",
+                    scan_id,
+                )
+
+        ip_addresses = sorted(
+            {
+                ip
+                for validated in validated_hostnames
+                for ip in validated.ip_addresses
+            }
+            | set(queued_ips)
+        )
+
+        if len(port_findings) == 0:
+            fallback_tls_results = await self._probe_tls_fallback_without_port_findings(
+                scope=scope,
+                validated_hostnames=validated_hostnames,
+                ip_addresses=ip_addresses,
+                scan_id=scan_id,
+            )
+            if fallback_tls_results:
+                tls_results.extend(fallback_tls_results)
+
+        vpn_results = []
+        for pf in port_findings:
+            if pf.service_type == ServiceType.VPN:
+                vpn_results.append(self.vpn_probe.probe(pf.ip_address, pf.port, pf.protocol))
+
+        api_tasks = []
+        for pf in port_findings:
+            if pf.port in {80, 443, 8080, 8443}:
+                scheme = "https" if pf.port in {443, 8443} else "http"
+                target_url = f"{scheme}://{pf.ip_address}:{pf.port}"
+                api_tasks.append(self.api_inspector.inspect(URLProbeTarget(url=target_url)))
+        api_results = await asyncio.gather(*api_tasks) if api_tasks else []
+
+        aggregated_assets = aggregate_assets(
+            target,
+            validated_hostnames,
+            port_findings,
+            tls_results,
+            vpn_results,
+            api_results,
+        )
+
         self._add_runtime_event(
             scan_id,
             f"Discovery produced {len(aggregated_assets)} aggregated asset candidate(s).",
@@ -848,11 +1201,14 @@ class PipelineOrchestrator:
             message=stage_message,
         )
 
+        semaphore = asyncio.Semaphore(self.port_scan_concurrency)
+
+        async def _scan_with_limit(ip_address: str) -> list[PortFinding]:
+            async with semaphore:
+                return await self._scan_host_with_profile(ip_address, full_port_scan_enabled)
+
         scan_results = await asyncio.gather(
-            *(
-                self._scan_host_with_profile(ip_address, full_port_scan_enabled)
-                for ip_address in ip_addresses
-            ),
+            *(_scan_with_limit(ip_address) for ip_address in ip_addresses),
             return_exceptions=True,
         )
         for ip_address, result in zip(ip_addresses, scan_results, strict=True):
@@ -930,8 +1286,14 @@ class PipelineOrchestrator:
             detail=f"{len(tls_targets)} TLS endpoint(s)",
             message="Negotiating TLS handshakes and retrieving certificate chains.",
         )
+        semaphore = asyncio.Semaphore(self.tls_probe_concurrency)
+
+        async def _probe_with_limit(target: TLSScanTarget) -> TLSProbeResult:
+            async with semaphore:
+                return await self.tls_probe.probe(target)
+
         results = await asyncio.gather(
-            *(self.tls_probe.probe(target) for target in tls_targets),
+            *(_probe_with_limit(target) for target in tls_targets),
             return_exceptions=True,
         )
         tls_results: list[TLSProbeResult] = []
@@ -977,7 +1339,7 @@ class PipelineOrchestrator:
         seen: set[tuple[str | None, str, int]] = set()
 
         for validated in validated_hostnames:
-            normalized_hostname = validated.hostname.strip().lower().rstrip('.')
+            normalized_hostname = validated.hostname.strip().lower().rstrip(".")
             if not scope.contains(hostname=normalized_hostname):
                 continue
             for ip_address in validated.ip_addresses:
@@ -991,11 +1353,11 @@ class PipelineOrchestrator:
                             hostname=normalized_hostname,
                             ip_address=ip_address,
                             port=port,
-                            protocol='tcp',
+                            protocol="tcp",
                         )
                     )
 
-        if not targets and scope.scope_type in {'ip', 'network'}:
+        if not targets and scope.scope_type in {"ip", "network"}:
             for ip_address in ip_addresses:
                 for port in common_tls_ports:
                     key = (None, ip_address, port)
@@ -1007,7 +1369,7 @@ class PipelineOrchestrator:
                             hostname=None,
                             ip_address=ip_address,
                             port=port,
-                            protocol='tcp',
+                            protocol="tcp",
                         )
                     )
 
@@ -1020,12 +1382,18 @@ class PipelineOrchestrator:
                 "Port scanning yielded 0 open findings; "
                 "attempting direct TLS fallback on common HTTPS ports (443, 8443)."
             ),
-            kind='degraded',
-            stage='probing_tls',
+            kind="degraded",
+            stage="probing_tls",
         )
 
+        semaphore = asyncio.Semaphore(self.tls_probe_concurrency)
+
+        async def _probe_with_limit(target: TLSScanTarget) -> TLSProbeResult:
+            async with semaphore:
+                return await self.tls_probe.probe(target)
+
         results = await asyncio.gather(
-            *(self.tls_probe.probe(target) for target in targets),
+            *(_probe_with_limit(target) for target in targets),
             return_exceptions=True,
         )
 
@@ -1044,8 +1412,8 @@ class PipelineOrchestrator:
                     "TLS fallback recovered "
                     f"{len(tls_results)} successful handshake result(s) after empty port-scan output."
                 ),
-                kind='success',
-                stage='probing_tls',
+                kind="success",
+                stage="probing_tls",
             )
 
         return tls_results
@@ -1061,7 +1429,9 @@ class PipelineOrchestrator:
             if not scope.contains(hostname=hostname):
                 continue
             for ip_address in validated.ip_addresses:
-                if scope.scope_type in {"ip", "network"} and not scope.contains(ip_address=ip_address):
+                if scope.scope_type in {"ip", "network"} and not scope.contains(
+                    ip_address=ip_address
+                ):
                     continue
                 ip_to_hostnames.setdefault(ip_address, set()).add(hostname)
         return ip_to_hostnames
@@ -1413,7 +1783,9 @@ class PipelineOrchestrator:
             analyzed_certificates = self.certificate_analyzer.analyze(extracted_certificates)
             persisted_certificates = []
 
-            for extracted, analyzed in zip(extracted_certificates, analyzed_certificates, strict=True):
+            for extracted, analyzed in zip(
+                extracted_certificates, analyzed_certificates, strict=True
+            ):
                 persisted_certificates.append(
                     await certificate_repository.create(
                         asset_id=asset.id,
@@ -1630,11 +2002,11 @@ class PipelineOrchestrator:
                             urgency = hndl.get("urgency")
                             entries = hndl.get("entries", [])
                             break_year = min((e["breakYear"] for e in entries), default=None)
-                            
+
                             updated_json = dict(cbom_document.cbom_json)
                             updated_json["quantumRiskSummary"]["hndlUrgency"] = urgency
                             updated_json["quantumRiskSummary"]["estimatedBreakYear"] = break_year
-                            
+
                             await cbom_repository.update(cbom_document.id, cbom_json=updated_json)
                 except Exception:
                     logger.exception(
@@ -1869,7 +2241,11 @@ class PipelineOrchestrator:
         analyzed_certificates: Sequence[Any],
     ) -> _AssessmentInputs:
         leaf_certificate = next(
-            (certificate for certificate in analyzed_certificates if certificate.cert_level is CertLevel.LEAF),
+            (
+                certificate
+                for certificate in analyzed_certificates
+                if certificate.cert_level is CertLevel.LEAF
+            ),
             analyzed_certificates[0] if analyzed_certificates else None,
         )
         metadata = dict(tls_result.metadata)
@@ -2055,9 +2431,7 @@ class ScanReadService:
             "completed_at": bundle["scan"].completed_at,
             "progress": bundle["progress"],
             "summary": bundle["summary"],
-            "dns_records": [
-                serialize_dns_record(record) for record in bundle["dns_records"]
-            ],
+            "dns_records": [serialize_dns_record(record) for record in bundle["dns_records"]],
             "assets": assets_payload,
         }
         payload.update(self._build_runtime_payload(bundle))
@@ -2088,9 +2462,7 @@ class ScanReadService:
             for bundle in bundles
             if bundle["scan"].status in {ScanStatus.PENDING, ScanStatus.RUNNING}
         )
-        failed_scans = sum(
-            1 for bundle in bundles if bundle["scan"].status is ScanStatus.FAILED
-        )
+        failed_scans = sum(1 for bundle in bundles if bundle["scan"].status is ScanStatus.FAILED)
         degraded_counts = [len(bundle["runtime"]["degraded_modes"]) for bundle in bundles]
 
         return {
@@ -2213,24 +2585,30 @@ class ScanReadService:
                 return {"nodes": [], "edges": []}
 
             assets = (
-                await session.execute(
-                    select(DiscoveredAsset)
-                    .where(DiscoveredAsset.scan_id == selected_scan_id)
-                    .order_by(DiscoveredAsset.hostname.asc(), DiscoveredAsset.port.asc())
-                    .limit(limit)
+                (
+                    await session.execute(
+                        select(DiscoveredAsset)
+                        .where(DiscoveredAsset.scan_id == selected_scan_id)
+                        .order_by(DiscoveredAsset.hostname.asc(), DiscoveredAsset.port.asc())
+                        .limit(limit)
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             if not assets:
                 return {"nodes": [], "edges": []}
 
             asset_ids = [asset.id for asset in assets]
             assessments = (
-                await session.execute(
-                    select(CryptoAssessment).where(
-                        CryptoAssessment.asset_id.in_(asset_ids)
+                (
+                    await session.execute(
+                        select(CryptoAssessment).where(CryptoAssessment.asset_id.in_(asset_ids))
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             assessments_by_asset_id = {
                 assessment.asset_id: assessment for assessment in assessments
             }
@@ -2358,7 +2736,9 @@ class ScanReadService:
                     edges.append([domain, ip])
 
         for ip in sorted_ips:
-            for port_id, _port_label in sorted(ip_to_ports.get(ip, []), key=lambda item: int(item[1])):
+            for port_id, _port_label in sorted(
+                ip_to_ports.get(ip, []), key=lambda item: int(item[1])
+            ):
                 edge = (ip, port_id)
                 if edge not in seen_edges:
                     seen_edges.add(edge)
@@ -2447,21 +2827,29 @@ class ScanReadService:
                 }
 
             leaf_certificate_rows = (
-                await session.execute(
-                    select(CertificateChain).where(
-                        CertificateChain.asset_id.in_(asset_ids),
-                        CertificateChain.cert_level == CertLevel.LEAF,
+                (
+                    await session.execute(
+                        select(CertificateChain).where(
+                            CertificateChain.asset_id.in_(asset_ids),
+                            CertificateChain.cert_level == CertLevel.LEAF,
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             for certificate_chain in leaf_certificate_rows:
                 leaf_certificates[certificate_chain.asset_id] = certificate_chain
 
             remediation_action_rows = (
-                await session.execute(
-                    select(RemediationAction).where(RemediationAction.asset_id.in_(asset_ids))
+                (
+                    await session.execute(
+                        select(RemediationAction).where(RemediationAction.asset_id.in_(asset_ids))
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             for remediation_action in remediation_action_rows:
                 remediation_actions.setdefault(remediation_action.asset_id, []).append(
                     remediation_action
@@ -2655,27 +3043,22 @@ class ScanReadService:
             )
         ]
         runtime_events = (
-            [
-                serialize_runtime_event(event)
-                for event in runtime_snapshot.events
-            ]
+            [serialize_runtime_event(event) for event in runtime_snapshot.events]
             if runtime_snapshot is not None
             else persisted_events
         )
         degraded_modes = (
             list(runtime_snapshot.degraded_modes)
             if runtime_snapshot is not None
-            else [
-                event["message"]
-                for event in persisted_events
-                if event["kind"] == "degraded"
-            ]
+            else [event["message"] for event in persisted_events if event["kind"] == "degraded"]
         )
 
         return {
             "stage": stage,
             "stage_detail": runtime_snapshot.stage_detail if runtime_snapshot is not None else None,
-            "stage_started_at": runtime_snapshot.stage_started_at if runtime_snapshot is not None else None,
+            "stage_started_at": runtime_snapshot.stage_started_at
+            if runtime_snapshot is not None
+            else None,
             "elapsed_seconds": elapsed_seconds,
             "events": runtime_events,
             "degraded_modes": degraded_modes,
@@ -2808,7 +3191,9 @@ def serialize_leaf_certificate(certificate_chain: CertificateChain | None) -> di
     }
 
 
-def serialize_asset_certificate(certificate_chain: CertificateChain | None) -> dict[str, Any] | None:
+def serialize_asset_certificate(
+    certificate_chain: CertificateChain | None,
+) -> dict[str, Any] | None:
     """Build frontend-facing TLS certificate summary from the leaf certificate row."""
     if certificate_chain is None:
         return None
@@ -2886,11 +3271,7 @@ def serialize_asset_fingerprint_history_entry(
     if parsed_scanned_at is not None and parsed_scanned_at.tzinfo is None:
         parsed_scanned_at = parsed_scanned_at.replace(tzinfo=UTC)
 
-    if (
-        parsed_scan_id is None
-        and parsed_q_score is None
-        and parsed_scanned_at is None
-    ):
+    if parsed_scan_id is None and parsed_q_score is None and parsed_scanned_at is None:
         return None
 
     return {

@@ -10,6 +10,7 @@ import { ChevronRight, Scan, Check, X, Shield, AlertTriangle, Download } from 'l
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as RechartTooltip, ReferenceLine, CartesianGrid } from 'recharts';
 import PQCCertificateModal from '@/components/dashboard/PQCCertificateModal';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
+import { buildHndlEstimateExplanation, deriveHndlModelParameters } from '@/lib/hndlModel';
 
 function buildAssetScoreReason(asset: ReturnType<typeof useSelectedScan>['selectedAssets'][number]): string {
   const isTransitionAsset =
@@ -70,6 +71,7 @@ const AssetDetail = () => {
     return candidate.port === requestedPort;
   });
   const rawAsset = selectedAssetResults.find((candidate) => candidate.asset_id === asset?.id);
+  const modelParams = useMemo(() => deriveHndlModelParameters(rawAsset ? [rawAsset] : []), [rawAsset]);
   const relatedIps = useMemo(() => {
     if (!asset) return [];
     return [...new Set(
@@ -294,6 +296,14 @@ const AssetDetail = () => {
                   <p className="text-xs font-body text-foreground">Estimated break year: <span className="font-mono font-bold">~{asset.hndlBreakYear}</span></p>
                   <p className="text-xs font-body text-muted-foreground mt-0.5">
                     {Math.round((new Date(`${asset.hndlBreakYear}-01-01`).getTime() - Date.now()) / (1000 * 60 * 60 * 24)).toLocaleString()} days remaining
+                  </p>
+                  <p className="text-[10px] font-body text-muted-foreground mt-2 leading-relaxed">
+                    {buildHndlEstimateExplanation({
+                      breakYear: asset.hndlBreakYear,
+                      growthRate: modelParams.growthRate,
+                      logicalQubits: modelParams.logicalQubits,
+                      algorithm: modelParams.algorithm,
+                    })}
                   </p>
                 </div>
               )}

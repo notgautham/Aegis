@@ -112,7 +112,9 @@ class AuthorizedScope:
         return False
 
 
-def is_asset_in_scope(target: str, *, hostname: str | None = None, ip_address: str | None = None) -> bool:
+def is_asset_in_scope(
+    target: str, *, hostname: str | None = None, ip_address: str | None = None
+) -> bool:
     """Convenience helper for validating a discovered surface against target scope."""
     return AuthorizedScope.from_target(target).contains(hostname=hostname, ip_address=ip_address)
 
@@ -148,7 +150,9 @@ def _build_ip_hostname_index(
             normalized_ip = _normalize_ip(ip_address)
             if normalized_ip is None:
                 continue
-            if scope.scope_type in {"ip", "network"} and not scope.contains(ip_address=normalized_ip):
+            if scope.scope_type in {"ip", "network"} and not scope.contains(
+                ip_address=normalized_ip
+            ):
                 continue
             ip_to_hostnames[normalized_ip].add(normalized_hostname or validated.hostname)
     return ip_to_hostnames
@@ -222,7 +226,8 @@ def aggregate_assets(
 
         hostnames_for_asset = (
             [normalized_hostname]
-            if normalized_hostname and scope.contains(hostname=normalized_hostname, ip_address=normalized_ip)
+            if normalized_hostname
+            and scope.contains(hostname=normalized_hostname, ip_address=normalized_ip)
             else sorted(ip_to_hostnames.get(normalized_ip, set()))
         )
 
@@ -244,9 +249,11 @@ def aggregate_assets(
                 port=tls_result.port,
                 protocol=tls_result.protocol.lower(),
                 service_type=existing.service_type if existing else ServiceType.TLS,
-                server_software=tls_result.server_software or (existing.server_software if existing else None),
+                server_software=tls_result.server_software
+                or (existing.server_software if existing else None),
                 tls_version=tls_result.tls_version or (existing.tls_version if existing else None),
-                cipher_suite=tls_result.cipher_suite or (existing.cipher_suite if existing else None),
+                cipher_suite=tls_result.cipher_suite
+                or (existing.cipher_suite if existing else None),
                 certificate_chain_pem=(
                     tls_result.certificate_chain_pem
                     or (existing.certificate_chain_pem if existing else ())
@@ -277,7 +284,7 @@ def aggregate_assets(
         host = parsed.hostname
         if not host:
             continue
-        
+
         # This is a heuristic match
         for key, asset in assets.items():
             if asset.port == port and (asset.hostname == host or asset.ip_address == host):

@@ -26,7 +26,9 @@ class ResolvedHandshakeMetadata:
 
 def resolve_tls13_handshake_metadata(metadata: Mapping[str, object]) -> ResolvedHandshakeMetadata:
     """Extract TLS 1.3 key exchange and authentication from nested handshake metadata."""
-    normalized_version = str(resolve_mapping_value(metadata, "tls_version", "version") or "").upper()
+    normalized_version = str(
+        resolve_mapping_value(metadata, "tls_version", "version") or ""
+    ).upper()
     if "1.3" not in normalized_version and "TLS13" not in normalized_version.replace(".", ""):
         raise HandshakeMetadataResolutionError("Metadata does not describe a TLS 1.3 handshake.")
 

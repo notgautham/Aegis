@@ -21,9 +21,7 @@ class CertificateChain(Base):
 
     __tablename__ = "certificate_chains"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     asset_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("discovered_assets.id", ondelete="CASCADE"),
@@ -46,12 +44,8 @@ class CertificateChain(Base):
     quantum_safe: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # ── Validity Period ─────────────────────────────────
-    not_before: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    not_after: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    not_before: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    not_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # ── Relationships ───────────────────────────────────
     asset = relationship("DiscoveredAsset", back_populates="certificate_chains")

@@ -151,6 +151,15 @@ Request field notes:
 
 - values containing `full port`, `full-port`, `all ports`, or `all-ports` enable full TCP scan mode
 - full mode is additive: bounded scan first, then full TCP sweep (1-65535)
+- values containing `no enumeration` disable broad subdomain enumeration
+- scanner UI currently submits one target per request
+
+Execution model note:
+
+- discovery pipeline is streaming/concurrent: host enumeration, port scanning, and TLS probing can overlap per asset
+- default orchestrator concurrency guards:
+  - TLS probe concurrency: `50`
+  - port scan concurrency: `20`
 
 ### 3. `GET /api/v1/scan/{scan_id}`
 
@@ -160,7 +169,7 @@ Use this for:
 
 - polling a running scan
 - stage/progress display
-- scan console event feed
+- scanner and dashboard runtime event feed
 - degraded-mode visibility
 
 Response shape:

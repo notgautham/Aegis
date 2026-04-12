@@ -60,9 +60,7 @@ def test_deterministic_fallback_mode_works_without_cloud_llm() -> None:
         ),
     )
 
-    result = RoadmapGenerator(
-        settings=Settings(LLM_PROVIDER_MODE="deterministic")
-    ).generate(
+    result = RoadmapGenerator(settings=Settings(LLM_PROVIDER_MODE="deterministic")).generate(
         remediation_input=remediation_input,
         retrieved_chunks=retrieved_chunks,
         hndl_timeline=HndlCalculator(current_year=2026).calculate(assessment=assessment),

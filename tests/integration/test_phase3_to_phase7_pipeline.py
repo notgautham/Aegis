@@ -14,7 +14,12 @@ from backend.analysis.cert_analyzer import CertificateAnalyzer
 from backend.analysis.cipher_parser import parse_tls12_cipher_suite
 from backend.analysis.risk_scorer import calculate_risk_score
 from backend.cbom.cyclonedx_mapper import AssetCbomBundle, CycloneDxMapper
-from backend.cert import CertificateRequest, CertificateSigner, get_extension_payload, load_certificate
+from backend.cert import (
+    CertificateRequest,
+    CertificateSigner,
+    get_extension_payload,
+    load_certificate,
+)
 from backend.compliance import ComplianceInput, RulesEngine
 from backend.core.config import Settings, get_settings
 from backend.discovery.cert_extractor import CertificateExtractor
@@ -157,7 +162,9 @@ async def test_vulnerable_tls12_flow_persists_cbom_remediation_and_certificate(
         default_top_k=5,
     )
     retrieval_service.ingest_source_directory(write_sample_corpus(tmp_path / "corpus"))
-    remediation_bundle = await RagOrchestrator(retrieval_service=retrieval_service).generate_and_persist(
+    remediation_bundle = await RagOrchestrator(
+        retrieval_service=retrieval_service
+    ).generate_and_persist(
         remediation_input=RemediationInput(
             asset=asset,
             assessment=assessment,
@@ -191,7 +198,6 @@ async def test_vulnerable_tls12_flow_persists_cbom_remediation_and_certificate(
     assert persisted_certificate.tier is ComplianceTier.QUANTUM_VULNERABLE
     assert persisted_certificate.remediation_bundle_id == remediation_bundle.id
     assert get_extension_payload(parsed_certificate, "pqc_status") == "VULNERABLE"
-    assert (
-        get_extension_payload(parsed_certificate, "remediation_bundle_id")
-        == str(remediation_bundle.id)
+    assert get_extension_payload(parsed_certificate, "remediation_bundle_id") == str(
+        remediation_bundle.id
     )

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
 import IntelligencePanel from '@/components/dashboard/IntelligencePanel';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
+import { buildHndlEstimateExplanation, deriveHndlModelParameters } from '@/lib/hndlModel';
 import { FileText, Lock, BarChart3 } from 'lucide-react';
 
 const pqcTabs = [
@@ -43,10 +44,15 @@ const cellTooltip = (sensitivity: string, vulnerability: string, count: number) 
 };
 
 const PQCHndl = () => {
-  const { selectedAssets } = useSelectedScan();
+  const { selectedAssets, selectedAssetResults } = useSelectedScan();
   const hndlAssets = selectedAssets
     .filter((asset) => asset.hndlBreakYear !== null)
     .sort((a, b) => (a.hndlBreakYear || 0) - (b.hndlBreakYear || 0));
+  const earliestBreakYear = hndlAssets.length > 0 ? hndlAssets[0].hndlBreakYear : null;
+  const hndlExposureCount = earliestBreakYear
+    ? selectedAssets.filter((asset) => asset.hndlBreakYear && asset.hndlBreakYear <= earliestBreakYear).length
+    : 0;
+  const modelParams = deriveHndlModelParameters(selectedAssetResults);
 
   const timelineData = Array.from({ length: 11 }, (_, index) => {
     const year = 2026 + index;
@@ -69,8 +75,20 @@ const PQCHndl = () => {
       <h1 className="font-display text-2xl italic text-brand-primary">HNDL Intelligence</h1>
       <SectionTabBar tabs={pqcTabs} />
       <p className="text-xs font-body text-muted-foreground italic">
-        HNDL exposure analysis: {selectedAssets.filter((asset) => asset.hndlBreakYear && asset.hndlBreakYear <= 2033).length} assets estimated decryptable before 2033 based on IBM/Google quantum computing roadmaps.
+        HNDL exposure analysis: {hndlExposureCount} asset{hndlExposureCount === 1 ? '' : 's'} estimated decryptable by {earliestBreakYear ?? 'the current model horizon'}.
       </p>
+      <Card className="shadow-sm border-[hsl(var(--border-default))] bg-[hsl(var(--bg-sunken)/0.35)]">
+        <CardContent className="py-3">
+          <p className="text-[11px] font-body text-muted-foreground leading-relaxed">
+            {buildHndlEstimateExplanation({
+              breakYear: earliestBreakYear,
+              growthRate: modelParams.growthRate,
+              logicalQubits: modelParams.logicalQubits,
+              algorithm: modelParams.algorithm,
+            })}
+          </p>
+        </CardContent>
+      </Card>
       <IntelligencePanel assets={selectedAssets} collapsed />
 
       <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)] border-l-4 border-l-[hsl(var(--status-critical))]">

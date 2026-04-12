@@ -177,7 +177,9 @@ class CycloneDxMapper:
                             "signatureAlgorithm": leaf_certificate.signature_algorithm
                             if leaf_certificate
                             else None,
-                            "quantumSafe": leaf_certificate.quantum_safe if leaf_certificate else None,
+                            "quantumSafe": leaf_certificate.quantum_safe
+                            if leaf_certificate
+                            else None,
                         },
                     },
                 }

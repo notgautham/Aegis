@@ -92,7 +92,7 @@ class OpenRouterEmbeddingProvider:
             "Content-Type": "application/json",
         }
         payload = {"model": self.model, "input": list(texts)}
-        
+
         response_json = call_cloud_api(url, headers, payload)
         embeddings = [item["embedding"] for item in response_json["data"]]
         if not embeddings:
@@ -122,12 +122,8 @@ class JinaEmbeddingProvider:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        payload = {
-            "model": self.model,
-            "input": list(texts),
-            "task": "retrieval.passage"
-        }
-        
+        payload = {"model": self.model, "input": list(texts), "task": "retrieval.passage"}
+
         response_json = call_cloud_api(url, headers, payload)
         embeddings = [item["embedding"] for item in response_json["data"]]
         if not embeddings:
@@ -163,7 +159,7 @@ class CohereEmbeddingProvider:
             "input_type": "search_document",
             "embedding_types": ["float"],
         }
-        
+
         response_json = call_cloud_api(url, headers, payload)
         embeddings = response_json["embeddings"]["float"]
         if not embeddings:
@@ -325,9 +321,7 @@ class RetrievalService:
     def load_documents(self, source_dir: Path) -> list[_LoadedDocument]:
         """Load supported local documents from the configured corpus directory."""
         if not source_dir.exists():
-            raise CorpusSetupError(
-                f"Local corpus directory does not exist: {source_dir}"
-            )
+            raise CorpusSetupError(f"Local corpus directory does not exist: {source_dir}")
 
         files = sorted(
             path
@@ -337,9 +331,7 @@ class RetrievalService:
             and path.name.lower() not in self._IGNORED_FILENAMES
         )
         if not files:
-            raise CorpusSetupError(
-                f"No supported corpus documents were found under {source_dir}"
-            )
+            raise CorpusSetupError(f"No supported corpus documents were found under {source_dir}")
 
         loaded_documents: list[_LoadedDocument] = []
         for path in files:
@@ -599,11 +591,7 @@ def strip_headers_and_footers(text: str) -> str:
     """Remove common repeated header/footer lines from extracted corpus text."""
     lines = [line.strip() for line in text.splitlines()]
     counts = Counter(line for line in lines if line)
-    cleaned = [
-        line
-        for line in lines
-        if line and not (counts[line] > 2 and len(line.split()) <= 8)
-    ]
+    cleaned = [line for line in lines if line and not (counts[line] > 2 and len(line.split()) <= 8)]
     return "\n".join(cleaned)
 
 

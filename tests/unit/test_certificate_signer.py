@@ -101,9 +101,8 @@ def test_issue_certificate_assigns_tier_validity_and_oids(
 
     if tier is ComplianceTier.QUANTUM_VULNERABLE:
         assert get_extension_payload(certificate, "broken_algorithms") == "kex:ECDHE,sig:RSA"
-        assert (
-            get_extension_payload(certificate, "remediation_bundle_id")
-            == str(remediation_bundle.id)
+        assert get_extension_payload(certificate, "remediation_bundle_id") == str(
+            remediation_bundle.id
         )
 
 
@@ -131,9 +130,7 @@ def test_fallback_certificate_contains_expected_standard_extensions(
     extended_key_usage = certificate.extensions.get_extension_for_oid(
         ExtensionOID.EXTENDED_KEY_USAGE
     ).value
-    san = certificate.extensions.get_extension_for_oid(
-        ExtensionOID.SUBJECT_ALTERNATIVE_NAME
-    ).value
+    san = certificate.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME).value
 
     assert basic_constraints.ca is False
     assert key_usage.digital_signature is True
@@ -161,9 +158,7 @@ def test_ip_assets_use_ip_address_subject_alternative_name(
         )
     )
     certificate = load_certificate(issued.certificate_pem)
-    san = certificate.extensions.get_extension_for_oid(
-        ExtensionOID.SUBJECT_ALTERNATIVE_NAME
-    ).value
+    san = certificate.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME).value
 
     assert certificate.subject.rfc4514_string() == "CN=203.0.113.19"
     assert [str(value) for value in san.get_values_for_type(x509.IPAddress)] == ["203.0.113.19"]

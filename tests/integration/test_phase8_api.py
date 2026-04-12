@@ -59,7 +59,9 @@ async def _make_client(session_factory):
 
 
 @pytest.mark.asyncio
-async def test_scan_api_runs_stubbed_pipeline_and_exposes_artifacts(tmp_path, session_factory) -> None:
+async def test_scan_api_runs_stubbed_pipeline_and_exposes_artifacts(
+    tmp_path, session_factory
+) -> None:
     hostname = f"phase8-{uuid.uuid4().hex[:8]}.example.com"
     ip_address = "198.51.100.41"
     runtime_store = ScanRuntimeStore()
@@ -71,7 +73,9 @@ async def test_scan_api_runs_stubbed_pipeline_and_exposes_artifacts(tmp_path, se
         runtime_store=runtime_store,
         validated_hostnames=[],
         port_findings_by_ip={ip_address: [make_tls_port(ip_address), make_vpn_port(ip_address)]},
-        tls_results_by_target={(hostname, ip_address, 443): build_tls_result(hostname=hostname, ip_address=ip_address)},
+        tls_results_by_target={
+            (hostname, ip_address, 443): build_tls_result(hostname=hostname, ip_address=ip_address)
+        },
         enumerated_hostnames=[hostname],
     )
     app.state.pipeline_orchestrator.dns_validator = StubDNSValidator(
@@ -115,12 +119,18 @@ async def test_scan_api_runs_stubbed_pipeline_and_exposes_artifacts(tmp_path, se
         assert results_response.status_code == 200
         results_payload = results_response.json()
         assert len(results_payload["assets"]) == 3
-        tls_asset = next(asset for asset in results_payload["assets"] if asset["assessment"] is not None)
+        tls_asset = next(
+            asset for asset in results_payload["assets"] if asset["assessment"] is not None
+        )
         assert tls_asset["assessment"]["risk_score"] == 84.5
 
         cbom_response = await client.get(f"/api/v1/assets/{tls_asset['asset_id']}/cbom")
-        certificate_response = await client.get(f"/api/v1/assets/{tls_asset['asset_id']}/certificate")
-        remediation_response = await client.get(f"/api/v1/assets/{tls_asset['asset_id']}/remediation")
+        certificate_response = await client.get(
+            f"/api/v1/assets/{tls_asset['asset_id']}/certificate"
+        )
+        remediation_response = await client.get(
+            f"/api/v1/assets/{tls_asset['asset_id']}/remediation"
+        )
 
         assert cbom_response.status_code == 200
         assert certificate_response.status_code == 200
@@ -134,7 +144,9 @@ async def test_scan_api_runs_stubbed_pipeline_and_exposes_artifacts(tmp_path, se
 
 
 @pytest.mark.asyncio
-async def test_latest_artifact_selection_is_deterministic_with_equal_timestamps(session_factory) -> None:
+async def test_latest_artifact_selection_is_deterministic_with_equal_timestamps(
+    session_factory,
+) -> None:
     scan_id = uuid.uuid4()
     asset_id = uuid.uuid4()
     created_at = datetime(2026, 3, 27, tzinfo=UTC)
@@ -300,23 +312,23 @@ async def test_mission_control_overview_aggregates_recent_scans_and_priority_fin
     async with session_factory() as session:
         session.add_all(
             [
-                    ScanJob(
-                        id=vulnerable_scan_id,
-                        target=vulnerable_target,
+                ScanJob(
+                    id=vulnerable_scan_id,
+                    target=vulnerable_target,
                     status=ScanStatus.COMPLETED,
                     created_at=base_time,
                     completed_at=base_time + timedelta(minutes=4),
                 ),
-                    ScanJob(
-                        id=transitioning_scan_id,
-                        target=transitioning_target,
+                ScanJob(
+                    id=transitioning_scan_id,
+                    target=transitioning_target,
                     status=ScanStatus.COMPLETED,
                     created_at=base_time - timedelta(hours=1),
                     completed_at=base_time - timedelta(hours=1) + timedelta(minutes=3),
                 ),
-                    ScanJob(
-                        id=failed_scan_id,
-                        target=failed_target,
+                ScanJob(
+                    id=failed_scan_id,
+                    target=failed_target,
                     status=ScanStatus.FAILED,
                     created_at=base_time - timedelta(hours=2),
                     completed_at=base_time - timedelta(hours=2) + timedelta(minutes=1),
@@ -329,9 +341,9 @@ async def test_mission_control_overview_aggregates_recent_scans_and_priority_fin
         session.add_all(
             [
                 DiscoveredAsset(
-                        id=vulnerable_asset_id,
-                        scan_id=vulnerable_scan_id,
-                        hostname=vulnerable_target,
+                    id=vulnerable_asset_id,
+                    scan_id=vulnerable_scan_id,
+                    hostname=vulnerable_target,
                     ip_address="198.51.100.61",
                     port=443,
                     protocol="tcp",
@@ -339,9 +351,9 @@ async def test_mission_control_overview_aggregates_recent_scans_and_priority_fin
                     server_software="nginx",
                 ),
                 DiscoveredAsset(
-                        id=transitioning_asset_id,
-                        scan_id=transitioning_scan_id,
-                        hostname=transitioning_target,
+                    id=transitioning_asset_id,
+                    scan_id=transitioning_scan_id,
+                    hostname=transitioning_target,
                     ip_address="198.51.100.62",
                     port=8443,
                     protocol="tcp",
@@ -423,23 +435,23 @@ async def test_scan_history_supports_exact_target_filter_and_recent_ordering(
     async with session_factory() as session:
         session.add_all(
             [
-                    ScanJob(
-                        id=latest_scan_id,
-                        target=shared_target,
+                ScanJob(
+                    id=latest_scan_id,
+                    target=shared_target,
                     status=ScanStatus.COMPLETED,
                     created_at=base_time,
                     completed_at=base_time + timedelta(minutes=2),
                 ),
-                    ScanJob(
-                        id=older_scan_id,
-                        target=shared_target,
+                ScanJob(
+                    id=older_scan_id,
+                    target=shared_target,
                     status=ScanStatus.FAILED,
                     created_at=base_time - timedelta(days=1),
                     completed_at=base_time - timedelta(days=1) + timedelta(minutes=1),
                 ),
-                    ScanJob(
-                        id=other_scan_id,
-                        target=other_target,
+                ScanJob(
+                    id=other_scan_id,
+                    target=other_target,
                     status=ScanStatus.COMPLETED,
                     created_at=base_time - timedelta(hours=2),
                     completed_at=base_time - timedelta(hours=2) + timedelta(minutes=2),

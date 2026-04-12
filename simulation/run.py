@@ -58,12 +58,17 @@ def _print_pretty_summary(output):
             f"{_safe_text(asset.get('compliance_tier'))[:20]:20}"
         )
 
+
 async def main():
     parser = argparse.ArgumentParser(description="Run Aegis Pipeline locally.")
     parser.add_argument("--target", required=True, help="Target domain (e.g. sc.com)")
     parser.add_argument("--skip-enumeration", action="store_true", help="Skip Amass/DNSx")
-    parser.add_argument("--full-port-scan", action="store_true", help="Enable full TCP port scanning mode")
-    parser.add_argument("--format", choices=["pretty", "json"], default="pretty", help="Terminal output format")
+    parser.add_argument(
+        "--full-port-scan", action="store_true", help="Enable full TCP port scanning mode"
+    )
+    parser.add_argument(
+        "--format", choices=["pretty", "json"], default="pretty", help="Terminal output format"
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -100,7 +105,7 @@ async def main():
     except Exception as e:
         print(f"PIPELINE CRASHED: {e}", file=sys.stderr)
         sys.exit(1)
-    
+
     end_time = time.time()
     scan_duration_seconds = round(end_time - start_time, 2)
 
@@ -114,10 +119,10 @@ async def main():
         assessment = asset.get("assessment") or {}
         cbom = asset.get("cbom") or {}
         remediation = asset.get("remediation") or {}
-        
+
         cbom_json = cbom.get("cbom_json", {})
         cbom_summary = cbom_json.get("quantumRiskSummary") if cbom_json else None
-        
+
         hndl_timeline = remediation.get("hndl_timeline") or {}
         entries = hndl_timeline.get("entries", [])
         hndl_break_year = min((e["breakYear"] for e in entries), default=None) if entries else None
@@ -125,29 +130,31 @@ async def main():
         tier = assessment.get("compliance_tier")
         tier_val = tier.value if hasattr(tier, "value") else tier
 
-        formatted_assets.append({
-            "hostname": asset.get("hostname"),
-            "port": asset.get("port"),
-            "tls_version": assessment.get("tls_version"),
-            "cipher_suite": assessment.get("cipher_suite"),
-            "kex_algorithm": assessment.get("kex_algorithm"),
-            "sig_algorithm": assessment.get("auth_algorithm"),
-            "enc_algorithm": assessment.get("enc_algorithm"),
-            "V_kex": assessment.get("kex_vulnerability"),
-            "V_sig": assessment.get("sig_vulnerability"),
-            "V_sym": assessment.get("sym_vulnerability"),
-            "V_tls": assessment.get("tls_vulnerability"),
-            "risk_score": assessment.get("risk_score"),
-            "q_score": (
-                None
-                if assessment.get("risk_score") is None
-                else round(100 - float(assessment.get("risk_score")), 2)
-            ),
-            "compliance_tier": tier_val,
-            "hndl_break_year": hndl_break_year,
-            "cbom_summary": cbom_summary,
-            "remediation_patch": remediation.get("patch_config")
-        })
+        formatted_assets.append(
+            {
+                "hostname": asset.get("hostname"),
+                "port": asset.get("port"),
+                "tls_version": assessment.get("tls_version"),
+                "cipher_suite": assessment.get("cipher_suite"),
+                "kex_algorithm": assessment.get("kex_algorithm"),
+                "sig_algorithm": assessment.get("auth_algorithm"),
+                "enc_algorithm": assessment.get("enc_algorithm"),
+                "V_kex": assessment.get("kex_vulnerability"),
+                "V_sig": assessment.get("sig_vulnerability"),
+                "V_sym": assessment.get("sym_vulnerability"),
+                "V_tls": assessment.get("tls_vulnerability"),
+                "risk_score": assessment.get("risk_score"),
+                "q_score": (
+                    None
+                    if assessment.get("risk_score") is None
+                    else round(100 - float(assessment.get("risk_score")), 2)
+                ),
+                "compliance_tier": tier_val,
+                "hndl_break_year": hndl_break_year,
+                "cbom_summary": cbom_summary,
+                "remediation_patch": remediation.get("patch_config"),
+            }
+        )
 
     output = {
         "target": args.target,
@@ -157,11 +164,11 @@ async def main():
             "q_score": "0-100, higher is better",
             "relation": "q_score = 100 - risk_score",
         },
-        "assets": formatted_assets
+        "assets": formatted_assets,
     }
 
     json_output = json.dumps(output, indent=2)
-    
+
     # Write to file
     results_dir = SIM_DIR / "results"
     results_dir.mkdir(exist_ok=True, parents=True)
@@ -174,6 +181,7 @@ async def main():
     else:
         _print_pretty_summary(output)
         print(f"\nJSON artifact written to: {latest_file}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

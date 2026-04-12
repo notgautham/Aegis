@@ -16,7 +16,8 @@ Aegis is fully containerized. Running the stack brings up the following services
 
 - **Git**
 - **Docker Desktop** (Required for all platforms)
-- **API Keys:** You will need keys for **Groq** (LLM) and **Jina AI** (Embeddings) to enable the intelligence layer.
+- **Python 3.11** (for local host-side tooling and tests; container already uses Python 3.11)
+- **API Keys (Optional):** Groq/Jina/OpenRouter/Cohere keys are optional in local mode. The project works in deterministic local/offline mode without cloud keys.
 
 ## 1. Environment Configuration
 
@@ -28,7 +29,7 @@ cd Aegis
 cp .env.example .env
 ```
 
-Edit `.env` and provide your real API keys for `GROQ_API_KEY` and `JINA_API_KEY`.
+Edit `.env` if needed. By default, local mode is enabled and cloud keys are commented out.
 
 ## 2. Launching the Stack
 
@@ -82,6 +83,7 @@ Score note:
 
 Dashboard scan mode note:
 - The Quantum Readiness Scanner prompt accepts a **single target** URL/domain per run.
+- The post-login default landing page is `/scanner`.
 - Pressing Enter in the scanner input immediately starts the scan.
 - The prompt includes a **Full Port Scan** toggle.
 - Disabled: bounded fast scan.
@@ -94,6 +96,7 @@ Dashboard scan mode note:
 - Discovery graph view auto-fits the current scan network so larger topologies remain visible.
 - Discovery graph supports zoom controls for dense multi-asset scopes.
 - Scan history and all-time discovery timelines are intentionally bounded/on-demand to keep dashboard navigation responsive for large scans.
+- Profiles (`Quick`, `Standard`, `Deep`, `PQC Focus`) define strategy depth and are separate from the two coverage toggles above.
 
 ## Monitoring and Logs
 
@@ -104,6 +107,6 @@ Dashboard scan mode note:
 ## Related Documentation
 
 - [README.md](./README.md)
-- [context/DATABASE.md](./context/DATABASE.md)
-- [context/API.md](./context/API.md)
-- [context/CONTEXT.md](./context/CONTEXT.md)
+- [documentations/DATABASE.md](./documentations/DATABASE.md)
+- [documentations/API.md](./documentations/API.md)
+- [documentations/CONTEXT.md](./documentations/CONTEXT.md)

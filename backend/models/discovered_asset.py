@@ -20,9 +20,7 @@ class DiscoveredAsset(Base):
 
     __tablename__ = "discovered_assets"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     scan_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("scan_jobs.id", ondelete="CASCADE"),
@@ -70,10 +68,7 @@ class DiscoveredAsset(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<DiscoveredAsset id={self.id} "
-            f"host={self.hostname}:{self.port}/{self.protocol}>"
-        )
+        return f"<DiscoveredAsset id={self.id} host={self.hostname}:{self.port}/{self.protocol}>"
 
 
 from backend.models.remediation_action import RemediationAction  # noqa: E402,F401

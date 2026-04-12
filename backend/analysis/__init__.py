@@ -3,7 +3,11 @@ Phase 4 cryptographic analysis engine.
 """
 
 from backend.analysis.cert_analyzer import CertificateAnalysis, CertificateAnalyzer
-from backend.analysis.cipher_parser import CipherParseError, ParsedCipherSuite, parse_tls12_cipher_suite
+from backend.analysis.cipher_parser import (
+    CipherParseError,
+    ParsedCipherSuite,
+    parse_tls12_cipher_suite,
+)
 from backend.analysis.constants import TLS_VULNERABILITY_MAP, VULNERABILITY_MAP, WEIGHTS
 from backend.analysis.handshake_metadata_resolver import (
     HandshakeMetadataResolutionError,

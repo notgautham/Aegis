@@ -70,7 +70,7 @@ const DataContextBadge = () => {
           </DropdownMenuContent>
         </DropdownMenu>
         <button
-          onClick={() => navigate('/dashboard/scan-console')}
+          onClick={() => navigate('/scanner')}
           className="text-[11px] text-brand-primary hover:underline flex items-center gap-1 font-body"
         >
           <RefreshCw className="w-3 h-3" /> {isHistorical ? 'Re-scan this target' : 'Refresh'}

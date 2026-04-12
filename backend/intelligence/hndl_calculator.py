@@ -177,10 +177,8 @@ class HndlCalculator:
             return None
 
         try:
-            return (
-                payload["components"][0]["cryptoProperties"]["certificateProperties"][
-                    "subjectPublicKeySize"
-                ]
-            )
+            return payload["components"][0]["cryptoProperties"]["certificateProperties"][
+                "subjectPublicKeySize"
+            ]
         except (KeyError, IndexError, TypeError):
             return None

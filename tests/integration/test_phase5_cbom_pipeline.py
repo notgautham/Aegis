@@ -52,7 +52,9 @@ async def test_documented_vulnerable_case_persists_cbom_and_updates_tier(db_sess
         timestamp=datetime(2026, 3, 26, tzinfo=UTC),
     )
 
-    assert persisted.serial_number == f"urn:uuid:aegis-scan-20260326-testssl.sh-443-{bundle.asset.id}"
+    assert (
+        persisted.serial_number == f"urn:uuid:aegis-scan-20260326-testssl.sh-443-{bundle.asset.id}"
+    )
     assert persisted.cbom_json["quantumRiskSummary"]["tier"] == "QUANTUM_VULNERABLE"
     assert persisted.cbom_json["quantumRiskSummary"]["overallScore"] == 84.5
     assert bundle.assessment.compliance_tier is ComplianceTier.QUANTUM_VULNERABLE
@@ -77,9 +79,7 @@ async def test_hybrid_case_persists_cbom_and_updates_tier(db_session) -> None:
     )
 
     assert persisted.cbom_json["quantumRiskSummary"]["tier"] == "PQC_TRANSITIONING"
-    assert persisted.cbom_json["quantumRiskSummary"]["priorityActions"] == [
-        "migrate-key-exchange"
-    ]
+    assert persisted.cbom_json["quantumRiskSummary"]["priorityActions"] == ["migrate-key-exchange"]
     assert bundle.assessment.compliance_tier is ComplianceTier.PQC_TRANSITIONING
 
 
@@ -177,9 +177,7 @@ async def _create_bundle(
         issuer="CN=Aegis Test Root",
         public_key_algorithm="RSA" if auth_algorithm == "RSA" else "ML-DSA-65",
         key_size_bits=2048 if auth_algorithm == "RSA" else None,
-        signature_algorithm="sha256WithRSAEncryption"
-        if auth_algorithm == "RSA"
-        else "ML-DSA-65",
+        signature_algorithm="sha256WithRSAEncryption" if auth_algorithm == "RSA" else "ML-DSA-65",
         quantum_safe=auth_algorithm != "RSA",
         not_before=datetime(2026, 1, 1, tzinfo=UTC),
         not_after=datetime(2026, 6, 1, tzinfo=UTC),

@@ -25,7 +25,9 @@ async def get_asset_cbom(asset_id: uuid.UUID, request: Request) -> CbomResponse:
 
 
 @router.get("/assets/{asset_id}/certificate", response_model=ComplianceCertificateResponse)
-async def get_asset_certificate(asset_id: uuid.UUID, request: Request) -> ComplianceCertificateResponse:
+async def get_asset_certificate(
+    asset_id: uuid.UUID, request: Request
+) -> ComplianceCertificateResponse:
     """Return the latest persisted certificate for one asset."""
     payload = await request.app.state.scan_read_service.get_latest_certificate(asset_id=asset_id)
     return ComplianceCertificateResponse(**payload)

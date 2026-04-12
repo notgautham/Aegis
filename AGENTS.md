@@ -51,6 +51,7 @@ When relevant, prioritize finding and using these skills:
 - Follow the repository structure (`backend/`, `frontend/`, `docker/`, `tests/`, `scripts/`, `simulation/`).
 - Do not create unnecessary directories or duplicate modules. 
 - Keep the `simulation/` directory clean; only official benchmark scripts and evidence should reside here.
+- Treat `.agents/skills/` as agent tooling content. Do not edit skill files unless the task explicitly asks for skill development or skill maintenance.
 
 ## 7. Testing Expectations
 - Focus on verifying the pipeline logic (unit, integration) before integrating with the UI.

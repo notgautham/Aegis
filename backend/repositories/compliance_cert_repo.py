@@ -20,12 +20,8 @@ class ComplianceCertificateRepository(BaseRepository[ComplianceCertificate]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(ComplianceCertificate, session)
 
-    async def get_by_asset_id(
-        self, asset_id: uuid.UUID
-    ) -> Sequence[ComplianceCertificate]:
+    async def get_by_asset_id(self, asset_id: uuid.UUID) -> Sequence[ComplianceCertificate]:
         """Retrieve all compliance certificates for a given asset."""
-        stmt = select(ComplianceCertificate).where(
-            ComplianceCertificate.asset_id == asset_id
-        )
+        stmt = select(ComplianceCertificate).where(ComplianceCertificate.asset_id == asset_id)
         result = await self.session.execute(stmt)
         return result.scalars().all()

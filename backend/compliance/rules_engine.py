@@ -99,7 +99,9 @@ class RulesEngine:
     def _evaluate_kex(self, algorithm: str | None) -> DimensionEvaluation:
         normalized = canonicalize_algorithm("kex", algorithm)
         if not normalized:
-            return DimensionEvaluation(algorithm, None, DimensionStatus.FAIL, "Missing KEX algorithm.")
+            return DimensionEvaluation(
+                algorithm, None, DimensionStatus.FAIL, "Missing KEX algorithm."
+            )
         if normalized in self._PASS_KEX:
             return DimensionEvaluation(
                 algorithm,
@@ -130,7 +132,9 @@ class RulesEngine:
 
     def _evaluate_sig(self, algorithm: str | None) -> DimensionEvaluation:
         if not algorithm or not algorithm.strip():
-            return DimensionEvaluation(algorithm, None, DimensionStatus.FAIL, "Missing signature algorithm.")
+            return DimensionEvaluation(
+                algorithm, None, DimensionStatus.FAIL, "Missing signature algorithm."
+            )
 
         normalized = canonicalize_algorithm("sig", algorithm)
         hybrid_tokens = self._tokenize_sig_algorithms(algorithm)
@@ -224,10 +228,10 @@ class RulesEngine:
 
         # 2. PQC_TRANSITIONING: At least one PQC component (HYBRID or PASS) detected in KEX or SIG.
         # This rewards partial migration (like Discord's hybrid KEX).
-        if (
-            kex.status in {DimensionStatus.HYBRID, DimensionStatus.PASS}
-            or sig.status in {DimensionStatus.HYBRID, DimensionStatus.PASS}
-        ):
+        if kex.status in {DimensionStatus.HYBRID, DimensionStatus.PASS} or sig.status in {
+            DimensionStatus.HYBRID,
+            DimensionStatus.PASS,
+        }:
             # We still drop to VULNERABLE if the symmetric cipher is a hard FAIL (e.g. RC4)
             if sym.status == DimensionStatus.FAIL:
                 return ComplianceTier.QUANTUM_VULNERABLE
@@ -251,9 +255,7 @@ class RulesEngine:
     @staticmethod
     def _tokenize_sig_algorithms(algorithm: str) -> tuple[str, ...]:
         """Split hybrid signature strings into canonical tokens."""
-        raw_tokens = [
-            token for token in re.split(r"[\s,+/:|]+", algorithm.strip()) if token
-        ]
+        raw_tokens = [token for token in re.split(r"[\s,+/:|]+", algorithm.strip()) if token]
         canonical_tokens = []
         for token in raw_tokens:
             canonical = canonicalize_algorithm("sig", token)

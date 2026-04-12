@@ -15,6 +15,20 @@ const cbomTabs = [
   { id: 'export', label: 'Export Center', icon: Package, route: '/dashboard/cbom/export' },
 ];
 
+function compactAuthorityLabel(authority: string): string {
+  const trimmed = authority.trim();
+  if (!trimmed) return 'Unknown';
+
+  const orgMatch = trimmed.match(/(?:^|,\s*)O=([^,]+)/i);
+  if (orgMatch?.[1]) return orgMatch[1].trim();
+
+  return trimmed.replace(/^CN=/i, '').split(',')[0].trim() || 'Unknown';
+}
+
+function truncateLabel(value: string, max = 34): string {
+  return value.length > max ? `${value.slice(0, max - 1)}...` : value;
+}
+
 const CBOMOverview = () => {
   const { selectedAssets, selectedAssetResults } = useSelectedScan();
   const cbomAssetIds = new Set(
@@ -37,11 +51,15 @@ const CBOMOverview = () => {
   }));
 
   const caCounts = displayAssets.reduce((acc, asset) => {
-    const authority = asset.certInfo.certificate_authority || 'Unknown';
+    const authority = compactAuthorityLabel(asset.certInfo.certificate_authority || 'Unknown');
     acc[authority] = (acc[authority] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
-  const caData = Object.entries(caCounts).map(([name, count]) => ({ name, count }));
+  const caData = Object.entries(caCounts)
+    .map(([name, count]) => ({ fullName: name, name: truncateLabel(name), count }))
+    .sort((left, right) => right.count - left.count)
+    .slice(0, 10);
+  const caChartHeight = Math.max(260, caData.length * 30);
 
   const tlsCounts = displayAssets.reduce((acc, asset) => {
     const version = asset.tls || 'Unknown';
@@ -123,8 +141,16 @@ const CBOMOverview = () => {
         <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
           <CardHeader className="pb-2"><CardTitle className="text-sm font-body">Top Certificate Authorities</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={caData} layout="vertical"><XAxis type="number" tick={{ fontSize: 10 }} /><YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={80} /><Tooltip /><Bar dataKey="count" fill="hsl(var(--brand-accent))" radius={[0, 4, 4, 0]} /></BarChart>
+            <ResponsiveContainer width="100%" height={caChartHeight}>
+              <BarChart data={caData} layout="vertical" margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
+                <XAxis type="number" tick={{ fontSize: 10 }} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={170} />
+                <Tooltip
+                  formatter={(value: number, _name: string, item: { payload?: { fullName?: string } }) => [value, item?.payload?.fullName ?? 'Certificate Authority']}
+                  labelFormatter={(_label, payload) => payload?.[0]?.payload?.fullName ?? 'Certificate Authority'}
+                />
+                <Bar dataKey="count" fill="hsl(var(--brand-accent))" radius={[0, 4, 4, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>

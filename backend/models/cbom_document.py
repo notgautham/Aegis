@@ -20,9 +20,7 @@ class CbomDocument(Base):
 
     __tablename__ = "cbom_documents"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     scan_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("scan_jobs.id", ondelete="CASCADE"),
@@ -35,9 +33,7 @@ class CbomDocument(Base):
         nullable=False,
         index=True,
     )
-    serial_number: Mapped[str] = mapped_column(
-        Text, nullable=False, unique=True
-    )
+    serial_number: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     cbom_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

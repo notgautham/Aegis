@@ -20,9 +20,7 @@ class AssetFingerprint(Base):
 
     __tablename__ = "asset_fingerprints"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     canonical_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     first_seen_scan_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

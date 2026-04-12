@@ -11,7 +11,12 @@ from typing import Iterable
 from qdrant_client import QdrantClient
 
 from backend.core.config import Settings
-from backend.discovery.types import EnumeratedHostname, PortFinding, TLSProbeResult, ValidatedHostname
+from backend.discovery.types import (
+    EnumeratedHostname,
+    PortFinding,
+    TLSProbeResult,
+    ValidatedHostname,
+)
 from backend.intelligence import RagOrchestrator, RetrievalService, create_embedding_provider
 from backend.models.enums import ServiceType
 from backend.pipeline import PipelineOrchestrator, ScanRuntimeStore

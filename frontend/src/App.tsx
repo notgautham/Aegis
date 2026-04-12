@@ -11,6 +11,7 @@ import Login from "./pages/Login.tsx";
 import Index from "./pages/Index.tsx";
 import DashboardLayout from "./pages/DashboardLayout.tsx";
 import DashboardHome from "./pages/DashboardHome.tsx";
+import Scanner from "./pages/Scanner.tsx";
 import AssetDiscovery from "./pages/AssetDiscovery.tsx";
 import AssetInventory from "./pages/AssetInventory.tsx";
 import AssetDetail from "./pages/AssetDetail.tsx";
@@ -29,7 +30,6 @@ import RemediationRoadmap from "./pages/RemediationRoadmap.tsx";
 import ReportingExecutive from "./pages/ReportingExecutive.tsx";
 import ReportingScheduled from "./pages/ReportingScheduled.tsx";
 import ReportingOnDemand from "./pages/ReportingOnDemand.tsx";
-import ScanConsole from "./pages/ScanConsole.tsx";
 import ScanHistory from "./pages/ScanHistory.tsx";
 import SettingsLayout from "./pages/SettingsLayout.tsx";
 import SettingsScanConfig from "./pages/SettingsScanConfig.tsx";
@@ -79,7 +79,6 @@ const App = () => (
               <Route path="reporting/executive" element={<ReportingExecutive />} />
               <Route path="reporting/scheduled" element={<ReportingScheduled />} />
               <Route path="reporting/on-demand" element={<ReportingOnDemand />} />
-              <Route path="scan-console" element={<ScanConsole />} />
               <Route path="history" element={<ScanHistory />} />
               <Route path="scans/:scanId" element={<ScanReport />} />
               <Route path="settings" element={<SettingsLayout />}>
@@ -88,6 +87,9 @@ const App = () => (
                 <Route path="notifications" element={<SettingsNotifications />} />
                 <Route path="integrations" element={<SettingsIntegrations />} />
               </Route>
+            </Route>
+            <Route path="/scanner" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+              <Route index element={<Scanner />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

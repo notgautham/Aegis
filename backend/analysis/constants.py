@@ -62,7 +62,7 @@ _ALGORITHM_ALIASES: dict[str, dict[str, str]] = {
         "4588": "X25519MLKEM768",
         "0X11EC": "X25519MLKEM768",
         "X25519_ML_KEM_768": "X25519_MLKEM768",
-        "P256MLKEM768": "X25519_MLKEM768", # Fallback for other hybrid pairs
+        "P256MLKEM768": "X25519_MLKEM768",  # Fallback for other hybrid pairs
         "KYBER768": "MLKEM768",
         "ML-KEM-768": "MLKEM768",
         "MLKEM768": "MLKEM768",
@@ -103,12 +103,7 @@ def canonicalize_algorithm(category: str, algorithm: str | None) -> str | None:
     if algorithm is None:
         return None
 
-    cleaned = (
-        algorithm.upper()
-        .replace("-", "")
-        .replace(" ", "")
-        .replace("/", "_")
-    )
+    cleaned = algorithm.upper().replace("-", "").replace(" ", "").replace("/", "_")
     alias_map = _ALGORITHM_ALIASES.get(category, {})
     return alias_map.get(cleaned, cleaned)
 

@@ -92,7 +92,7 @@ const ScanHistory = () => {
           <h1 className="font-display text-2xl italic text-brand-primary">Scan History</h1>
           <p className="font-body text-sm text-muted-foreground mt-1">All past scans for {rootDomain || 'target'} infrastructure. Click any row to view in Dashboard.</p>
         </div>
-        <Button onClick={() => navigate('/dashboard/scan-console')} className="gap-1.5 text-xs">
+        <Button onClick={() => navigate('/scanner')} className="gap-1.5 text-xs">
           <Plus className="w-3.5 h-3.5" /> Run New Scan
         </Button>
       </div>

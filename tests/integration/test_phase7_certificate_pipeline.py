@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import pytest
 
-from backend.cert import CertificateRequest, CertificateSigner, get_extension_payload, load_certificate
+from backend.cert import (
+    CertificateRequest,
+    CertificateSigner,
+    get_extension_payload,
+    load_certificate,
+)
 from backend.core.config import get_settings
 from backend.models.enums import ComplianceTier
 from backend.repositories.compliance_cert_repo import ComplianceCertificateRepository

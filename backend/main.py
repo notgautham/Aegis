@@ -108,6 +108,7 @@ async def unexpected_exception_handler(request: Request, exc: Exception) -> JSON
         content=_error_payload("internal_error", "An unexpected server error occurred."),
     )
 
+
 # ── CORS Middleware ─────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
@@ -127,6 +128,7 @@ async def health_check() -> dict[str, str]:
     """Basic health check endpoint."""
     return {"status": "ok"}
 
+
 # ── Serve Frontend SPA ────────────────────────────────────────
 import os
 from fastapi.staticfiles import StaticFiles
@@ -134,8 +136,10 @@ from fastapi.responses import FileResponse
 
 frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
 if os.path.isdir(frontend_dist):
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
-    
+    app.mount(
+        "/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets"
+    )
+
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
         # Serve exact file if it exists (e.g. favicon.ico, logo.jpeg)

@@ -52,7 +52,7 @@ def parse_tls12_cipher_suite(cipher_suite: str) -> ParsedCipherSuite:
         tokens = normalized.split("-")
         if len(tokens) < 3:
             raise CipherParseError(f"Unsupported cipher format: {cipher_suite}")
-        
+
         # Most common OpenSSL format is KEX-AUTH-ENC-MAC or AUTH-ENC-MAC
         if tokens[0] in {"ECDHE", "DHE", "DH", "ECDH"}:
             kex_algorithm = tokens[0]
@@ -64,7 +64,7 @@ def parse_tls12_cipher_suite(cipher_suite: str) -> ParsedCipherSuite:
             auth_algorithm = tokens[0]
             enc_algorithm = "-".join(tokens[1:-1])
             mac_algorithm = tokens[-1]
-        
+
         return ParsedCipherSuite(
             raw_cipher_suite=normalized,
             kex_algorithm=kex_algorithm,

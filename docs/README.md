@@ -15,3 +15,9 @@ Use [docs/nist/README.md](docs/nist/README.md) for:
 - ingestion commands
 - validation commands
 - corpus maintenance notes
+
+Canonical project references:
+
+- API: [documentations/API.md](../documentations/API.md)
+- Database: [documentations/DATABASE.md](../documentations/DATABASE.md)
+- Operational context: [documentations/CONTEXT.md](../documentations/CONTEXT.md)

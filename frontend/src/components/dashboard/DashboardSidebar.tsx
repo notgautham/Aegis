@@ -12,7 +12,7 @@ import {
   Shield, Home, Search, Package, ClipboardList, ShieldCheck,
   Star, Wrench, BarChart3, Settings,
   Globe, Key, FileText, Server, Cpu, Lock, ChevronRight,
-  Sparkles, Map, Calendar, PenTool, Terminal, Pin, Clock, LogOut,
+  Sparkles, Map, Calendar, PenTool, Pin, Clock, LogOut,
 } from 'lucide-react';
 
 interface SubMenuItem {
@@ -33,6 +33,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
+  { id: 'scanner', icon: Shield, label: 'Scanner', pinRoute: '/scanner', pinIcon: 'Shield' },
   { id: 'dashboard', icon: Home, label: 'Dashboard', pinRoute: '/dashboard', pinIcon: 'Home' },
   {
     id: 'discovery', icon: Search, label: 'Asset Discovery', pinRoute: '/dashboard/discovery', pinIcon: 'Search',
@@ -85,7 +86,6 @@ const navItems: NavItem[] = [
       { label: 'On-Demand Builder', icon: PenTool, pinId: 'reporting:on-demand', pinRoute: '/dashboard/reporting/on-demand', pinIcon: 'PenTool' },
     ],
   },
-  { id: 'scan-console', icon: Terminal, label: 'Scan Console', pinRoute: '/dashboard/scan-console', pinIcon: 'Terminal' },
   { id: 'history', icon: Clock, label: 'Scan History', pinRoute: '/dashboard/history', pinIcon: 'Clock' },
 ];
 

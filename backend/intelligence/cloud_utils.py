@@ -6,7 +6,7 @@ import sys
 
 def call_cloud_api(url, headers, payload, method="POST", timeout_seconds=15.0):
     """
-    Run a cloud API call in a separate process with a clean environment 
+    Run a cloud API call in a separate process with a clean environment
     to bypass OQS-patched OpenSSL restrictions.
     """
     script = f"""
@@ -29,20 +29,20 @@ except Exception as e:
     print(f"ERROR:{{e}}", file=sys.stderr)
     sys.exit(1)
 """
-    
+
     env = os.environ.copy()
     env.pop("OPENSSL_CONF", None)
     env.pop("LD_LIBRARY_PATH", None)
-    
+
     result = subprocess.run(
         [sys.executable, "-c", script],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
-        env=env
+        env=env,
     )
-    
+
     if result.returncode != 0:
         raise RuntimeError(f"Cloud API Subprocess Failed: {result.stderr}")
-    
+
     return json.loads(result.stdout)

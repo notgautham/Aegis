@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
-import subprocess
+from collections.abc import AsyncIterator
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
@@ -34,58 +34,84 @@ class AmassEnumerator:
 
     async def enumerate(self, target: str) -> list[EnumeratedHostname]:
         """Enumerate hostnames for a domain target using Amass passive mode."""
+        records: dict[str, EnumeratedHostname] = {}
+        async for record in self.enumerate_stream(target):
+            records[record.hostname] = record
+        return sorted(records.values(), key=lambda record: record.hostname)
+
+    async def enumerate_stream(self, target: str) -> AsyncIterator[EnumeratedHostname]:
+        """Yield hostnames progressively as Amass emits results."""
         scope = AuthorizedScope.from_target(target)
         if scope.scope_type != "domain" or scope.domain is None:
-            return []
+            return
 
         if shutil.which(self.binary) is None:
             fallback = await self._enumerate_with_crtsh(scope.domain)
             if fallback:
-                return fallback
+                for record in fallback:
+                    yield record
+                return
             raise DNSEnumerationError(f"Amass binary not found: {self.binary}")
 
-        def _run_amass() -> subprocess.CompletedProcess[str]:
-            return subprocess.run(
-                [
-                    self.binary,
-                    "enum",
-                    "-passive",
-                    "-timeout",
-                    "2",
-                    "-d",
-                    scope.domain,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_seconds,
-                check=False,
-            )
+        process = await asyncio.create_subprocess_exec(
+            self.binary,
+            "enum",
+            "-passive",
+            "-timeout",
+            "2",
+            "-d",
+            scope.domain,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
 
+        seen: set[str] = set()
+        deadline = asyncio.get_running_loop().time() + self.timeout_seconds
         try:
-            completed = await asyncio.to_thread(_run_amass)
-        except subprocess.TimeoutExpired as exc:
+            assert process.stdout is not None
+            while True:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError()
+                line = await asyncio.wait_for(process.stdout.readline(), timeout=remaining)
+                if not line:
+                    break
+                hostname = line.decode("utf-8", errors="ignore").strip().lower().rstrip(".")
+                if not hostname:
+                    continue
+                if hostname != scope.domain and not hostname.endswith(f".{scope.domain}"):
+                    continue
+                if hostname in seen:
+                    continue
+                seen.add(hostname)
+                yield EnumeratedHostname(hostname=hostname, source="amass-passive")
+
+            remaining = max(1, int(deadline - asyncio.get_running_loop().time()))
+            return_code = await asyncio.wait_for(process.wait(), timeout=remaining)
+        except (TimeoutError, asyncio.TimeoutError) as exc:
+            process.kill()
+            await process.communicate()
+            if seen:
+                return
             fallback = await self._enumerate_with_crtsh(scope.domain)
             if fallback:
-                return fallback
+                for record in fallback:
+                    yield record
+                return
             raise DNSEnumerationError(
                 f"Amass enumeration timed out after {self.timeout_seconds} seconds."
             ) from exc
 
-        if completed.returncode != 0:
+        if return_code != 0 and not seen:
+            stderr = b""
+            if process.stderr is not None:
+                stderr = await process.stderr.read()
             fallback = await self._enumerate_with_crtsh(scope.domain)
             if fallback:
-                return fallback
-            raise DNSEnumerationError((completed.stderr or "").strip())
-
-        records: dict[str, EnumeratedHostname] = {}
-        for line in (completed.stdout or "").splitlines():
-            hostname = line.strip().lower().rstrip(".")
-            if not hostname:
-                continue
-            if hostname == scope.domain or hostname.endswith(f".{scope.domain}"):
-                records[hostname] = EnumeratedHostname(hostname=hostname, source="amass-passive")
-
-        return sorted(records.values(), key=lambda record: record.hostname)
+                for record in fallback:
+                    yield record
+                return
+            raise DNSEnumerationError(stderr.decode("utf-8", errors="ignore").strip())
 
     async def _enumerate_with_crtsh(self, domain: str) -> list[EnumeratedHostname]:
         """Fallback hostname discovery using Certificate Transparency data."""

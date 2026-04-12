@@ -10,7 +10,13 @@ from backend.analysis.constants import canonicalize_algorithm
 from backend.core.config import Settings, get_settings
 
 from .retrieval import build_citation_payload
-from .types import HndlTimelineResult, PatchArtifact, RemediationInput, RetrievedChunk, RoadmapResult
+from .types import (
+    HndlTimelineResult,
+    PatchArtifact,
+    RemediationInput,
+    RetrievedChunk,
+    RoadmapResult,
+)
 
 
 class RoadmapGenerationError(RuntimeError):
@@ -61,7 +67,10 @@ class RoadmapGenerator:
         detected_sym = RoadmapGenerator._display_algorithm(assessment.enc_algorithm)
         detected_algorithms = f"{detected_kex}, {detected_sig}, {detected_sym}"
 
-        is_aes128 = canonicalize_algorithm("sym", assessment.enc_algorithm) in {"AES128", "AES128GCM"}
+        is_aes128 = canonicalize_algorithm("sym", assessment.enc_algorithm) in {
+            "AES128",
+            "AES128GCM",
+        }
         break_year = min(
             (entry.break_year for entry in hndl_timeline.entries),
             default=None,

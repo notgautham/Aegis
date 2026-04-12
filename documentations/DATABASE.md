@@ -181,6 +181,7 @@ Notes:
 
 - `scan_profile` is free-form text persisted as submitted by clients.
 - dashboard full-port mode is activated by profile text containing `full port`, `full-port`, `all ports`, or `all-ports`.
+- scanner profiles (`Quick`/`Standard`/`Deep`/`PQC Focus`) and scanner toggles (full port scan, enumeration) are independent UI controls that are serialized into this single `scan_profile` string.
 
 Key relationships:
 

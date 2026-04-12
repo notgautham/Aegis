@@ -54,7 +54,10 @@ def test_mapped_cbom_contains_required_fields_and_values() -> None:
 
     assert document["bomFormat"] == "CycloneDX"
     assert document["specVersion"] == "1.6"
-    assert document["serialNumber"] == f"urn:uuid:aegis-scan-20260326-api.example.com-443-{bundle.asset.id}"
+    assert (
+        document["serialNumber"]
+        == f"urn:uuid:aegis-scan-20260326-api.example.com-443-{bundle.asset.id}"
+    )
     assert document["metadata"]["component"]["type"] == "service"
     assert document["components"][0]["type"] == "cryptographic-asset"
     assert document["components"][0]["cryptoProperties"]["tlsProperties"]["cipherSuites"] == [

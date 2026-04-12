@@ -17,6 +17,7 @@ from backend.api.v1.schemas import (
 
 router = APIRouter(tags=["Mission Control"])
 
+
 @router.get("/mission-control/graph")
 async def get_network_graph(
     request: Request,

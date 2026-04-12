@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Asset } from '@/data/demoData';
 import { cn } from '@/lib/utils';
 import { isTransitionAsset } from '@/lib/status';
+import { useSelectedScan } from '@/contexts/SelectedScanContext';
+import { buildHndlEstimateExplanation, deriveHndlModelParameters } from '@/lib/hndlModel';
 
 interface Insight {
   severity: 'critical' | 'high' | 'safe';
@@ -125,11 +127,18 @@ interface IntelligencePanelProps {
 }
 
 const IntelligencePanel = ({ assets, collapsed = false }: IntelligencePanelProps) => {
+  const { selectedAssetResults } = useSelectedScan();
+  const modelParams = deriveHndlModelParameters(selectedAssetResults);
   const insights = generateInsights(assets);
   const [expanded, setExpanded] = useState(!collapsed);
   const maxVisible = 5;
 
   if (insights.length === 0) return null;
+
+  const earliestCriticalBreakYear = assets
+    .filter((asset) => asset.hndlRiskLevel === 'critical' && asset.hndlBreakYear)
+    .map((asset) => asset.hndlBreakYear as number)
+    .sort((left, right) => left - right)[0] ?? null;
 
   const visibleInsights = expanded ? insights.slice(0, maxVisible) : insights.slice(0, 1);
   const hasMore = insights.length > maxVisible && expanded;
@@ -169,6 +178,16 @@ const IntelligencePanel = ({ assets, collapsed = false }: IntelligencePanelProps
         {hasMore && (
           <p className="text-[10px] text-muted-foreground font-body text-center pt-1">
             +{insights.length - maxVisible} more insight{insights.length - maxVisible > 1 ? 's' : ''}
+          </p>
+        )}
+        {earliestCriticalBreakYear && (
+          <p className="text-[10px] text-muted-foreground font-body border-t border-border/60 pt-2 leading-relaxed">
+            {buildHndlEstimateExplanation({
+              breakYear: earliestCriticalBreakYear,
+              growthRate: modelParams.growthRate,
+              logicalQubits: modelParams.logicalQubits,
+              algorithm: modelParams.algorithm,
+            })}
           </p>
         )}
       </CardContent>

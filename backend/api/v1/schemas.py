@@ -206,9 +206,7 @@ class AssetFingerprintResponse(BaseModel):
     last_seen_at: datetime
     first_seen_scan_id: uuid.UUID | None
     last_seen_scan_id: uuid.UUID | None
-    q_score_history: list[AssetFingerprintHistoryEntryResponse] = Field(
-        default_factory=list
-    )
+    q_score_history: list[AssetFingerprintHistoryEntryResponse] = Field(default_factory=list)
 
 
 class DNSRecordResponse(BaseModel):
