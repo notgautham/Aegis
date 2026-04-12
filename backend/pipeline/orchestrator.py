@@ -1797,6 +1797,7 @@ class PipelineOrchestrator:
 
             assessment_inputs = self._build_assessment_inputs(
                 tls_result=tls_result,
+                extracted_certificates=extracted_certificates,
                 analyzed_certificates=analyzed_certificates,
             )
             evaluation = self.rules_engine.evaluate(
@@ -2140,6 +2141,7 @@ class PipelineOrchestrator:
         self,
         *,
         tls_result: TLSProbeResult,
+        extracted_certificates: Sequence[Any],
         analyzed_certificates: Sequence[Any],
     ) -> _AssessmentInputs:
         if not tls_result.cipher_suite:
@@ -2160,6 +2162,8 @@ class PipelineOrchestrator:
                 enc_algorithm="UNKNOWN",
                 tls_version="Handshake Failed",
                 risk_score=100.0,
+                base_risk_score=100.0,
+                certificate_penalty=0.0,
             )
             return _AssessmentInputs(
                 tls_version="Handshake Failed",
@@ -2180,6 +2184,7 @@ class PipelineOrchestrator:
         if tls_version and "1.3" in tls_version:
             return self._build_tls13_assessment_inputs(
                 tls_result=tls_result,
+                    extracted_certificates=extracted_certificates,
                 analyzed_certificates=analyzed_certificates,
             )
 
@@ -2196,11 +2201,13 @@ class PipelineOrchestrator:
         if self._is_unknown_token(resolved_kex_algorithm) and metadata_kex is not None:
             resolved_kex_algorithm = canonicalize_algorithm("kex", str(metadata_kex))
 
+        leaf_days_remaining = self._extract_leaf_certificate_days_remaining(extracted_certificates)
         risk = calculate_risk_score(
             kex_vulnerability=self._safe_lookup_vulnerability("kex", resolved_kex_algorithm),
             sig_vulnerability=parsed.sig_vulnerability,
             sym_vulnerability=parsed.sym_vulnerability,
             tls_version=tls_result.tls_version,
+            certificate_days_remaining=leaf_days_remaining,
         )
         score_explanation = generate_score_explanation(
             kex_vulnerability=risk.kex_vulnerability,
@@ -2212,6 +2219,8 @@ class PipelineOrchestrator:
             enc_algorithm=parsed.enc_algorithm,
             tls_version=tls_result.tls_version,
             risk_score=risk.score,
+            base_risk_score=risk.base_score,
+            certificate_penalty=risk.certificate_penalty,
         )
         return _AssessmentInputs(
             tls_version=tls_result.tls_version,
@@ -2232,6 +2241,7 @@ class PipelineOrchestrator:
         self,
         *,
         tls_result: TLSProbeResult,
+        extracted_certificates: Sequence[Any],
         analyzed_certificates: Sequence[Any],
     ) -> _AssessmentInputs:
         leaf_certificate = next(
@@ -2281,11 +2291,13 @@ class PipelineOrchestrator:
         kex_vulnerability = self._safe_lookup_vulnerability("kex", kex_algorithm)
         sig_vulnerability = self._safe_lookup_vulnerability("sig", auth_algorithm)
         sym_vulnerability = self._safe_lookup_vulnerability("sym", enc_algorithm)
+        leaf_days_remaining = self._extract_leaf_certificate_days_remaining(extracted_certificates)
         risk = calculate_risk_score(
             kex_vulnerability=kex_vulnerability,
             sig_vulnerability=sig_vulnerability,
             sym_vulnerability=sym_vulnerability,
             tls_version=tls_result.tls_version,
+            certificate_days_remaining=leaf_days_remaining,
         )
         score_explanation = generate_score_explanation(
             kex_vulnerability=kex_vulnerability,
@@ -2297,6 +2309,8 @@ class PipelineOrchestrator:
             enc_algorithm=enc_algorithm,
             tls_version=tls_result.tls_version,
             risk_score=risk.score,
+            base_risk_score=risk.base_score,
+            certificate_penalty=risk.certificate_penalty,
         )
         return _AssessmentInputs(
             tls_version=tls_result.tls_version,
@@ -2331,6 +2345,29 @@ class PipelineOrchestrator:
             return lookup_vulnerability(category, algorithm)
         except KeyError:
             return 1.0
+
+    @staticmethod
+    def _extract_leaf_certificate_days_remaining(extracted_certificates: Sequence[Any]) -> int | None:
+        if not extracted_certificates:
+            return None
+
+        leaf = next(
+            (
+                cert
+                for cert in extracted_certificates
+                if getattr(cert, "cert_level", None) is CertLevel.LEAF
+            ),
+            extracted_certificates[0],
+        )
+        not_after = getattr(leaf, "not_after", None)
+        if not_after is None:
+            return None
+
+        if not_after.tzinfo is None:
+            not_after = not_after.replace(tzinfo=UTC)
+
+        delta = not_after - datetime.now(UTC)
+        return int(delta.total_seconds() // 86400)
 
     @staticmethod
     def _is_unknown_token(value: str | None) -> bool:

@@ -23,6 +23,8 @@ class RiskScoreBreakdown:
     sig_component: float
     sym_component: float
     tls_component: float
+    base_score: float
+    certificate_penalty: float
 
 
 def _kex_threat_sentence(algorithm: str | None) -> str:
@@ -79,6 +81,8 @@ def generate_score_explanation(
     enc_algorithm: str | None,
     tls_version: str | None,
     risk_score: float,
+    base_risk_score: float | None = None,
+    certificate_penalty: float = 0.0,
 ) -> dict[str, Any]:
     """Return a deterministic human-readable explanation for risk and q-score components."""
     kex_expr, _, kex_points = _format_component(WEIGHTS["kex"], kex_vulnerability)
@@ -86,6 +90,7 @@ def generate_score_explanation(
     sym_expr, _, sym_points = _format_component(WEIGHTS["sym"], sym_vulnerability)
     tls_expr, _, tls_points = _format_component(WEIGHTS["tls"], tls_vulnerability)
 
+    effective_base_risk = round(base_risk_score if base_risk_score is not None else risk_score, 2)
     qscore = round(100 - risk_score, 2)
     components = {
         "kex": (kex_points, kex_algorithm or "UNKNOWN"),
@@ -96,8 +101,55 @@ def generate_score_explanation(
     dominant_key = max(components, key=lambda key: components[key][0])
     dominant_points, dominant_algorithm = components[dominant_key]
     projected_qscore = round(min(100.0, qscore + dominant_points), 2)
+    certificate_penalty_points = round(certificate_penalty * 100, 2)
+
+    formula = "FinalRisk = min((0.45 x V_kex) + (0.35 x V_sig) + (0.10 x V_sym) + (0.10 x V_tls) + CertPenalty, 1.00)"
+    derivation = (
+        f"BaseRisk = ({kex_expr}) + ({sig_expr}) + ({sym_expr}) + ({tls_expr}) = {effective_base_risk/100:.4f}; "
+        f"CertPenalty = {certificate_penalty:.2f}; "
+        f"FinalRisk = min({effective_base_risk/100:.4f} + {certificate_penalty:.2f}, 1.00) = {risk_score/100:.4f}; "
+        f"Q-Score = 100 - ({risk_score:.2f}) = {qscore:.2f}."
+    )
+
+    penalty_reason = (
+        "expired_certificate"
+        if certificate_penalty >= 0.10
+        else "expiring_within_30_days"
+        if certificate_penalty > 0
+        else "none"
+    )
 
     return {
+        "formula": formula,
+        "inputs": {
+            "weights": {"kex": WEIGHTS["kex"], "sig": WEIGHTS["sig"], "sym": WEIGHTS["sym"], "tls": WEIGHTS["tls"]},
+            "vulnerabilities": {
+                "kex": round(kex_vulnerability or 0.0, 2),
+                "sig": round(sig_vulnerability or 0.0, 2),
+                "sym": round(sym_vulnerability or 0.0, 2),
+                "tls": round(tls_vulnerability or 0.0, 2),
+            },
+            "algorithms": {
+                "kex": kex_algorithm or "UNKNOWN",
+                "sig": auth_algorithm or "UNKNOWN",
+                "sym": enc_algorithm or "UNKNOWN",
+                "tls": tls_version or "UNKNOWN",
+            },
+        },
+        "weighted_components": {
+            "kex": round(kex_points, 2),
+            "sig": round(sig_points, 2),
+            "sym": round(sym_points, 2),
+            "tls": round(tls_points, 2),
+        },
+        "penalties": {
+            "certificate": round(certificate_penalty_points, 2),
+            "certificate_reason": penalty_reason,
+        },
+        "base_risk_score": effective_base_risk,
+        "final_risk_score": round(risk_score, 2),
+        "q_score": qscore,
+        "derivation": derivation,
         "kex_explanation": (
             f"{kex_algorithm or 'UNKNOWN'} detected. {_kex_threat_sentence(kex_algorithm)} "
             f"Weighted contribution: {kex_expr} ({kex_points:.2f} points)."
@@ -129,6 +181,7 @@ def calculate_risk_score(
     sym_vulnerability: float,
     tls_version: str | None = None,
     tls_vulnerability: float | None = None,
+    certificate_days_remaining: int | None = None,
 ) -> RiskScoreBreakdown:
     """Calculate the 0-100 quantum risk score using the documented formula."""
     resolved_tls_vulnerability = (
@@ -142,7 +195,17 @@ def calculate_risk_score(
     sym_component = WEIGHTS["sym"] * sym_vulnerability
     tls_component = WEIGHTS["tls"] * resolved_tls_vulnerability
 
-    score = round(100 * (kex_component + sig_component + sym_component + tls_component), 2)
+    base_fraction = kex_component + sig_component + sym_component + tls_component
+    certificate_penalty = 0.0
+    if certificate_days_remaining is not None:
+        if certificate_days_remaining <= 0:
+            certificate_penalty = 0.10
+        elif certificate_days_remaining <= 30:
+            certificate_penalty = 0.05
+
+    final_fraction = min(base_fraction + certificate_penalty, 1.00)
+    score = round(100 * final_fraction, 2)
+    base_score = round(100 * base_fraction, 2)
 
     return RiskScoreBreakdown(
         score=score,
@@ -154,4 +217,6 @@ def calculate_risk_score(
         sig_component=round(sig_component, 4),
         sym_component=round(sym_component, 4),
         tls_component=round(tls_component, 4),
+        base_score=base_score,
+        certificate_penalty=round(certificate_penalty, 2),
     )

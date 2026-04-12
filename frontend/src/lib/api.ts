@@ -40,6 +40,41 @@ export interface AssessmentResponse {
   kex_algorithm: string;
   risk_score: number; // 0–100
   score_explanation?: {
+    formula?: string;
+    derivation?: string;
+    base_risk_score?: number;
+    final_risk_score?: number;
+    q_score?: number;
+    weighted_components?: {
+      kex?: number;
+      sig?: number;
+      sym?: number;
+      tls?: number;
+    };
+    penalties?: {
+      certificate?: number;
+      certificate_reason?: string;
+    };
+    inputs?: {
+      weights?: {
+        kex?: number;
+        sig?: number;
+        sym?: number;
+        tls?: number;
+      };
+      vulnerabilities?: {
+        kex?: number;
+        sig?: number;
+        sym?: number;
+        tls?: number;
+      };
+      algorithms?: {
+        kex?: string;
+        sig?: string;
+        sym?: string;
+        tls?: string;
+      };
+    };
     kex_explanation?: string;
     sig_explanation?: string;
     sym_explanation?: string;

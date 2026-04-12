@@ -1,552 +1,268 @@
 # Aegis Database Reference
 
-This document describes the current persisted data model used by Aegis.
+Last updated: 2026-04-12
 
-The platform uses two storage systems:
+This document describes persisted storage used by Aegis in local Docker mode.
 
-- PostgreSQL for transactional scan records and generated artifacts
-- Qdrant for the retrieval corpus used by the remediation intelligence pipeline
+## 1. Storage Systems
 
-## Storage Roles
+Aegis uses two storage backends:
 
-### PostgreSQL
+1. PostgreSQL
+- transactional scan records
+- deterministic analysis data
+- generated artifacts and history read models
 
-PostgreSQL stores:
+2. Qdrant
+- vector corpus used for retrieval-backed remediation context
+- default collection: aegis_nist_docs
 
-- scan jobs
-- discovered assets
-- deterministic crypto assessments
-- certificate-chain observations
-- generated CBOM documents
-- remediation bundles
-- structured remediation actions
-- compliance certificates
-- persisted scan events
-- DNS validation rows
-- cross-scan asset fingerprints
+## 2. Runtime Database Configuration
 
-### Qdrant
+Primary local values:
+- DATABASE_URL=postgresql+asyncpg://aegis:aegis@postgres:5432/aegis
+- QDRANT_URL=http://qdrant:6333
+- QDRANT_COLLECTION_NAME=aegis_nist_docs
 
-Qdrant stores:
+## 3. Schema Source of Truth
 
-- vector embeddings for the approved local remediation corpus in [docs/nist](./docs/nist)
-- the `aegis_nist_docs` collection used by the Phase 6 retrieval and remediation flow
+Authoritative schema sources:
+1. SQLAlchemy models under backend/models
+2. Alembic migration history under migrations/versions
 
-Qdrant is not used for scan jobs, asset state, or normal application records. Those stay in PostgreSQL.
+If there is a mismatch, treat the runtime models as the current contract and update migrations/docs accordingly.
 
-## Important Source-of-Truth Note
+## 4. Core Entity Graph
 
-The current application code expects the schema described in the SQLAlchemy models under [backend/models](./backend/models).
+Scan-centric relationship model:
 
-The Alembic history checked into the repo currently includes the initial migration, but the running code also expects later tables and columns such as:
-
-- `scan_events`
-- `dns_records`
-- `asset_fingerprints`
-- `remediation_actions`
-- `scan_jobs.scan_profile`
-- `scan_jobs.initiated_by`
-- `discovered_assets.open_ports`
-- `discovered_assets.asset_metadata`
-- `discovered_assets.is_shadow_it`
-- `discovered_assets.discovery_source`
-
-Treat the ORM models and the live database schema as the authoritative shape for the current application behavior.
-
-## PostgreSQL Engine
-
-- Database: PostgreSQL 15
-- ORM: SQLAlchemy 2 async ORM
-- Driver: `asyncpg`
-- Migrations: Alembic
-- Local container name: `aegis-postgres`
-- Default local connection:
-  - internal Docker URL: `postgresql+asyncpg://aegis:aegis@postgres:5432/aegis`
-  - host psql/pgAdmin URL: `postgres://aegis:aegis@localhost:5432/aegis`
-
-## Scan-Centric Data Model
-
-Aegis is scan-centric.
-
-- One `scan_jobs` row represents one submitted scan target.
-- Each scan can discover many `discovered_assets`.
-- Each asset can then accumulate assessments and generated artifacts.
-- Some records are scan-scoped.
-- Some records are asset-scoped.
-- `asset_fingerprints` provide a stable cross-scan identity layer across repeated runs.
-
-High-level relationship graph:
-
-```text
 scan_jobs
-  |- discovered_assets
-  |    |- crypto_assessments
-  |    |- certificate_chains
-  |    |- cbom_documents
-  |    |- remediation_bundles
-  |    |- remediation_actions
-  |    \- compliance_certificates
-  |- dns_records
-  \- scan_events
+- discovered_assets
+  - crypto_assessments
+  - certificate_chains
+  - cbom_documents
+  - remediation_bundles
+  - remediation_actions
+  - compliance_certificates
+- dns_records
+- scan_events
 
-asset_fingerprints
-  |- first_seen_scan_id -> scan_jobs.id
-  \- last_seen_scan_id  -> scan_jobs.id
-```
+Cross-scan continuity:
+- asset_fingerprints (linked to first/last scan IDs)
 
-## Enum Types
+## 5. Table Inventory
 
-### `scan_status`
-
-Python enum: [ScanStatus](./backend/models/enums.py)
-
-- `pending`
-- `running`
-- `completed`
-- `failed`
-
-### `service_type`
-
-Python enum: [ServiceType](./backend/models/enums.py)
-
-- `tls`
-- `vpn`
-- `api`
-
-### `compliance_tier`
-
-Python enum: [ComplianceTier](./backend/models/enums.py)
-
-- `FULLY_QUANTUM_SAFE`
-- `PQC_TRANSITIONING`
-- `QUANTUM_VULNERABLE`
-
-### `cert_level`
-
-Python enum: [CertLevel](./backend/models/enums.py)
-
-- `leaf`
-- `intermediate`
-- `root`
-
-### `remediation_priority`
-
-Python enum: [RemediationPriority](./backend/models/remediation_action.py)
-
-- `P1`
-- `P2`
-- `P3`
-- `P4`
-
-### `remediation_status`
-
-Python enum: [RemediationStatus](./backend/models/remediation_action.py)
-
-- `not_started`
-- `in_progress`
-- `done`
-- `verified`
-
-### `remediation_effort`
-
-Python enum: [RemediationEffort](./backend/models/remediation_action.py)
-
-- `low`
-- `medium`
-- `high`
-
-## Tables
-
-### `scan_jobs`
-
-Model: [backend/models/scan_job.py](./backend/models/scan_job.py)
+## 5.1 scan_jobs
 
 Purpose:
-
-- root execution record for every submitted scan
-- source of truth for scan status, creation time, and completion time
-- parent row for scan-scoped children
+- root record for each submitted scan
 
 Important columns:
+- id (UUID PK)
+- target
+- status
+- created_at
+- completed_at
+- scan_profile
+- initiated_by
 
-- `id` - UUID primary key
-- `target` - exact submitted target string
-- `status` - `scan_status`
-- `created_at`
-- `completed_at`
-- `scan_profile` - optional scan-profile label
-- `initiated_by` - optional actor/source label
-
-Notes:
-
-- `scan_profile` is free-form text persisted as submitted by clients.
-- dashboard full-port mode is activated by profile text containing `full port`, `full-port`, `all ports`, or `all-ports`.
-- scanner profiles (`Quick`/`Standard`/`Deep`/`PQC Focus`) and scanner toggles (full port scan, enumeration) are independent UI controls that are serialized into this single `scan_profile` string.
-
-Key relationships:
-
-- one-to-many `discovered_assets`
-- one-to-many `cbom_documents`
-- one-to-many `dns_records`
-- one-to-many `scan_events`
-
-### `discovered_assets`
-
-Model: [backend/models/discovered_asset.py](./backend/models/discovered_asset.py)
+## 5.2 discovered_assets
 
 Purpose:
-
-- one row per discovered cryptographic surface within a specific scan
-- anchor row for downstream crypto analysis and generated artifacts
+- one row per discovered host/ip/port surface within a scan
 
 Important columns:
+- id (UUID PK)
+- scan_id (FK -> scan_jobs.id)
+- hostname, ip_address, port, protocol
+- service_type
+- server_software
+- open_ports (JSONB)
+- asset_metadata (JSONB)
+- is_shadow_it
+- discovery_source
 
-- `id` - UUID primary key
-- `scan_id` - FK to `scan_jobs.id`
-- `hostname`
-- `ip_address`
-- `port`
-- `protocol`
-- `service_type`
-- `server_software`
-- `open_ports` - JSONB summary of related open ports for the host
-- `asset_metadata` - JSONB discovery/TLS metadata
-- `is_shadow_it` - boolean flag
-- `discovery_source` - source marker such as DNS validation or port scan path
-
-Key relationships:
-
-- many-to-one `scan_job`
-- one-to-many `crypto_assessments`
-- one-to-many `certificate_chains`
-- one-to-many `cbom_documents`
-- one-to-many `remediation_bundles`
-- one-to-many `remediation_actions`
-- one-to-many `compliance_certificates`
-
-`asset_metadata` JSON conventions used by current frontend-facing APIs:
-
-- `service_type` - normalized service type string
-- `domain_enrichment` (object, when hostname is available):
-  - `hostname`
-  - `root_domain`
-  - `registrar`
-  - `registration_date` (`YYYY-MM-DD` when available)
-  - `expiry_date` (`YYYY-MM-DD` when available)
-  - `nameservers` (array of strings)
-- `network_enrichment` (object, when IP enrichment resolves):
-  - `subnet`
-  - `reverse_dns`
-  - `asn`
-  - `netname`
-  - `isp`
-  - `city`
-
-### `crypto_assessments`
-
-Model: [backend/models/crypto_assessment.py](./backend/models/crypto_assessment.py)
+## 5.3 crypto_assessments
 
 Purpose:
-
-- deterministic decomposition of the asset's crypto posture
-- source of risk score and compliance tier
+- deterministic cryptographic decomposition and scoring
 
 Important columns:
+- asset_id (FK -> discovered_assets.id)
+- tls_version, cipher_suite
+- kex_algorithm, auth_algorithm, enc_algorithm, mac_algorithm
+- kex_vulnerability, sig_vulnerability, sym_vulnerability, tls_vulnerability
+- risk_score
+- score_explanation (JSONB)
+- compliance_tier
 
-- `id`
-- `asset_id` - FK to `discovered_assets.id`
-- `tls_version`
-- `cipher_suite`
-- `kex_algorithm`
-- `auth_algorithm`
-- `enc_algorithm`
-- `mac_algorithm`
-- `kex_vulnerability`
-- `sig_vulnerability`
-- `sym_vulnerability`
-- `tls_vulnerability`
-- `risk_score`
-- `compliance_tier`
-
-Notes:
-
-- vulnerability values are normalized floats in the `0.0` to `1.0` range
-- `risk_score` is a `0` to `100` score produced by the deterministic rules/scoring pipeline
-- frontend `q_score` is derived as `100 - risk_score` (higher is better)
-
-### `certificate_chains`
-
-Model: [backend/models/certificate_chain.py](./backend/models/certificate_chain.py)
+## 5.4 certificate_chains
 
 Purpose:
-
-- persists individual certificates observed in a TLS chain
-- used for asset certificate detail, leaf certificate summaries, and CBOM mapping
+- persisted certificate chain rows per asset
 
 Important columns:
+- asset_id (FK)
+- cert_level (LEAF/INTERMEDIATE/ROOT enum)
+- subject, issuer
+- public_key_algorithm, key_size_bits
+- signature_algorithm
+- quantum_safe
+- not_before, not_after
 
-- `id`
-- `asset_id`
-- `cert_level`
-- `subject`
-- `issuer`
-- `public_key_algorithm`
-- `key_size_bits`
-- `signature_algorithm`
-- `quantum_safe`
-- `not_before`
-- `not_after`
-
-### `cbom_documents`
-
-Model: [backend/models/cbom_document.py](./backend/models/cbom_document.py)
+## 5.5 cbom_documents
 
 Purpose:
-
-- stores generated CycloneDX 1.6 cryptographic bills of materials
+- persisted CycloneDX CBOM payloads per asset and scan
 
 Important columns:
+- asset_id, scan_id
+- serial_number
+- cbom_json
+- created_at
 
-- `id`
-- `scan_id`
-- `asset_id`
-- `serial_number` - unique
-- `cbom_json` - JSONB
-- `created_at`
-
-### `remediation_bundles`
-
-Model: [backend/models/remediation_bundle.py](./backend/models/remediation_bundle.py)
+## 5.6 remediation_bundles
 
 Purpose:
-
-- stores the main Phase 6 remediation output for an asset
+- per-asset remediation package output
 
 Important columns:
+- asset_id
+- hndl_timeline (JSONB)
+- patch_config
+- migration_roadmap
+- source_citations (JSONB)
+- created_at
 
-- `id`
-- `asset_id`
-- `hndl_timeline` - JSONB
-- `patch_config` - generated patch/config text
-- `migration_roadmap` - roadmap text
-- `source_citations` - JSONB citation payload
-- `created_at`
-
-### `remediation_actions`
-
-Model: [backend/models/remediation_action.py](./backend/models/remediation_action.py)
+## 5.7 remediation_actions
 
 Purpose:
-
-- stores structured remediation tasks derived from assessments and bundles
+- structured remediation action rows for prioritization and UI tables
 
 Important columns:
+- asset_id
+- priority (P1-P4)
+- finding
+- action
+- effort
+- status
+- category
+- nist_reference
 
-- `id`
-- `asset_id`
-- `remediation_bundle_id`
-- `priority`
-- `finding`
-- `action`
-- `effort`
-- `status`
-- `category`
-- `nist_reference`
-- `created_at`
-- `updated_at`
-
-### `compliance_certificates`
-
-Model: [backend/models/compliance_certificate.py](./backend/models/compliance_certificate.py)
+## 5.8 compliance_certificates
 
 Purpose:
-
-- stores issued Aegis compliance certificates per asset
+- persisted compliance certificate metadata and optional PEM
 
 Important columns:
+- asset_id
+- tier
+- signing_algorithm
+- valid_from, valid_until
+- extensions_json
+- remediation_bundle_id
+- certificate_pem
 
-- `id`
-- `asset_id`
-- `tier`
-- `certificate_pem`
-- `signing_algorithm`
-- `valid_from`
-- `valid_until`
-- `extensions_json`
-- `remediation_bundle_id`
-
-### `dns_records`
-
-Model: [backend/models/dns_record.py](./backend/models/dns_record.py)
+## 5.9 dns_records
 
 Purpose:
-
-- stores validated DNS resolution rows for hostnames discovered during a scan
+- DNS validation outcomes tied to scan scope
 
 Important columns:
+- scan_id
+- hostname
+- resolved_ips (JSONB array)
+- cnames (JSONB array)
+- discovery_source
+- is_in_scope
+- discovered_at
 
-- `id`
-- `scan_id`
-- `hostname`
-- `resolved_ips` - JSONB array
-- `cnames` - JSONB array
-- `discovery_source`
-- `is_in_scope`
-- `discovered_at`
-
-### `scan_events`
-
-Model: [backend/models/scan_event.py](./backend/models/scan_event.py)
+## 5.10 scan_events
 
 Purpose:
-
-- persists runtime pipeline events so historical scans still have event logs after in-memory state is gone
+- persisted event timeline for scan execution and diagnostics
 
 Important columns:
+- scan_id
+- timestamp
+- kind
+- message
+- stage
 
-- `id`
-- `scan_id`
-- `timestamp`
-- `kind`
-- `stage`
-- `message`
-
-### `asset_fingerprints`
-
-Model: [backend/models/asset_fingerprint.py](./backend/models/asset_fingerprint.py)
+## 5.11 asset_fingerprints
 
 Purpose:
-
-- stable cross-scan identity for the same logical asset
-- used for persisted q-score history and trend views
+- stable cross-scan identity and q-score history
 
 Important columns:
+- canonical_key (unique)
+- first_seen_scan_id
+- last_seen_scan_id
+- first_seen_at, last_seen_at
+- appearance_count
+- q_score_history (JSONB array)
+- latest_q_score
+- latest_compliance_tier
 
-- `id`
-- `canonical_key` - unique logical identity, typically host/IP plus port/protocol
-- `first_seen_scan_id`
-- `last_seen_scan_id`
-- `first_seen_at`
-- `last_seen_at`
-- `appearance_count`
-- `q_score_history` - JSONB array of score snapshots
-- `latest_q_score`
-- `latest_compliance_tier`
+## 6. Enum Domains
 
-## Write-Side Flow
+Current enums include:
+- scan_status: pending, running, completed, failed
+- service_type: tls, vpn, api
+- compliance_tier: FULLY_QUANTUM_SAFE, PQC_TRANSITIONING, QUANTUM_VULNERABLE
+- cert_level: LEAF, INTERMEDIATE, ROOT
+- remediation_priority: P1, P2, P3, P4
+- remediation_status: not_started, in_progress, done, verified
+- remediation_effort: low, medium, high
 
-During a successful scan, the pipeline typically writes in this order:
+## 7. Scoring Persistence Notes
 
-1. `scan_jobs`
-2. `dns_records`
-3. `discovered_assets`
-4. `crypto_assessments`
-5. `asset_fingerprints`
-6. `certificate_chains`
-7. `cbom_documents`
-8. `remediation_bundles`
-9. `remediation_actions`
-10. `compliance_certificates`
-11. `scan_events`
+risk_score persistence model:
+- Stored as numeric score (0-100) on crypto_assessments.risk_score.
+- Derived by deterministic formula from vulnerability components.
+- Includes certificate penalty from LEAF cert expiry window.
 
-Not every scan populates every table. Example:
+q_score usage model:
+- Not a primary persisted score on assessments.
+- Derived as q_score = 100 - risk_score.
+- Persisted historically in asset_fingerprints.q_score_history and latest_q_score.
 
-- non-remediated scans may leave `remediation_bundles` empty
-- scans with no captured certificate chain may leave `certificate_chains` empty
-- sparse targets may only create one asset row
+## 8. Qdrant Collection Notes
 
-## Read-Side API Assembly
+Expected collection:
+- aegis_nist_docs
 
-The frontend does not query tables directly. The backend read service assembles:
+Corpus source:
+- docs/nist
 
-- scan status payloads
-- compiled scan results
-- latest artifact per asset
-- mission-control overview
-- mission-control recent activity
-- mission-control network graph
-- scan history
+Ingestion command:
 
-The main compiled payload comes from:
-
-- [backend/pipeline/orchestrator.py](./backend/pipeline/orchestrator.py)
-- [backend/api/v1/schemas.py](./backend/api/v1/schemas.py)
-
-## Qdrant
-
-### Purpose
-
-Qdrant stores the embedded remediation/reference corpus used by the retrieval and RAG layer.
-
-### Current collection
-
-- collection name: `aegis_nist_docs`
-
-### Source corpus
-
-- local files under [docs/nist](./docs/nist)
-- supported ingestion formats:
-  - `.pdf`
-  - `.txt`
-  - `.md`
-
-### Lifecycle
-
-- documents are ingested when you explicitly run the ingestion script
-- scans do not re-ingest the corpus on every run
-- scans query the persisted vectors already stored in Qdrant
-
-### Setup and validation commands
-
-```powershell
+```bash
 docker compose exec backend python scripts/ingest_nist_docs.py
-docker compose exec backend python scripts/validate_ingested_corpus.py
 ```
 
-### Relevant files
+## 9. Useful Database Checks
 
-- [scripts/ingest_nist_docs.py](./scripts/ingest_nist_docs.py)
-- [scripts/validate_ingested_corpus.py](./scripts/validate_ingested_corpus.py)
-- [backend/intelligence/retrieval.py](./backend/intelligence/retrieval.py)
-- [docs/nist/README.md](./docs/nist/README.md)
+List tables:
 
-## Useful Operational Commands
-
-### Apply migrations
-
-```powershell
-docker compose exec backend alembic upgrade head
+```bash
+docker compose exec -T postgres psql -U aegis -d aegis -c "\dt"
 ```
 
-### Open psql inside the Postgres container
+Inspect assessment count:
 
-```powershell
-docker compose exec postgres psql -U aegis -d aegis
+```bash
+docker compose exec -T postgres psql -U aegis -d aegis -c "select count(*) from crypto_assessments;"
 ```
 
-### List table row counts
+Inspect scan status counts:
 
-```powershell
-docker compose exec postgres psql -U aegis -d aegis -c "\\dt"
+```bash
+docker compose exec -T postgres psql -U aegis -d aegis -c "select status, count(*) from scan_jobs group by status;"
 ```
 
-### Inspect recent scans
+## 10. Maintenance Guidance
 
-```powershell
-docker compose exec postgres psql -U aegis -d aegis -c "select id, target, status, created_at, completed_at from scan_jobs order by created_at desc limit 20;"
-```
-
-### Inspect collection status in Qdrant
-
-```powershell
-docker compose exec backend python scripts/validate_ingested_corpus.py
-```
-
-## Related Files
-
-- [backend/core/database.py](./backend/core/database.py)
-- [backend/models](./backend/models)
-- [backend/repositories](./backend/repositories)
-- [backend/api/v1/schemas.py](./backend/api/v1/schemas.py)
-- [API.md](./API.md)
-- [SETUP.md](./SETUP.md)
+- Keep table names and key column notes in sync with backend/models.
+- Update this file whenever new read-model tables or JSON fields are introduced.
+- If you add migration scripts that alter scoring schema behavior, also update CONTEXT.md and API.md.

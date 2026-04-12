@@ -1,72 +1,109 @@
-# Aegis — Agent Instructions
+# Aegis Agent Instructions
 
-This document provides instructions for AI coding agents on how to correctly implement and modify the Aegis project.
+This file defines repository-specific rules for coding agents working on Aegis.
 
-## 1. Project Context
-Aegis is a continuous, autonomous Cryptographic Intelligence Platform designed for the banking sector. As defined in `SOLUTION.md`, it addresses the Harvest Now, Decrypt Later (HNDL) quantum threat vector. Aegis discovers public-facing cryptographic surfaces, inventories them into a CycloneDX 1.6 Cryptographic Bill of Materials (CBOM), evaluates compliance against NIST FIPS 203/204/205, scores quantum risk, generates remediation strategies via a RAG pipeline, and issues three-tier X.509 compliance certificates.
+## 1) Product Context
 
-## 2. Source of Truth
+Aegis is a scan-centric quantum cryptographic intelligence platform.
 
-| Document | Role |
-|----------|------|
-| `README.md` | **Read first.** Project overview, benchmark results, and tech stack summary. |
-| `SETUP.md` | **Production setup guide.** Step-by-step instructions for infrastructure, PQC engine verification, and initialization. |
-| `API.md` | **Backend surface reference.** Detailed endpoint contracts, request/response shapes, and scan-centric architecture. |
-| `DATABASE.md` | **Data architecture.** Full schema mapping for PostgreSQL and collection definitions for Qdrant. |
-| `SOLUTION.md` | Product intent, problem statement, threat models, and high-level context. **Never modify this file.** |
-| `AGENTS.md` | This file. Workflow guidance and behavioral expectations. |
+Core flow:
+1. Discover internet-facing cryptographic surfaces.
+2. Analyze TLS and certificate posture.
+3. Compute deterministic quantum risk and compliance tier.
+4. Generate persisted artifacts (CBOM, remediation bundle, compliance certificate).
+5. Expose results via API and dashboard.
 
-## 3. Development Workflow
-- Work module-by-module (e.g., Discovery Engine, Cipher Suite Parser, etc.) rather than making large unstructured changes.
-- Maintain the **PQC-Native** specialized Alpine environment for the backend to ensure byte-level detection works.
-- Build minimal working implementations first, verify them, then add robustness, error handling, and edge cases.
-- Use the **Cloud Tunnel (Subprocess Isolation)** pattern for any new cloud API integrations to avoid OpenSSL library conflicts.
+## 2) Source of Truth Documents
 
-## 4. Using Agent Skills
-The repository includes reusable skills located in `.agents/skills/`. Before implementing complex functionality, agents should check this directory for a relevant skill. Prefer using an existing skill instead of recreating patterns from scratch.
+Use these documents in this order:
+1. README.md
+2. SETUP.md
+3. documentations/API.md
+4. documentations/DATABASE.md
+5. documentations/CONTEXT.md
+6. documentations/SOLUTION.md
 
-When relevant, prioritize finding and using these skills:
+Hard rule:
+- Never modify documentations/SOLUTION.md unless explicitly asked by the user.
 
-**Backend & Infrastructure:**
-- `fastapi-templates` — Async endpoint design, Pydantic schemas, dependency injection.
-- `sqlalchemy-alembic-expert-best-practices-code-review` — Async ORM models, repository/DAO, Alembic migrations.
-- `docker-oqs` — OQS-patched OpenSSL Dockerfile, docker-compose, PQC verification.
-- `pytest-coverage` — Unit/integration test patterns, fixtures, async testing.
+## 3) Runtime and Environment Reality
 
-**Frontend:**
-- `nextjs-app-router-patterns` — Next.js 14 App Router pages, layouts, client components, API client.
-- `shadcn-ui` — Component installation, customization, and theming.
-- `frontend-design` — Premium UI design principles and aesthetics.
-- `react-components` — Design-to-React component conversion.
-- `web-design-guidelines` — UX/accessibility auditing.
+Current default runtime is local deterministic mode.
 
-## 5. Implementation Rules
-- **Do not invent new architecture** unless absolutely necessary.
-- Respect the defined tech stack (FastAPI, Python 3.11, Vite, React, PostgreSQL, Qdrant).
-- Maintain the **45/35/10/10** weighted risk scoring formula as defined in the core logic.
-- Avoid large refactors unless explicitly requested by the user.
-- **Never modify `SOLUTION.md`.**
+Important facts:
+1. Root .env is intentionally tracked.
+2. Cloud API keys are not required for standard local scan operation.
+3. Deterministic scoring and compliance logic must remain non-LLM.
+4. Backend container startup applies Alembic migration automatically.
 
-## 6. File Structure Discipline
-- Follow the repository structure (`backend/`, `frontend/`, `docker/`, `tests/`, `scripts/`, `simulation/`).
-- Do not create unnecessary directories or duplicate modules. 
-- Keep the `simulation/` directory clean; only official benchmark scripts and evidence should reside here.
-- Treat `.agents/skills/` as agent tooling content. Do not edit skill files unless the task explicitly asks for skill development or skill maintenance.
+## 4) Architectural Constraints
 
-## 7. Testing Expectations
-- Focus on verifying the pipeline logic (unit, integration) before integrating with the UI.
-- Prefer adding unit tests alongside new functionality to validate edge cases (like new cipher suite variants).
-- Always verify PQC detection against `pq.cloudflareresearch.com` using the `simulation/run.py` tool.
+Do not violate these:
+1. Risk scoring and compliance tiering are deterministic only.
+2. RAG/advisory logic must not write risk scores or tiers.
+3. Keep backend and frontend status/tier vocabulary aligned.
+4. Prefer minimal targeted changes over broad refactors.
 
-## 8. Safe Modification Guidelines
-- **Avoid modifying** database schemas or deterministic pipeline stages unless explicitly required.
-- The PQC Compliance Engine must remain a purely deterministic boolean engine — do not introduce probabilistic or LLM-based logic into security evaluations.
-- The RAG pipeline (LangChain + Qdrant) must never have write access to risk scores or compliance tiers.
+## 5) Codebase Boundaries
 
-## 9. Agent Execution Strategy
-Before writing any code, execute the following steps:
-1. **Read `README.md` and `SETUP.md`** to understand the current project state and environment.
-2. **Consult `API.md` and `DATABASE.md`** for the specific architectural boundaries of the task.
-3. **Check `.agents/skills/`** for applicable reusable skills.
-4. **Implement minimal working functionality.**
-5. **Verify** the implementation using the `simulation/run.py` tool and the `pytest` suite.
+Primary code ownership map:
+1. backend/analysis: deterministic scoring/parsing logic
+2. backend/compliance: tier evaluation rules
+3. backend/pipeline: orchestration and read-model assembly
+4. backend/api/v1: endpoint and schema contracts
+5. backend/models + backend/repositories: persistence model
+6. frontend/src/lib/adapters.ts: backend-to-UI mapping
+7. frontend/src/contexts: scan selection and queue lifecycle
+8. frontend/src/pages: route-level UX surfaces
+
+## 6) Implementation Workflow
+
+For non-trivial work:
+1. Read relevant docs and existing module.
+2. Implement minimal working change first.
+3. Validate with focused tests/build.
+4. Only then expand robustness if needed.
+
+## 7) Testing Expectations
+
+Minimum validation before completion:
+1. Backend logic changes: targeted pytest for changed module.
+2. Frontend changes: production build in frontend.
+3. Data/score changes: verify with at least one DB/API sanity query.
+
+Preferred checks:
+1. docker compose exec -T backend pytest -q <tests>
+2. cd frontend && npm run build
+3. simulation/run.py for pipeline behavior spot-check when relevant
+
+## 8) Data and Migration Safety
+
+Rules:
+1. Avoid schema-changing migrations unless user asks.
+2. If scoring logic changes, ensure historical backfill is addressed.
+3. Do not silently alter deterministic formula semantics.
+4. Keep score explanation payload aligned with formula behavior.
+
+## 9) File Hygiene
+
+1. Do not add temporary scripts/files to repository unless requested.
+2. Remove accidental junk files (.DS_Store, .bak, .orig, .rej) when encountered.
+3. Keep scripts directory production-meaningful.
+
+## 10) Agent Skill Usage
+
+Check .agents/skills before implementing complex work.
+
+High-value skills in this repo:
+1. docker-oqs
+2. fastapi-templates
+3. sqlalchemy-alembic-expert-best-practices-code-review
+4. pytest-coverage
+5. frontend-design
+
+## 11) Completion Criteria
+
+A task is complete only when:
+1. Code changes compile/lint/test for touched areas.
+2. Docs are updated if behavior/contract changed.
+3. User-facing semantics are verified against runtime data where applicable.

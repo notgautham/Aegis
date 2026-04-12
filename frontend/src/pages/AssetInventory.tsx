@@ -91,7 +91,6 @@ const AssetInventory = () => {
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Asset</th>
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">IP</th>
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Type</th>
-                <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Owner</th>
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Criticality</th>
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">TLS</th>
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Cipher</th>
@@ -103,13 +102,12 @@ const AssetInventory = () => {
               <tbody>
                 {filtered.map((a, i) => (
                   <tr key={a.id} className={cn("border-b border-border/50 hover:bg-[hsl(var(--bg-sunken))] transition-colors cursor-pointer", i % 2 === 0 && "bg-[hsl(var(--bg-sunken)/0.3)]")}>
-                    <td className="px-3 py-2 font-mono font-medium text-foreground cursor-pointer hover:text-brand-primary" onClick={() => navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}`)}>{a.domain}</td>
+                    <td className="px-3 py-2 font-mono font-medium text-foreground cursor-pointer hover:text-brand-primary" onClick={() => navigate(`/dashboard/assets/${a.domain.replace(/\./g, '-')}?port=${a.port}`)}>{a.domain}</td>
                     <td className="px-3 py-2 font-mono text-muted-foreground">{a.ip}</td>
                     <td className="px-3 py-2"><Badge variant="secondary" className="text-[10px]">{a.type}</Badge></td>
-                    <td className="px-3 py-2 text-muted-foreground">{a.ownerTeam}</td>
                     <td className="px-3 py-2"><Badge variant="outline" className="text-[10px]">{a.businessCriticality.replace('_', ' ')}</Badge></td>
                     <td className="px-3 py-2 font-mono text-muted-foreground">{a.tls}</td>
-                    <td className="px-3 py-2 font-mono text-muted-foreground text-[10px] max-w-[120px] truncate">{a.cipher}</td>
+                    <td className="px-3 py-2 font-mono text-muted-foreground text-[10px] whitespace-nowrap">{a.cipher}</td>
                     <td className="px-3 py-2 font-mono">{a.certificate}</td>
                     <td className="px-3 py-2"><span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded" style={{ color: getStatusColor(a.status), backgroundColor: `${getStatusColor(a.status)}15` }}>{getStatusLabel(a.status)}</span></td>
                     <td className="px-3 py-2">

@@ -112,6 +112,7 @@ const AssetDetail = () => {
     ];
   }, [asset, rawAsset]);
   const scoreReason = asset ? buildAssetScoreReason(asset) : '';
+  const scoreExplanation = rawAsset?.assessment?.score_explanation ?? null;
 
   if (selectedAssets.length === 0 || !asset) {
     return <div className="p-10 text-center"><h1 className="font-display text-2xl italic text-brand-primary">Asset Not Found</h1><p className="text-muted-foreground mt-2 font-body text-sm">No asset matching "{id}"</p><Button variant="outline" className="mt-4" onClick={() => navigate('/dashboard/inventory')}>Back to Inventory</Button></div>;
@@ -280,16 +281,62 @@ const AssetDetail = () => {
       <Card className="shadow-sm">
         <CardHeader className="pb-2"><CardTitle className="text-sm font-body">PQC Assessment</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ResponsiveContainer width="100%" height={220}>
-              <RadarChart data={radarData}>
-                <PolarGrid stroke="hsl(var(--border-default))" />
-                <PolarAngleAxis dataKey="axis" tick={{ fontSize: 9 }} />
-                <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 8 }} />
-                <Radar dataKey="value" stroke="hsl(var(--brand-primary))" fill="hsl(var(--brand-primary))" fillOpacity={0.15} strokeWidth={2} />
-              </RadarChart>
-            </ResponsiveContainer>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:items-start">
+            <div className="pt-4 lg:pt-8">
+              <ResponsiveContainer width="100%" height={340}>
+                <RadarChart data={radarData}>
+                  <PolarGrid stroke="hsl(var(--border-default))" />
+                  <PolarAngleAxis dataKey="axis" tick={{ fontSize: 11 }} />
+                  <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+                  <Radar dataKey="value" stroke="hsl(var(--brand-primary))" fill="hsl(var(--brand-primary))" fillOpacity={0.15} strokeWidth={2} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
             <div className="space-y-4">
+              {scoreExplanation && (
+                <div className="p-3 rounded-lg bg-[hsl(var(--bg-sunken))] border border-[hsl(var(--border-default))]">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Shield className="w-4 h-4 text-brand-primary" />
+                    <span className="font-body text-xs font-semibold text-foreground">Deterministic Score Math</span>
+                  </div>
+                  <p className="text-[11px] font-mono text-foreground leading-relaxed">
+                    Risk = 100 x (0.45 x V<sub>KEX</sub> + 0.35 x V<sub>SIG</sub> + 0.10 x V<sub>SYM</sub> + 0.10 x V<sub>TLS</sub>) + P<sub>cert</sub>
+                  </p>
+                  <p className="mt-1 text-[10px] font-mono text-muted-foreground leading-relaxed break-words">
+                    V<sub>KEX</sub>={scoreExplanation.inputs?.vulnerabilities?.kex ?? 'N/A'}, V<sub>SIG</sub>={scoreExplanation.inputs?.vulnerabilities?.sig ?? 'N/A'}, V<sub>SYM</sub>={scoreExplanation.inputs?.vulnerabilities?.sym ?? 'N/A'}, V<sub>TLS</sub>={scoreExplanation.inputs?.vulnerabilities?.tls ?? 'N/A'}, P<sub>cert</sub>={scoreExplanation.penalties?.certificate ?? 0}
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-mono">
+                    <div className="rounded border border-border px-2 py-1.5 bg-background">
+                      <span className="text-muted-foreground">Base Risk</span>
+                      <p className="font-semibold text-foreground">{scoreExplanation.base_risk_score ?? rawAsset?.assessment?.risk_score ?? 'N/A'}</p>
+                    </div>
+                    <div className="rounded border border-border px-2 py-1.5 bg-background">
+                      <span className="text-muted-foreground">Certificate Penalty</span>
+                      <p className="font-semibold text-foreground">+{scoreExplanation.penalties?.certificate ?? 0}</p>
+                    </div>
+                    <div className="rounded border border-border px-2 py-1.5 bg-background">
+                      <span className="text-muted-foreground">Final Risk</span>
+                      <p className="font-semibold text-foreground">{scoreExplanation.final_risk_score ?? rawAsset?.assessment?.risk_score ?? 'N/A'}</p>
+                    </div>
+                    <div className="rounded border border-border px-2 py-1.5 bg-background">
+                      <span className="text-muted-foreground">Q-Score</span>
+                      <p className="font-semibold text-foreground">{scoreExplanation.q_score ?? asset.qScore}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-mono text-muted-foreground">
+                    <p>KEX {scoreExplanation.inputs?.vulnerabilities?.kex ?? 'N/A'} x {scoreExplanation.inputs?.weights?.kex ?? 'N/A'}</p>
+                    <p>SIG {scoreExplanation.inputs?.vulnerabilities?.sig ?? 'N/A'} x {scoreExplanation.inputs?.weights?.sig ?? 'N/A'}</p>
+                    <p>SYM {scoreExplanation.inputs?.vulnerabilities?.sym ?? 'N/A'} x {scoreExplanation.inputs?.weights?.sym ?? 'N/A'}</p>
+                    <p>TLS {scoreExplanation.inputs?.vulnerabilities?.tls ?? 'N/A'} x {scoreExplanation.inputs?.weights?.tls ?? 'N/A'}</p>
+                  </div>
+                  {scoreExplanation.derivation && (
+                    <p className="mt-2 text-[10px] font-mono text-muted-foreground leading-relaxed break-words">
+                      {scoreExplanation.derivation}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {asset.hndlBreakYear && (
                 <div className="p-3 rounded-lg bg-[hsl(var(--status-critical)/0.05)] border border-[hsl(var(--status-critical)/0.15)]">
                   <div className="flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4 text-[hsl(var(--status-critical))]" /><span className="font-body text-xs font-semibold text-[hsl(var(--status-critical))]">HNDL Risk</span></div>

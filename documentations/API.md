@@ -1,97 +1,53 @@
 # Aegis API Reference
 
-This document describes the current backend HTTP API exposed by Aegis.
+Last updated: 2026-04-12
 
-It is the practical reference for:
+This document describes the live HTTP API exposed by the backend in local Docker mode.
 
-- frontend integration
-- scan orchestration
-- status polling
-- artifact retrieval
-- mission-control summaries
-- scan-history views
+## 1. Base Information
 
-The API is scan-centric:
+- Base URL: http://localhost:8000
+- API prefix: /api/v1
+- OpenAPI JSON: http://localhost:8000/openapi.json
+- Swagger UI: http://localhost:8000/docs
+- Health: GET /health
+- Content type: application/json
 
-- a scan is created first
-- status and progress are polled by `scan_id`
-- compiled results are fetched by `scan_id`
-- per-asset artifact endpoints use `asset_id`
+## 2. Auth and Security
 
-## Base Information
+Current API behavior:
+- No backend JWT/session enforcement.
+- Frontend login is currently a local UI gate.
+- Treat as local trusted environment, not production-hardened security.
 
-- Base URL: `http://localhost:8000`
-- API prefix: `/api/v1`
-- OpenAPI JSON: `http://localhost:8000/api/v1/openapi.json`
-- Swagger UI: `http://localhost:8000/docs`
-- Health endpoint: `GET /health`
-- Response format: JSON
+## 3. Core Semantics
 
-## Authentication
+### 3.1 Score model
 
-There is currently no real backend authentication or authorization layer enforced on these routes.
+- risk_score: 0-100 (higher is worse)
+- q_score: 0-100 (higher is better)
+- relation: q_score = 100 - risk_score
 
-Current state:
+### 3.2 Compliance tiers
 
-- frontend login is a local prototype gate only
-- backend routes are not JWT/session protected
-- CORS is currently permissive in development
+- FULLY_QUANTUM_SAFE
+- PQC_TRANSITIONING
+- QUANTUM_VULNERABLE
 
-Treat the current API as a trusted local-development/demo surface, not a production-secure interface.
+### 3.3 Scan status
 
-## Error Envelope
+- pending
+- running
+- completed
+- failed
 
-Application-level errors are returned in a consistent envelope:
+## 4. Endpoints
 
-```json
-{
-  "error": {
-    "type": "not_found",
-    "message": "Scan not found"
-  }
-}
-```
+## 4.1 Health
 
-Common error types:
+### GET /health
 
-- `http_error`
-- `validation_error`
-- `invalid_request`
-- `not_found`
-- `internal_error`
-
-## Shared Enums
-
-### Scan status
-
-- `pending`
-- `running`
-- `completed`
-- `failed`
-
-### Service type
-
-- `tls`
-- `vpn`
-- `api`
-
-### Compliance tier
-
-- `FULLY_QUANTUM_SAFE`
-- `PQC_TRANSITIONING`
-- `QUANTUM_VULNERABLE`
-
-### Score semantics
-
-- `risk_score` (0-100): higher is worse
-- `q_score` (0-100): higher is better
-- relation: `q_score = 100 - risk_score`
-
-## Endpoints
-
-### 1. `GET /health`
-
-Simple backend liveness check.
+Returns backend liveness.
 
 Example response:
 
@@ -101,650 +57,206 @@ Example response:
 }
 ```
 
-### 2. `POST /api/v1/scan`
+## 4.2 Scans
 
-Create a new scan job and dispatch the background orchestrator.
+### POST /api/v1/scan
+
+Create a scan job and dispatch background pipeline.
 
 Request body:
 
 ```json
 {
   "target": "example.com",
-  "scan_profile": "quick",
+  "scan_profile": "Standard + Full Port Scan",
   "initiated_by": "frontend_scan_queue"
 }
 ```
 
-Accepted target types:
+Request fields:
+- target: required; domain/IP/CIDR accepted.
+- scan_profile: optional; free-form string persisted to scan_jobs.scan_profile.
+- initiated_by: optional; persisted to scan_jobs.initiated_by.
 
-- domain
-- IP address
-- CIDR range
-
-Validation notes:
-
-- invalid targets return `400`
-- target parsing uses the discovery scope validator before scan creation
-
-Response status:
-
-- `202 Accepted`
-
-Response shape:
+Response: 202 Accepted
 
 ```json
 {
   "scan_id": "uuid",
   "target": "example.com",
   "status": "pending",
-  "created_at": "2026-04-10T12:00:00Z"
+  "created_at": "2026-04-12T12:00:00Z"
 }
 ```
 
-Request field notes:
-
-- `target` is required
-- `scan_profile` is optional and persisted to `scan_jobs.scan_profile`
-- `initiated_by` is optional and persisted to `scan_jobs.initiated_by`
-
-`scan_profile` behavior currently used by the dashboard:
-
-- values containing `full port`, `full-port`, `all ports`, or `all-ports` enable full TCP scan mode
-- full mode is additive: bounded scan first, then full TCP sweep (1-65535)
-- values containing `no enumeration` disable broad subdomain enumeration
-- scanner UI currently submits one target per request
-
-Execution model note:
-
-- discovery pipeline is streaming/concurrent: host enumeration, port scanning, and TLS probing can overlap per asset
-- default orchestrator concurrency guards:
-  - TLS probe concurrency: `50`
-  - port scan concurrency: `20`
-
-### 3. `GET /api/v1/scan/{scan_id}`
-
-Return live scan status and runtime telemetry.
-
-Use this for:
-
-- polling a running scan
-- stage/progress display
-- scanner and dashboard runtime event feed
-- degraded-mode visibility
-
-Response shape:
-
-```json
-{
-  "scan_id": "uuid",
-  "target": "example.com",
-  "status": "running",
-  "created_at": "2026-04-10T12:00:00Z",
-  "completed_at": null,
-  "progress": {
-    "assets_discovered": 1,
-    "assessments_created": 1,
-    "cboms_created": 1,
-    "remediations_created": 1,
-    "certificates_created": 1
-  },
-  "summary": {
-    "total_assets": 1,
-    "tls_assets": 1,
-    "non_tls_assets": 0,
-    "fully_quantum_safe_assets": 0,
-    "transitioning_assets": 1,
-    "vulnerable_assets": 0,
-    "critical_assets": 0,
-    "unknown_assets": 0,
-    "average_q_score": 50.0,
-    "highest_risk_score": 50.0
-  },
-  "stage": "analysis",
-  "stage_detail": "Running TLS assessment",
-  "stage_started_at": "2026-04-10T12:00:03Z",
-  "elapsed_seconds": 4.2,
-  "events": [
-    {
-      "timestamp": "2026-04-10T12:00:03Z",
-      "kind": "info",
-      "message": "Assessment pipeline started",
-      "stage": "analysis"
-    }
-  ],
-  "degraded_modes": []
-}
-```
-
-Field notes:
-
-- `progress` is derived counter data, not a persisted row
-- `summary` is a derived posture summary for the scan
-- `events` come from runtime memory while active and from persisted `scan_events` for completed/history reads
-- `degraded_modes` reports fallback or reduced-capability scan paths
-
-### 4. `GET /api/v1/scan/{scan_id}/results`
-
-Return the compiled scan read model used by the dashboard, asset pages, CBOM pages, PQC pages, remediation pages, and reports.
-
-Top-level response shape:
-
-```json
-{
-  "scan_id": "uuid",
-  "target": "example.com",
-  "status": "completed",
-  "created_at": "2026-04-10T12:00:00Z",
-  "completed_at": "2026-04-10T12:00:08Z",
-  "progress": {
-    "assets_discovered": 1,
-    "assessments_created": 1,
-    "cboms_created": 1,
-    "remediations_created": 1,
-    "certificates_created": 1
-  },
-  "summary": {
-    "total_assets": 1,
-    "tls_assets": 1,
-    "non_tls_assets": 0,
-    "fully_quantum_safe_assets": 0,
-    "transitioning_assets": 1,
-    "vulnerable_assets": 0,
-    "critical_assets": 0,
-    "unknown_assets": 0,
-    "average_q_score": 50.0,
-    "highest_risk_score": 50.0
-  },
-  "stage": "completed",
-  "stage_detail": "Scan finished",
-  "stage_started_at": "2026-04-10T12:00:08Z",
-  "elapsed_seconds": 8.0,
-  "events": [],
-  "degraded_modes": [],
-  "dns_records": [],
-  "assets": []
-}
-```
-
-#### `summary`
-
-Includes:
-
-- `total_assets`
-- `tls_assets`
-- `non_tls_assets`
-- `fully_quantum_safe_assets`
-- `transitioning_assets`
-- `vulnerable_assets`
-- `critical_assets`
-- `unknown_assets`
-- `average_q_score`
-- `highest_risk_score`
-
-#### `dns_records[]`
-
-Each item contains:
-
-- `hostname`
-- `resolved_ips`
-- `cnames`
-- `discovery_source`
-- `is_in_scope`
-- `discovered_at`
-
-#### `assets[]`
-
-Each asset contains:
-
-- `asset_id`
-- `hostname`
-- `ip_address`
-- `port`
-- `protocol`
-- `service_type`
-- `server_software`
-- `open_ports`
-- `asset_metadata`
-- `is_shadow_it`
-- `discovery_source`
-- `assessment`
-- `cbom`
-- `remediation`
-- `certificate`
-- `compliance_certificate`
-- `leaf_certificate`
-- `remediation_actions`
-- `asset_fingerprint`
-
-`asset_metadata` currently includes enrichment keys when available:
-
-- `service_type`
-- `domain_enrichment`:
-  - `hostname`
-  - `root_domain`
-  - `registrar`
-  - `registration_date`
-  - `expiry_date`
-  - `nameservers`
-- `network_enrichment`:
-  - `subnet`
-  - `reverse_dns`
-  - `asn`
-  - `netname`
-  - `isp`
-  - `city`
-
-#### `assessment`
-
-Fields:
-
-- `id`
-- `tls_version`
-- `cipher_suite`
-- `kex_algorithm`
-- `auth_algorithm`
-- `enc_algorithm`
-- `mac_algorithm`
-- `risk_score`
-- `compliance_tier`
-- `kex_vulnerability`
-- `sig_vulnerability`
-- `sym_vulnerability`
-- `tls_vulnerability`
-
-#### `cbom`
-
-Fields:
-
-- `id`
-- `serial_number`
-- `created_at`
-- `cbom_json`
-
-#### `remediation`
-
-Fields:
-
-- `id`
-- `created_at`
-- `hndl_timeline`
-- `patch_config`
-- `migration_roadmap`
-- `source_citations`
-
-#### `certificate`
-
-TLS certificate summary for frontend asset views.
-
-Fields:
-
-- `subject_cn`
-- `subject_alt_names`
-- `issuer`
-- `certificate_authority`
-- `signature_algorithm`
-- `key_type`
-- `key_size`
-- `valid_from`
-- `valid_until`
-- `days_remaining`
-- `sha256_fingerprint`
-
-#### `compliance_certificate`
-
-Persisted Aegis compliance certificate summary.
-
-Fields:
-
-- `id`
-- `tier`
-- `signing_algorithm`
-- `valid_from`
-- `valid_until`
-- `extensions_json`
-- `remediation_bundle_id`
-- `certificate_pem` (omitted in `scan/{id}/results`, present in `assets/{asset_id}/certificate`)
-
-#### `leaf_certificate`
-
-Leaf-certificate summary for the asset when a leaf row exists in `certificate_chains`.
-
-Fields:
-
-- `subject_cn`
-- `issuer`
-- `public_key_algorithm`
-- `key_size_bits`
-- `signature_algorithm`
-- `quantum_safe`
-- `not_before`
-- `not_after`
-- `days_remaining`
-
-#### `remediation_actions[]`
-
-Fields:
-
-- `priority`
-- `finding`
-- `action`
-- `effort`
-- `status`
-- `category`
-- `nist_reference`
-
-#### `asset_fingerprint`
-
-Cross-scan identity and score history.
-
-Fields:
-
-- `canonical_key`
-- `appearance_count`
-- `latest_q_score`
-- `latest_compliance_tier`
-- `first_seen_at`
-- `last_seen_at`
-- `first_seen_scan_id`
-- `last_seen_scan_id`
-- `q_score_history[]`
-
-Each `q_score_history[]` item contains:
-
-- `scan_id`
-- `q_score`
-- `scanned_at`
-
-### 5. `GET /api/v1/assets/{asset_id}/cbom`
-
-Return the latest persisted CBOM for a given asset.
-
-Response shape:
-
-```json
-{
-  "id": "uuid",
-  "serial_number": "urn:uuid:...",
-  "created_at": "2026-04-10T12:00:05Z",
-  "cbom_json": {
-    "bomFormat": "CycloneDX",
-    "specVersion": "1.6"
-  }
-}
-```
-
-### 6. `GET /api/v1/assets/{asset_id}/certificate`
-
-Return the latest persisted compliance certificate for a given asset.
-
-Response shape:
-
-```json
-{
-  "id": "uuid",
-  "tier": "PQC_TRANSITIONING",
-  "signing_algorithm": "ML-DSA-65",
-  "valid_from": "2026-04-10T12:00:06Z",
-  "valid_until": "2026-05-10T12:00:06Z",
-  "extensions_json": {},
-  "remediation_bundle_id": "uuid",
-  "certificate_pem": "-----BEGIN CERTIFICATE-----..."
-}
-```
-
-### 7. `GET /api/v1/assets/{asset_id}/remediation`
-
-Return the latest persisted remediation bundle for a given asset.
-
-Response shape:
-
-```json
-{
-  "id": "uuid",
-  "created_at": "2026-04-10T12:00:05Z",
-  "hndl_timeline": {
-    "urgency": "HIGH"
-  },
-  "patch_config": "server { ... }",
-  "migration_roadmap": "Preparation / Prerequisites ...",
-  "source_citations": {
-    "documents": []
-  }
-}
-```
-
-### 8. `GET /api/v1/mission-control/overview`
-
-Return an aggregate portfolio view across recent scans.
-
-Query parameters:
-
-- `recent_limit` - optional integer, default `10`, min `1`, max `25`
-- `priority_limit` - optional integer, default `5`, min `1`, max `10`
-
-Response shape:
-
-```json
-{
-  "portfolio_summary": {
-    "completed_scans": 8,
-    "running_scans": 1,
-    "failed_scans": 1,
-    "vulnerable_assets": 6,
-    "transitioning_assets": 4,
-    "compliant_assets": 20,
-    "certificates_issued": 24,
-    "remediation_bundles_generated": 10,
-    "degraded_scan_count": 2
-  },
-  "recent_scans": [],
-  "priority_findings": [],
-  "system_health": {
-    "backend_status": "healthy",
-    "degraded_runtime_notice_count": 0
-  }
-}
-```
-
-#### `recent_scans[]`
-
-Each item contains:
-
-- `scan_id`
-- `target`
-- `status`
-- `created_at`
-- `completed_at`
-- `summary`
-- `progress`
-- `degraded_mode_count`
-
-#### `priority_findings[]`
-
-Each item contains:
-
-- `scan_id`
-- `asset_id`
-- `target`
-- `asset_label`
-- `port`
-- `service_type`
-- `tier`
-- `risk_score`
-
-### 9. `GET /api/v1/mission-control/activity`
-
-Return persisted recent scan events for dashboard activity feeds.
-
-Query parameters:
-
-- `limit` - optional integer, default `25`, min `1`, max `100`
-
-Response shape:
-
-```json
-{
-  "items": [
-    {
-      "timestamp": "2026-04-11T03:00:00Z",
-      "kind": "info",
-      "message": "Persisted 4 discovered assets.",
-      "stage": "discovering_assets",
-      "scan_id": "uuid",
-      "target": "example.com",
-      "status": "completed",
-      "route": "/dashboard/discovery"
-    }
-  ]
-}
-```
-
-### 10. `GET /api/v1/mission-control/graph`
-
-Return network graph nodes and edges derived from persisted scan assets.
-
-Query parameters:
-
-- `scan_id` - optional UUID; when omitted, uses latest completed scan
-- `limit` - optional integer, default `150`, min `1`, max `500`
-
-Response shape:
-
-```json
-{
-  "nodes": [
-    {
-      "id": "cloudflare.com",
-      "label": "cloudflare.com",
-      "status": "standard",
-      "x": 120,
-      "y": 180.0,
-      "r": 18
-    }
-  ],
-  "edges": [["cloudflare.com", "104.16.132.229"]]
-}
-```
-
-`status` values are one of:
-
-- `critical`
-- `unknown`
-- `standard`
-- `safe`
-- `elite-pqc`
-
-### 11. `GET /api/v1/scan/history`
-
-Return the scan-history timeline used by the frontend.
-
-Query parameters:
-
-- `limit` - optional integer, min `1`, max `5000`; omit to return all matching scans
-- `target` - optional exact target filter
-
-Response shape:
-
-```json
-{
-  "items": [
-    {
-      "scan_id": "uuid",
-      "target": "example.com",
-      "status": "completed",
-      "created_at": "2026-04-10T12:00:00Z",
-      "completed_at": "2026-04-10T12:00:08Z",
-      "summary": {
-        "total_assets": 1,
-        "tls_assets": 1,
-        "non_tls_assets": 0,
-        "vulnerable_assets": 0,
-        "transitioning_assets": 1,
-        "fully_quantum_safe_assets": 0,
-        "critical_assets": 0,
-        "unknown_assets": 0,
-        "average_q_score": 50.0,
-        "highest_risk_score": 50.0
-      },
-      "progress": {
-        "assets_discovered": 1,
-        "assessments_created": 1,
-        "cboms_created": 1,
-        "remediations_created": 1,
-        "certificates_created": 1
-      },
-      "scan_profile": null,
-      "initiated_by": null,
-      "degraded_mode_count": 0
-    }
-  ]
-}
-```
-
-This endpoint currently powers:
-
-- Scan History page
-- top scan selector
-- same-target enterprise score history
-- all-time aggregation paths in several pages
-
-## Development and Verification Commands
-
-### Start the backend stack
+Behavior notes:
+- target is validated before scan creation.
+- scan_profile string controls full-port and enumeration behavior in orchestrator.
+
+### GET /api/v1/scan/{scan_id}
+
+Returns live/persisted scan status.
+
+Response includes:
+- scan metadata (target, status, created/completed timestamps)
+- progress counters
+- summary posture counters
+- stage and stage_detail
+- runtime/persisted events
+- degraded_modes list
+
+### GET /api/v1/scan/{scan_id}/results
+
+Returns compiled scan read model.
+
+Top-level fields:
+- scan metadata and status
+- progress, summary
+- stage/stage_detail/elapsed_seconds
+- events, degraded_modes
+- dns_records[]
+- assets[]
+
+AssetResultResponse fields (important):
+- asset_id, hostname, ip_address, port, protocol, service_type
+- open_ports, asset_metadata, is_shadow_it, discovery_source
+- assessment
+- certificate and leaf_certificate
+- cbom
+- remediation and remediation_actions
+- compliance_certificate
+- asset_fingerprint
+
+## 4.3 Mission Control
+
+### GET /api/v1/mission-control/graph
+
+Query params:
+- scan_id (optional UUID)
+- limit (default 150, max 500)
+
+Returns node/edge graph payload used in network topology visualizations.
+
+### GET /api/v1/mission-control/overview
+
+Query params:
+- recent_limit (default 10, max 25)
+- priority_limit (default 5, max 10)
+
+Returns portfolio_summary, recent_scans, priority_findings, and system_health.
+
+### GET /api/v1/mission-control/activity
+
+Query params:
+- limit (default 25, max 100)
+
+Returns recent scan activity feed.
+
+### GET /api/v1/scan/history
+
+Query params:
+- limit (default 200, max 5000)
+- target (optional exact target filter)
+
+Returns lightweight timeline entries with summary/progress and scan metadata.
+
+## 4.4 Asset Artifact Endpoints
+
+### GET /api/v1/assets/{asset_id}/cbom
+
+Returns latest persisted CBOM document for one asset.
+
+### GET /api/v1/assets/{asset_id}/certificate
+
+Returns latest persisted compliance certificate for one asset.
+
+### GET /api/v1/assets/{asset_id}/remediation
+
+Returns latest persisted remediation bundle for one asset.
+
+## 5. Key Response Shapes
+
+## 5.1 AssessmentResponse
+
+Important fields:
+- tls_version, cipher_suite
+- kex_algorithm, auth_algorithm, enc_algorithm, mac_algorithm
+- kex_vulnerability, sig_vulnerability, sym_vulnerability, tls_vulnerability
+- risk_score
+- score_explanation (deterministic derivation payload)
+- compliance_tier
+
+## 5.2 AssetCertificateResponse
+
+Important fields:
+- subject_cn, issuer, certificate_authority
+- signature_algorithm, key_type, key_size
+- valid_from, valid_until, days_remaining
+- sha256_fingerprint
+
+## 5.3 AssetFingerprintResponse
+
+Cross-scan continuity payload:
+- canonical_key
+- appearance_count
+- latest_q_score
+- latest_compliance_tier
+- first_seen/last_seen timestamps
+- q_score_history[]
+
+## 6. Error Handling
+
+Validation and request errors are returned with standard FastAPI error responses.
+
+Common scenarios:
+- invalid target in POST /scan => 400
+- unknown scan_id or asset_id => 404
+- unhandled server issues => 500
+
+## 7. Scanner Profile Notes
+
+Profile parsing is string-based and currently supports operational toggles embedded in scan_profile text:
+- full port/all ports tokens => enable full TCP sweep mode.
+- no enumeration token => disable broad subdomain enumeration.
+
+Scanner UI submits one target per run.
+
+## 8. Local Mode Notes
+
+Default local mode characteristics:
+- EMBEDDING_PROVIDER_MODE=local
+- LLM_PROVIDER_MODE=local
+- cloud keys are not required for normal scanning and deterministic scoring
+
+Deterministic risk/compliance decisions are never delegated to LLM providers.
+
+## 9. Practical API Verification Commands
 
 ```bash
-docker compose up -d --build
+curl -s http://localhost:8000/health | jq
+curl -s http://localhost:8000/api/v1/scan/history?limit=5 | jq
 ```
 
-### Apply migrations
+Create a scan:
 
 ```bash
-docker compose exec backend alembic upgrade head
+curl -s -X POST http://localhost:8000/api/v1/scan \
+  -H 'content-type: application/json' \
+  -d '{"target":"example.com","scan_profile":"Standard","initiated_by":"manual"}' | jq
 ```
 
-### Ingest the corpus required for remediation retrieval
+Fetch results:
 
 ```bash
-docker compose exec backend python scripts/ingest_nist_docs.py
+curl -s http://localhost:8000/api/v1/scan/<scan_id>/results | jq
 ```
 
-### Validate the corpus and Qdrant collection
+## 10. Contract Ownership
 
-```bash
-docker compose exec backend python scripts/validate_ingested_corpus.py
-```
+Backend contract definitions are in:
+- backend/api/v1/schemas.py
+- backend/api/v1/endpoints/scans.py
+- backend/api/v1/endpoints/mission_control.py
+- backend/api/v1/endpoints/assets.py
 
-### Health check
-
-```bash
-curl http://localhost:8000/health
-```
-
-### Example create-scan request
-
-```bash
-curl -X POST http://localhost:8000/api/v1/scan \
-  -H "Content-Type: application/json" \
-  -d '{"target":"testssl.sh","scan_profile":"quick","initiated_by":"frontend_scan_queue"}'
-```
-
-## Current API Gaps
-
-These are important missing capabilities, not hidden routes:
-
-- no real backend auth or user scoping
-- no scan cancel/abort endpoint
-- no report-generation/download endpoints
-- no scheduled-report CRUD endpoints
-- no notification APIs
-
-## Related Files
-
-- [backend/main.py](./backend/main.py)
-- [backend/api/v1/router.py](./backend/api/v1/router.py)
-- [backend/api/v1/endpoints/scans.py](./backend/api/v1/endpoints/scans.py)
-- [backend/api/v1/endpoints/assets.py](./backend/api/v1/endpoints/assets.py)
-- [backend/api/v1/endpoints/mission_control.py](./backend/api/v1/endpoints/mission_control.py)
-- [backend/api/v1/schemas.py](./backend/api/v1/schemas.py)
-- [DATABASE.md](./DATABASE.md)
-- [SETUP.md](./SETUP.md)
+When runtime behavior changes, update this document and schemas together.

@@ -18,23 +18,23 @@ import type {
 
 function mapStatus(raw: AssetResultResponse): Asset['status'] {
   const tier = raw.assessment?.compliance_tier;
-  const risk = raw.assessment?.risk_score ?? 50;
+  const risk = raw.assessment?.risk_score;
   if (tier === 'FULLY_QUANTUM_SAFE') return 'elite-pqc';
   if (tier === 'PQC_TRANSITIONING') return 'transitioning';
-  if (tier === 'QUANTUM_VULNERABLE') return risk > 70 ? 'critical' : 'vulnerable';
-  if (risk > 70) return 'critical';
-  if (risk >= 40) return 'vulnerable';
+  if (tier === 'QUANTUM_VULNERABLE') return typeof risk === 'number' && risk > 70 ? 'critical' : 'vulnerable';
+  if (typeof risk === 'number' && risk > 70) return 'critical';
+  if (typeof risk === 'number' && risk >= 40) return 'vulnerable';
   return 'standard';
 }
 
 function mapTier(raw: AssetResultResponse): Asset['tier'] {
   const tier = raw.assessment?.compliance_tier;
-  const risk = raw.assessment?.risk_score ?? 50;
+  const risk = raw.assessment?.risk_score;
   if (tier === 'FULLY_QUANTUM_SAFE') return 'elite_pqc';
   if (tier === 'PQC_TRANSITIONING') return 'transitioning';
-  if (tier === 'QUANTUM_VULNERABLE') return risk > 70 ? 'critical' : 'legacy';
-  if (risk > 70) return 'critical';
-  if (risk >= 40) return 'legacy';
+  if (tier === 'QUANTUM_VULNERABLE') return typeof risk === 'number' && risk > 70 ? 'critical' : 'legacy';
+  if (typeof risk === 'number' && risk > 70) return 'critical';
+  if (typeof risk === 'number' && risk >= 40) return 'legacy';
   return 'standard';
 }
 
@@ -71,11 +71,16 @@ function hasForwardSecrecy(kex: string | undefined): boolean {
 function buildDimensionScores(raw: AssetResultResponse): DimensionScores {
   const assessment = raw.assessment;
   const tier = assessment?.compliance_tier;
+  const dimensionFromVulnerability = (value: number | undefined): number => {
+    const vulnerability = typeof value === 'number' ? value : 1;
+    return Math.round((1 - vulnerability) * 100);
+  };
+
   return {
-    tls_version: Math.round((1 - (assessment?.tls_vulnerability ?? 0.5)) * 100),
-    key_exchange: Math.round((1 - (assessment?.kex_vulnerability ?? 0.5)) * 100),
-    cipher_strength: Math.round((1 - (assessment?.sym_vulnerability ?? 0.5)) * 100),
-    certificate_algo: Math.round((1 - (assessment?.sig_vulnerability ?? 0.5)) * 100),
+    tls_version: dimensionFromVulnerability(assessment?.tls_vulnerability),
+    key_exchange: dimensionFromVulnerability(assessment?.kex_vulnerability),
+    cipher_strength: dimensionFromVulnerability(assessment?.sym_vulnerability),
+    certificate_algo: dimensionFromVulnerability(assessment?.sig_vulnerability),
     forward_secrecy: hasForwardSecrecy(assessment?.kex_algorithm) ? 100 : 0,
     pqc_readiness:
       tier === 'FULLY_QUANTUM_SAFE'
@@ -113,13 +118,13 @@ function buildCertInfo(raw: AssetResultResponse): CertificateInfo {
     signature_algorithm:
       leaf?.signature_algorithm ??
       certificate?.signature_algorithm ??
-      'sha256WithRSAEncryption',
+      'Unavailable',
     key_type: keyType,
-    key_size: leaf?.key_size_bits ?? certificate?.key_size ?? 2048,
-    valid_from: certificate?.valid_from ?? '',
-    valid_until: leaf?.not_after ?? certificate?.valid_until ?? '',
-    days_remaining: leaf?.days_remaining ?? certificate?.days_remaining ?? 0,
-    sha256_fingerprint: certificate?.sha256_fingerprint ?? '',
+    key_size: leaf?.key_size_bits ?? certificate?.key_size ?? 0,
+    valid_from: certificate?.valid_from ?? '--',
+    valid_until: leaf?.not_after ?? certificate?.valid_until ?? '--',
+    days_remaining: leaf?.days_remaining ?? certificate?.days_remaining ?? -1,
+    sha256_fingerprint: certificate?.sha256_fingerprint ?? '--',
   };
 }
 
@@ -137,7 +142,8 @@ function buildSoftware(raw: AssetResultResponse): SoftwareInfo | null {
 
 export function adaptAsset(raw: AssetResultResponse): Asset {
   const domain = raw.hostname ?? raw.ip_address ?? 'unknown';
-  const qScore = Math.round(100 - (raw.assessment?.risk_score ?? 50));
+  const riskScore = raw.assessment?.risk_score;
+  const qScore = typeof riskScore === 'number' ? Math.round(100 - riskScore) : 0;
   const hndl = raw.remediation?.hndl_timeline;
   const currentYear = new Date().getFullYear();
   const hndlBreakYear = hndl?.entries.length
@@ -164,11 +170,14 @@ export function adaptAsset(raw: AssetResultResponse): Asset {
     url: `https://${domain}:${raw.port}`,
     port: raw.port,
     type: mapType(raw.service_type),
-    tls: raw.assessment?.tls_version ?? 'TLS 1.2',
-    tlsVersionsSupported: [raw.assessment?.tls_version ?? 'TLS 1.2'],
-    cipher: raw.assessment?.cipher_suite ?? 'Unknown',
-    keyExchange: raw.assessment?.kex_algorithm ?? 'Unknown',
-    certificate: raw.certificate?.signature_algorithm ?? 'sha256WithRSAEncryption',
+    tls: raw.assessment?.tls_version ?? 'Unavailable',
+    tlsVersionsSupported: raw.assessment?.tls_version ? [raw.assessment.tls_version] : [],
+    cipher: raw.assessment?.cipher_suite ?? 'Unavailable',
+    keyExchange: raw.assessment?.kex_algorithm ?? 'Unavailable',
+    certificate:
+      raw.certificate?.signature_algorithm ??
+      raw.leaf_certificate?.signature_algorithm ??
+      'Unavailable',
     certInfo: buildCertInfo(raw),
     qScore,
     status: mapStatus(raw),
