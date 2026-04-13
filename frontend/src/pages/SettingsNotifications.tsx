@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useScanContext } from '@/contexts/ScanContext';
+import { useScanQueue } from '@/contexts/ScanQueueContext';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Bell, Mail, MessageSquare, AlertTriangle, Save } from 'lucide-react';
@@ -14,7 +15,9 @@ interface NotificationChannel {
 
 const SettingsNotifications = () => {
   const { rootDomain } = useScanContext();
+  const { notifications } = useScanQueue();
   const d = rootDomain || 'target.com';
+  const storageKey = 'aegis-notification-settings';
   const [channels, setChannels] = useState<NotificationChannel[]>([
     { id: 'email', label: 'Email', icon: Mail, enabled: true, target: `admin@${d}` },
     { id: 'slack', label: 'Slack', icon: MessageSquare, enabled: true, target: '#aegis-alerts' },
@@ -27,6 +30,49 @@ const SettingsNotifications = () => {
   const [certExpiryDays, setCertExpiryDays] = useState('30');
   const [shadowItAlert, setShadowItAlert] = useState(true);
   const [weeklyDigest, setWeeklyDigest] = useState(true);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        channels?: NotificationChannel[];
+        criticalAlerts?: boolean;
+        scanComplete?: boolean;
+        certExpiry?: boolean;
+        certExpiryDays?: string;
+        shadowItAlert?: boolean;
+        weeklyDigest?: boolean;
+        savedAt?: string;
+      };
+      if (parsed.channels) setChannels(parsed.channels);
+      if (parsed.criticalAlerts !== undefined) setCriticalAlerts(parsed.criticalAlerts);
+      if (parsed.scanComplete !== undefined) setScanComplete(parsed.scanComplete);
+      if (parsed.certExpiry !== undefined) setCertExpiry(parsed.certExpiry);
+      if (parsed.certExpiryDays) setCertExpiryDays(parsed.certExpiryDays);
+      if (parsed.shadowItAlert !== undefined) setShadowItAlert(parsed.shadowItAlert);
+      if (parsed.weeklyDigest !== undefined) setWeeklyDigest(parsed.weeklyDigest);
+      if (parsed.savedAt) setSavedAt(parsed.savedAt);
+    } catch {
+      // Ignore malformed local settings and continue with defaults.
+    }
+  }, []);
+
+  const saveSettings = () => {
+    const payload = {
+      channels,
+      criticalAlerts,
+      scanComplete,
+      certExpiry,
+      certExpiryDays,
+      shadowItAlert,
+      weeklyDigest,
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(storageKey, JSON.stringify(payload));
+    setSavedAt(payload.savedAt);
+  };
 
   const toggleChannel = (id: string) => {
     setChannels(prev => prev.map(c => c.id === id ? { ...c, enabled: !c.enabled } : c));
@@ -39,10 +85,18 @@ const SettingsNotifications = () => {
           <h1 className="font-display italic text-2xl text-foreground">Notifications</h1>
           <p className="font-body text-sm text-muted-foreground mt-1">Configure alerts and notification channels</p>
         </div>
-        <button className="flex items-center gap-2 font-body text-sm font-semibold bg-accent-amber text-brand-primary px-4 py-2 rounded-lg hover:brightness-110 transition-all">
+        <button
+          className="flex items-center gap-2 font-body text-sm font-semibold bg-accent-amber text-brand-primary px-4 py-2 rounded-lg hover:brightness-110 transition-all"
+          onClick={saveSettings}
+        >
           <Save className="w-4 h-4" /> Save Changes
         </button>
       </div>
+      {savedAt && (
+        <p className="-mt-4 mb-4 text-xs font-mono text-muted-foreground">
+          Saved at {new Date(savedAt).toLocaleString()}
+        </p>
+      )}
 
       <div className="space-y-6">
         {/* Channels */}
@@ -130,6 +184,25 @@ const SettingsNotifications = () => {
               </div>
               <Switch checked={weeklyDigest} onCheckedChange={setWeeklyDigest} />
             </div>
+          </div>
+        </div>
+
+        <div className="bg-surface rounded-xl border border-[hsl(var(--border-default))] p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Bell className="w-4 h-4 text-accent-amber" />
+            <h2 className="font-body font-bold text-sm text-foreground">Recent Notification Activity</h2>
+          </div>
+          <div className="space-y-2">
+            {notifications.length === 0 ? (
+              <p className="font-body text-xs text-muted-foreground">No notification events yet. Run a scan to populate this feed.</p>
+            ) : (
+              notifications.slice(-5).reverse().map((item) => (
+                <div key={item.id} className="rounded-lg bg-sunken/50 px-3 py-2">
+                  <p className="font-body text-xs text-foreground">{item.message}</p>
+                  <p className="font-mono text-[10px] text-muted-foreground mt-0.5">{new Date(item.timestamp).toLocaleString()}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

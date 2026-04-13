@@ -89,6 +89,9 @@ const CyberRatingPerAsset = () => {
         </TooltipContent>
       </Tooltip>
     </div>
+    <p className="font-body text-sm text-muted-foreground -mt-2">
+      Asset-level cryptographic scores with weak-dimension hints and 7-day score movement.
+    </p>
     <SectionTabBar tabs={ratingTabs} />
 
     <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">

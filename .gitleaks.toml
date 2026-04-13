@@ -1,0 +1,7 @@
+title = "aegis-gitleaks-config"
+
+[allowlist]
+description = "Allow tracked root .env as documented for local deterministic mode"
+paths = [
+  '''^\.env$''',
+]

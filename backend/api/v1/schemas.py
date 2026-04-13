@@ -89,6 +89,11 @@ class ScanStatusResponse(ScanAcceptedResponse):
     stage_detail: str | None = None
     stage_started_at: datetime | None = None
     elapsed_seconds: float | None = None
+    estimated_total_seconds: float | None = None
+    estimated_remaining_seconds: float | None = None
+    estimated_remaining_lower_seconds: float | None = None
+    estimated_remaining_upper_seconds: float | None = None
+    eta_confidence: str | None = None
     events: list[ScanRuntimeEventResponse] = Field(default_factory=list)
     degraded_modes: list[str] = Field(default_factory=list)
 
@@ -258,6 +263,11 @@ class ScanResultsResponse(BaseModel):
     stage_detail: str | None = None
     stage_started_at: datetime | None = None
     elapsed_seconds: float | None = None
+    estimated_total_seconds: float | None = None
+    estimated_remaining_seconds: float | None = None
+    estimated_remaining_lower_seconds: float | None = None
+    estimated_remaining_upper_seconds: float | None = None
+    eta_confidence: str | None = None
     events: list[ScanRuntimeEventResponse] = Field(default_factory=list)
     degraded_modes: list[str] = Field(default_factory=list)
     dns_records: list[DNSRecordResponse] = Field(default_factory=list)

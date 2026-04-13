@@ -1,0 +1,66 @@
+name: Security Container Scan
+
+on:
+  schedule:
+    - cron: "15 3 * * 1"
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "docker/**"
+      - "docker-compose.yml"
+      - "requirements.txt"
+      - ".github/workflows/security-container-scan.yml"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  trivy-filesystem:
+    name: Trivy Filesystem Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy FS scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          severity: "HIGH,CRITICAL"
+          format: "sarif"
+          output: "trivy-fs.sarif"
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Upload Trivy FS SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-fs.sarif
+
+  trivy-image:
+    name: Trivy Backend Image Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -f docker/Dockerfile.oqs -t aegis:security-scan .
+
+      - name: Run Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "aegis:security-scan"
+          severity: "HIGH,CRITICAL"
+          format: "sarif"
+          output: "trivy-image.sarif"
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Upload Trivy image SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image.sarif

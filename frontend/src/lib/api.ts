@@ -18,6 +18,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (!res.ok) {
     throw new Error(`API ${method} ${path} failed: ${res.status} ${res.statusText}`);
   }
+  if (res.status === 204) {
+    return undefined as T;
+  }
   return res.json() as Promise<T>;
 }
 
@@ -250,6 +253,11 @@ export interface ScanStatusResponse {
   stage_detail: string | null;
   stage_started_at: string | null;
   elapsed_seconds: number | null;
+  estimated_total_seconds: number | null;
+  estimated_remaining_seconds: number | null;
+  estimated_remaining_lower_seconds: number | null;
+  estimated_remaining_upper_seconds: number | null;
+  eta_confidence: string | null;
   events: ScanRuntimeEvent[];
   degraded_modes: string[];
 }
@@ -330,6 +338,9 @@ export const api = {
     const suffix = search.toString() ? `?${search.toString()}` : '';
     return request<ScanHistoryResponse>('GET', `/api/v1/scan/history${suffix}`);
   },
+
+  deleteScan: (scanId: string) =>
+    request<void>('DELETE', `/api/v1/scan/${scanId}`),
 
   getAssetCbom: (assetId: string) =>
     request<CbomResponse>('GET', `/api/v1/assets/${assetId}/cbom`),

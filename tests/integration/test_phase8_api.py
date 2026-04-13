@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.core.config import get_settings
@@ -289,6 +290,74 @@ async def test_invalid_target_and_failure_cleanup_are_reported(tmp_path, session
         assert status_response.json()["status"] == "failed"
         assert status_response.json()["stage"] == "failed"
         assert missing_response.status_code == 404
+    finally:
+        await client.aclose()
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_delete_scan_removes_scan_and_cascaded_records(session_factory) -> None:
+    scan_id = uuid.uuid4()
+    asset_id = uuid.uuid4()
+    target = f"delete-{uuid.uuid4().hex[:8]}.example.com"
+
+    async with session_factory() as session:
+        session.add(
+            ScanJob(
+                id=scan_id,
+                target=target,
+                status=ScanStatus.COMPLETED,
+            )
+        )
+        session.add(
+            DiscoveredAsset(
+                id=asset_id,
+                scan_id=scan_id,
+                hostname=target,
+                ip_address="198.51.100.90",
+                port=443,
+                protocol="tcp",
+                service_type=ServiceType.TLS,
+                server_software="nginx",
+            )
+        )
+        session.add(
+            CryptoAssessment(
+                asset_id=asset_id,
+                tls_version="1.3",
+                cipher_suite="TLS_AES_256_GCM_SHA384",
+                risk_score=10.0,
+                compliance_tier=ComplianceTier.FULLY_QUANTUM_SAFE,
+            )
+        )
+        await session.commit()
+
+    app.state.scan_read_service = ScanReadService(
+        session_factory=session_factory,
+        runtime_store=ScanRuntimeStore(),
+    )
+    client = await _make_client(session_factory)
+    try:
+        delete_response = await client.delete(f"/api/v1/scan/{scan_id}")
+        assert delete_response.status_code == 204
+
+        status_response = await client.get(f"/api/v1/scan/{scan_id}")
+        assert status_response.status_code == 404
+
+        async with session_factory() as session:
+            deleted_scan = await session.get(ScanJob, scan_id)
+            assert deleted_scan is None
+
+            orphan_assets = (
+                (
+                    await session.execute(
+                        select(DiscoveredAsset).where(DiscoveredAsset.scan_id == scan_id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert orphan_assets == []
     finally:
         await client.aclose()
         app.dependency_overrides.clear()

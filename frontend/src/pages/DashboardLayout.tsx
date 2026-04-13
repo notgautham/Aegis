@@ -15,11 +15,21 @@ import { Progress } from '@/components/ui/progress';
 import { X, Maximize2, Minimize2, CheckCircle2, Loader2, Clock, XCircle, StopCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
+function formatEtaRange(lowerSeconds: number | null, upperSeconds: number | null): string | null {
+  if (lowerSeconds === null && upperSeconds === null) return null;
+  const lower = Math.max(0, Math.round((lowerSeconds ?? upperSeconds ?? 0) / 60));
+  const upper = Math.max(lower, Math.round((upperSeconds ?? lowerSeconds ?? 0) / 60));
+
+  if (upper <= 1) return 'ETA < 1 min';
+  if (lower === upper) return `ETA ~${upper} min`;
+  return `ETA ${lower}-${upper} min`;
+}
+
 const DashboardLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { setScannedDomain } = useScanContext();
-  const { queue, isRunning, minimized, setMinimized, toggleMinimize, cancelQueue, removeQueueItem, startQueue, logs, queueComplete, latestCompletedScanId } = useScanQueue();
+  const { queue, isRunning, minimized, setMinimized, toggleMinimize, cancelQueue, removeQueueItem, logs, queueComplete, latestCompletedScanId } = useScanQueue();
   const { setSelectedScanId } = useSelectedScan();
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const lastSyncedCompletedScanId = useRef<string | null>(null);
@@ -83,7 +93,13 @@ const DashboardLayout = () => {
     const trimmedDomain = domain.trim();
     if (!trimmedDomain) return;
     setScannedDomain(trimmedDomain);
-    startQueue([trimmedDomain], 'Standard + Bounded Port Scan + No Enumeration');
+    navigate('/scanner', {
+      state: {
+        target: trimmedDomain,
+        autoStart: true,
+        profile: 'Quick + Bounded Port Scan + No Enumeration',
+      },
+    });
   };
 
   useEffect(() => {
@@ -152,7 +168,14 @@ const DashboardLayout = () => {
                           <div key={phase} className={`flex-1 h-1.5 rounded-full ${phases.indexOf(item.currentPhase) >= phaseIndex ? 'bg-[hsl(var(--accent-amber))]' : 'bg-[hsl(var(--bg-sunken))]'}`} />
                         ))}
                       </div>
-                      <p className="text-[10px] font-mono text-muted-foreground">{item.currentPhase}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[10px] font-mono text-muted-foreground">{item.currentPhase}</p>
+                        {formatEtaRange(item.etaLowerSeconds, item.etaUpperSeconds) && (
+                          <p className="text-[10px] font-mono text-muted-foreground">
+                            {formatEtaRange(item.etaLowerSeconds, item.etaUpperSeconds)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -172,7 +195,10 @@ const DashboardLayout = () => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-24 right-6 z-[9999] bg-popover border border-border rounded-xl shadow-lg p-3 min-w-[280px]">
           <div className="flex items-center gap-2 mb-2">
             <Loader2 className="w-3.5 h-3.5 text-[hsl(var(--accent-amber))] animate-spin" />
-            <span className="text-xs font-body">Scanning {scanningItem?.target} - {scanningItem?.currentPhase}...</span>
+            <span className="text-xs font-body">
+              Scanning {scanningItem?.target} - {scanningItem?.currentPhase}...
+              {scanningItem ? ` ${formatEtaRange(scanningItem.etaLowerSeconds, scanningItem.etaUpperSeconds) ?? ''}` : ''}
+            </span>
             <div className="flex-1" />
             <button onClick={toggleMinimize} className="p-0.5"><Maximize2 className="w-3 h-3 text-muted-foreground" /></button>
             <button onClick={() => setCancelConfirm(true)} className="p-0.5"><X className="w-3 h-3 text-muted-foreground" /></button>

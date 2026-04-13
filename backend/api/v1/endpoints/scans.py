@@ -8,7 +8,7 @@ import asyncio
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.v1.schemas import (
@@ -93,6 +93,38 @@ async def get_scan_results(
     """Return the compiled read model for one scan."""
     payload = await request.app.state.scan_read_service.get_scan_results(scan_id=scan_id)
     return ScanResultsResponse(**payload)
+
+
+@router.delete("/scan/{scan_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_scan(
+    scan_id: uuid.UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+) -> Response:
+    """Delete one scan and all cascaded artifacts from persistence."""
+    repository = ScanJobRepository(session)
+    scan_job = await repository.get_by_id(scan_id)
+    if scan_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found.")
+
+    scan_task = request.app.state.scan_tasks.pop(scan_id, None)
+    if scan_task is not None and not scan_task.done():
+        scan_task.cancel()
+        try:
+            await scan_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Failed while cancelling scan task for %s.", scan_id)
+
+    await repository.delete(scan_id)
+    await session.commit()
+
+    runtime_store = getattr(request.app.state, "scan_runtime_store", None)
+    if runtime_store is not None:
+        runtime_store.remove_scan(scan_id)
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _cleanup_scan_task(*, request: Request, scan_id: uuid.UUID, task: asyncio.Task[None]) -> None:

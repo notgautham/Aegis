@@ -9,6 +9,9 @@ export interface QueueItem {
   scanId: string;
   progress: number;
   currentPhase: string;
+  etaRemainingSeconds: number | null;
+  etaLowerSeconds: number | null;
+  etaUpperSeconds: number | null;
 }
 
 export interface ScanNotification {
@@ -16,6 +19,7 @@ export interface ScanNotification {
   message: string;
   link: string;
   timestamp: Date;
+  scanId?: string;
 }
 
 interface ScanQueueContextType {
@@ -119,6 +123,9 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
         scanId: `pending-${id}`,
         progress: 0,
         currentPhase: '',
+        etaRemainingSeconds: null,
+        etaLowerSeconds: null,
+        etaUpperSeconds: null,
       };
     });
   }, []);
@@ -175,7 +182,14 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
 
             updateQueue((prev) => prev.map((item) => (
               item.id === nextItem.id
-                ? { ...item, currentPhase: phase, progress: prog }
+                ? {
+                  ...item,
+                  currentPhase: phase,
+                  progress: prog,
+                  etaRemainingSeconds: status.estimated_remaining_seconds ?? null,
+                  etaLowerSeconds: status.estimated_remaining_lower_seconds ?? null,
+                  etaUpperSeconds: status.estimated_remaining_upper_seconds ?? null,
+                }
                 : item
             )));
             addLog(`${phase}: ${nextItem.target}`);
@@ -194,8 +208,9 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
               setNotifications((prev) => [...prev, {
                 id: scanId,
                 message: `Scan complete: ${nextItem.target} · ${assetsFound} assets found`,
-                link: `/dashboard/scans/${scanId}`,
+                link: '/dashboard/history',
                 timestamp: new Date(),
+                scanId,
               }]);
             } else if (status.status === 'failed') {
               done = true;

@@ -336,7 +336,9 @@ class RetrievalService:
         try:
             vector_size = len(self.embedding_provider.embed(["aegis-collection-healthcheck"])[0])
         except Exception as exc:
-            logger.warning("Unable to compute embedding vector size for runtime compatibility check: %s", exc)
+            logger.warning(
+                "Unable to compute embedding vector size for runtime compatibility check: %s", exc
+            )
             return
 
         existing_size = self._get_collection_vector_size()

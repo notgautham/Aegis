@@ -92,6 +92,29 @@ from backend.repositories import (
 
 logger = logging.getLogger(__name__)
 MAX_SCAN_RUNTIME_EVENTS = 60
+TLS_STAGE_BASE_BUDGET_SECONDS = 1200
+TLS_TARGET_CAP_DEFAULT = 1200
+ETA_STAGE_WEIGHTS_SECONDS: dict[str, float] = {
+    "queued": 5.0,
+    "preparing_scan": 15.0,
+    "enumerating_domains": 90.0,
+    "validating_dns": 45.0,
+    "scanning_ports": 240.0,
+    "probing_tls": 600.0,
+    "persisting_assets": 90.0,
+    "completed": 0.0,
+    "failed": 0.0,
+}
+ETA_STAGE_ORDER: tuple[str, ...] = (
+    "queued",
+    "preparing_scan",
+    "enumerating_domains",
+    "validating_dns",
+    "scanning_ports",
+    "probing_tls",
+    "persisting_assets",
+    "completed",
+)
 COMMON_ENUMERATION_PREFIXES: tuple[str, ...] = (
     "www",
     "api",
@@ -270,6 +293,9 @@ class ScanRuntimeStore:
     def get_snapshot(self, scan_id: uuid.UUID) -> ScanRuntimeState | None:
         return self._states.get(scan_id)
 
+    def remove_scan(self, scan_id: uuid.UUID) -> None:
+        self._states.pop(scan_id, None)
+
 
 class PipelineOrchestrator:
     """Coordinate the end-to-end Aegis pipeline for one persisted scan job."""
@@ -330,6 +356,19 @@ class PipelineOrchestrator:
         self.max_tls_sni_targets_per_ip = max(
             1,
             int(os.getenv("AEGIS_MAX_TLS_SNI_PER_IP", "3")),
+        )
+        self.max_tls_targets_per_scan = max(
+            50,
+            int(os.getenv("AEGIS_MAX_TLS_TARGETS_PER_SCAN", str(TLS_TARGET_CAP_DEFAULT))),
+        )
+        self.tls_stage_budget_seconds = max(
+            60,
+            int(
+                os.getenv(
+                    "AEGIS_TLS_STAGE_BUDGET_SECONDS",
+                    str(TLS_STAGE_BASE_BUDGET_SECONDS),
+                )
+            ),
         )
 
     def _ensure_retrieval_runtime_compatibility(self) -> None:
@@ -663,7 +702,9 @@ class PipelineOrchestrator:
         if not hostnames:
             return []
 
-        normalized = sorted({hostname.strip().lower().rstrip(".") for hostname in hostnames if hostname})
+        normalized = sorted(
+            {hostname.strip().lower().rstrip(".") for hostname in hostnames if hostname}
+        )
         if len(normalized) <= self.max_tls_sni_targets_per_ip:
             return normalized
 
@@ -809,6 +850,7 @@ class PipelineOrchestrator:
         port_tasks: set[asyncio.Task[None]] = set()
         port_stage_announced = False
         tls_stage_announced = False
+        tls_cap_announced = False
 
         async def _probe_tls_target(target_item: TLSScanTarget) -> None:
             async with tls_semaphore:
@@ -832,7 +874,7 @@ class PipelineOrchestrator:
                 tls_results.append(result)
 
         def _schedule_tls_target(target_item: TLSScanTarget) -> None:
-            nonlocal tls_stage_announced
+            nonlocal tls_stage_announced, tls_cap_announced
             target_key = (
                 target_item.hostname,
                 target_item.ip_address,
@@ -840,6 +882,17 @@ class PipelineOrchestrator:
                 target_item.protocol,
             )
             if target_key in seen_tls_targets:
+                return
+            if len(seen_tls_targets) >= self.max_tls_targets_per_scan:
+                if not tls_cap_announced:
+                    tls_cap_announced = True
+                    self._add_degraded_mode(
+                        scan_id,
+                        (
+                            "Streaming TLS target set exceeded cap; "
+                            f"limiting to {self.max_tls_targets_per_scan} endpoints."
+                        ),
+                    )
                 return
             seen_tls_targets.add(target_key)
 
@@ -884,7 +937,9 @@ class PipelineOrchestrator:
                     return
 
             async with lock:
-                known_hostnames = self._select_tls_hostnames(scope, ip_to_hostnames.get(ip_address, set()))
+                known_hostnames = self._select_tls_hostnames(
+                    scope, ip_to_hostnames.get(ip_address, set())
+                )
                 for finding in findings:
                     finding_key = (finding.ip_address, finding.port, finding.protocol)
                     if finding_key in seen_port_keys:
@@ -937,9 +992,7 @@ class PipelineOrchestrator:
                 "on",
             }
             ipv4_addresses = tuple(
-                address
-                for address in ip_addresses
-                if ipaddress.ip_address(address).version == 4
+                address for address in ip_addresses if ipaddress.ip_address(address).version == 4
             )
             selected_ip_addresses = ip_addresses if scan_ipv6 else (ipv4_addresses or ip_addresses)
 
@@ -1033,7 +1086,22 @@ class PipelineOrchestrator:
         if port_tasks:
             await asyncio.gather(*list(port_tasks), return_exceptions=True)
         if tls_tasks:
-            await asyncio.gather(*list(tls_tasks), return_exceptions=True)
+            done, pending = await asyncio.wait(
+                list(tls_tasks),
+                timeout=float(self.tls_stage_budget_seconds),
+            )
+            if pending:
+                for pending_task in pending:
+                    pending_task.cancel()
+                self._add_degraded_mode(
+                    scan_id,
+                    (
+                        "Streaming TLS probing exceeded stage budget; "
+                        f"cancelled {len(pending)} pending handshake task(s)."
+                    ),
+                )
+            if done:
+                await asyncio.gather(*list(done), return_exceptions=True)
 
         self._set_runtime_stage(
             scan_id,
@@ -1355,7 +1423,9 @@ class PipelineOrchestrator:
             if finding.service_type is not ServiceType.TLS:
                 continue
 
-            hostnames = self._select_tls_hostnames(scope, ip_to_hostnames.get(finding.ip_address, set()))
+            hostnames = self._select_tls_hostnames(
+                scope, ip_to_hostnames.get(finding.ip_address, set())
+            )
             if hostnames:
                 for hostname in hostnames:
                     _append_tls_target(
@@ -1376,6 +1446,18 @@ class PipelineOrchestrator:
                     )
                 )
 
+        if len(tls_targets) > self.max_tls_targets_per_scan:
+            dropped = len(tls_targets) - self.max_tls_targets_per_scan
+            tls_targets = tls_targets[: self.max_tls_targets_per_scan]
+            self._add_degraded_mode(
+                scan_id,
+                (
+                    "TLS target set exceeded cap; "
+                    f"limited probing to {self.max_tls_targets_per_scan} endpoints "
+                    f"(dropped {dropped} endpoints)."
+                ),
+            )
+
         self._set_runtime_stage(
             scan_id,
             stage="probing_tls",
@@ -1388,12 +1470,37 @@ class PipelineOrchestrator:
             async with semaphore:
                 return await self.tls_probe.probe(target)
 
-        results = await asyncio.gather(
-            *(_probe_with_limit(target) for target in tls_targets),
-            return_exceptions=True,
+        probe_tasks = [asyncio.create_task(_probe_with_limit(target)) for target in tls_targets]
+        done, pending = await asyncio.wait(
+            probe_tasks,
+            timeout=float(self.tls_stage_budget_seconds),
         )
+
+        if pending:
+            for pending_task in pending:
+                pending_task.cancel()
+            self._add_degraded_mode(
+                scan_id,
+                (
+                    "TLS probing exceeded stage budget; "
+                    f"cancelled {len(pending)} pending handshake task(s)."
+                ),
+            )
+
         tls_results: list[TLSProbeResult] = []
-        for tls_target, result in zip(tls_targets, results, strict=True):
+        for task, tls_target in zip(probe_tasks, tls_targets, strict=True):
+            if task not in done:
+                continue
+            if task.cancelled():
+                result: TLSProbeResult | Exception = asyncio.TimeoutError(
+                    "TLS probe task cancelled due to stage timeout."
+                )
+            else:
+                try:
+                    result = task.result()
+                except Exception as exc:
+                    result = exc
+
             if isinstance(result, Exception):
                 logger.exception(
                     "TLS probing failed for %s:%s.",
@@ -3152,6 +3259,113 @@ class ScanReadService:
         )
         return findings[:priority_limit]
 
+    @staticmethod
+    def _estimate_profile_multiplier(scan_profile: str | None) -> float:
+        if not scan_profile:
+            return 1.0
+
+        normalized = scan_profile.lower()
+        multiplier = 1.0
+
+        if "quick" in normalized:
+            multiplier *= 0.6
+        elif "deep" in normalized:
+            multiplier *= 1.9
+        elif "pqc focus" in normalized:
+            multiplier *= 1.25
+
+        if "full port scan" in normalized:
+            multiplier *= 2.2
+        if "bounded port scan" in normalized:
+            multiplier *= 0.85
+
+        if "full enumeration" in normalized:
+            multiplier *= 1.7
+        if "no enumeration" in normalized:
+            multiplier *= 0.8
+
+        return max(multiplier, 0.35)
+
+    @staticmethod
+    def _build_eta_payload(
+        *,
+        status: ScanStatus,
+        stage: str | None,
+        elapsed_seconds: float | None,
+        scan_profile: str | None,
+        progress: dict[str, Any],
+    ) -> dict[str, Any]:
+        if elapsed_seconds is None:
+            return {
+                "estimated_total_seconds": None,
+                "estimated_remaining_seconds": None,
+                "estimated_remaining_lower_seconds": None,
+                "estimated_remaining_upper_seconds": None,
+                "eta_confidence": None,
+            }
+
+        if status in {ScanStatus.COMPLETED, ScanStatus.FAILED}:
+            return {
+                "estimated_total_seconds": elapsed_seconds,
+                "estimated_remaining_seconds": 0.0,
+                "estimated_remaining_lower_seconds": 0.0,
+                "estimated_remaining_upper_seconds": 0.0,
+                "eta_confidence": "final",
+            }
+
+        multiplier = ScanReadService._estimate_profile_multiplier(scan_profile)
+        expected_by_stage = {
+            key: value * multiplier for key, value in ETA_STAGE_WEIGHTS_SECONDS.items()
+        }
+        total_expected = sum(
+            expected_by_stage.get(stage_name, 0.0) for stage_name in ETA_STAGE_ORDER
+        )
+
+        current_stage = stage or "queued"
+        completed_weight = 0.0
+        for stage_name in ETA_STAGE_ORDER:
+            if stage_name == current_stage:
+                break
+            completed_weight += expected_by_stage.get(stage_name, 0.0)
+
+        current_stage_expected = expected_by_stage.get(current_stage, expected_by_stage["queued"])
+        current_progress = 0.0
+        if current_stage_expected > 0:
+            current_progress = min(elapsed_seconds / current_stage_expected, 0.95)
+
+        estimated_complete_weight = completed_weight + (current_stage_expected * current_progress)
+        progress_ratio = min(max(estimated_complete_weight / max(total_expected, 1.0), 0.02), 0.99)
+
+        assets_discovered = progress.get("assets_discovered")
+        if isinstance(assets_discovered, (int, float)) and assets_discovered > 0:
+            scale = min(float(assets_discovered), 200.0)
+            total_expected *= 1.0 + (scale / 200.0) * 0.9
+
+        estimated_total_seconds = max(total_expected, elapsed_seconds * 1.05)
+        estimated_remaining_seconds = max(estimated_total_seconds - elapsed_seconds, 0.0)
+        lower = max(estimated_remaining_seconds * 0.75, 0.0)
+        upper = estimated_remaining_seconds * 1.35
+
+        confidence = "medium"
+        if current_stage in {"queued", "preparing_scan", "enumerating_domains"}:
+            confidence = "low"
+        elif current_stage in {"persisting_assets", "completed", "failed"}:
+            confidence = "high"
+
+        # Apply a small correction for progress ratio so ETA can drop faster as the scan advances.
+        remaining_after_progress = max(estimated_total_seconds * (1.0 - progress_ratio), 0.0)
+        estimated_remaining_seconds = min(estimated_remaining_seconds, remaining_after_progress)
+        lower = min(lower, estimated_remaining_seconds)
+        upper = max(upper, estimated_remaining_seconds)
+
+        return {
+            "estimated_total_seconds": estimated_total_seconds,
+            "estimated_remaining_seconds": estimated_remaining_seconds,
+            "estimated_remaining_lower_seconds": lower,
+            "estimated_remaining_upper_seconds": upper,
+            "eta_confidence": confidence,
+        }
+
     def _build_runtime_payload(self, bundle: dict[str, Any]) -> dict[str, Any]:
         runtime_snapshot = None
         if self.runtime_store is not None:
@@ -3193,6 +3407,14 @@ class ScanReadService:
             else [event["message"] for event in persisted_events if event["kind"] == "degraded"]
         )
 
+        eta_payload = self._build_eta_payload(
+            status=bundle["scan"].status,
+            stage=stage,
+            elapsed_seconds=elapsed_seconds,
+            scan_profile=bundle["scan"].scan_profile,
+            progress=bundle["progress"],
+        )
+
         return {
             "stage": stage,
             "stage_detail": runtime_snapshot.stage_detail if runtime_snapshot is not None else None,
@@ -3200,6 +3422,7 @@ class ScanReadService:
             if runtime_snapshot is not None
             else None,
             "elapsed_seconds": elapsed_seconds,
+            **eta_payload,
             "events": runtime_events,
             "degraded_modes": degraded_modes,
         }

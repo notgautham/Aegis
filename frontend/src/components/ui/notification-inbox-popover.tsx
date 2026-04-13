@@ -1,53 +1,77 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useScanQueue } from "@/contexts/ScanQueueContext";
+import { useSelectedScan } from "@/contexts/SelectedScanContext";
 import {
   Bell,
-  GitMerge,
-  FileText,
-  ClipboardCheck,
-  Mail,
-  MessageSquareQuote,
+  CheckCircle2,
   AlertCircle,
-  type LucideIcon,
+  Clock3,
 } from "lucide-react";
 
 interface Notification {
-  id: number;
-  user: string;
-  action: string;
-  target: string;
-  timestamp: string;
-  unread: boolean;
-  icon: LucideIcon;
+  id: string;
+  message: string;
+  timestamp: Date;
+  scanId?: string;
 }
-
-const initialNotifications: Notification[] = [
-  { id: 1, user: "AEGIS Scanner", action: "completed scan for", target: "vpn.aegis.com", timestamp: "10 minutes ago", unread: true, icon: GitMerge },
-  { id: 2, user: "System", action: "generated", target: "CBOM Report v2.1", timestamp: "30 minutes ago", unread: true, icon: FileText },
-  { id: 3, user: "PQC Engine", action: "flagged vulnerability in", target: "TLS 1.2 RSA-2048", timestamp: "2 hours ago", unread: false, icon: ClipboardCheck },
-  { id: 4, user: "AEGIS Scanner", action: "queued scan for", target: "portal.aegis.com", timestamp: "5 hours ago", unread: false, icon: Mail },
-  { id: 5, user: "System", action: "updated", target: "NIST compliance matrix", timestamp: "1 day ago", unread: false, icon: MessageSquareQuote },
-  { id: 6, user: "System", action: "alert:", target: "Certificate expiry in 30 days", timestamp: "3 days ago", unread: false, icon: AlertCircle },
-];
 
 function NotificationInboxPopover() {
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState(initialNotifications);
-  const unreadCount = notifications.filter((n) => n.unread).length;
+  const { notifications: queueNotifications, isRunning, queue } = useScanQueue();
+  const { setSelectedScanId } = useSelectedScan();
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState("all");
 
-  const filtered = tab === "unread" ? notifications.filter((n) => n.unread) : notifications;
+  const notifications = useMemo<Notification[]>(() => {
+    const dynamicFromQueue = queueNotifications.map((notification) => ({
+      id: notification.id,
+      message: notification.message,
+      timestamp: new Date(notification.timestamp),
+      scanId: notification.scanId,
+    }));
 
-  const markAsRead = (id: number) => {
-    setNotifications(notifications.map((n) => (n.id === id ? { ...n, unread: false } : n)));
+    const runningItems = queue
+      .filter((item) => item.status === "scanning")
+      .map((item) => ({
+        id: `running-${item.id}`,
+        message: `Scan in progress: ${item.target} (${item.currentPhase || "starting"})`,
+        timestamp: new Date(),
+        scanId: undefined,
+      }));
+
+    return [...runningItems, ...dynamicFromQueue];
+  }, [queue, queueNotifications]);
+
+  const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
+  const filtered = tab === "unread" ? notifications.filter((n) => !readIds.has(n.id)) : notifications;
+
+  const formatRelative = (timestamp: Date) => {
+    const diffMs = Date.now() - timestamp.getTime();
+    const diffMins = Math.max(1, Math.round(diffMs / 60000));
+    if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
+    const diffHours = Math.round(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+    const diffDays = Math.round(diffHours / 24);
+    return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+  };
+
+  const openNotification = (notification: Notification) => {
+    setReadIds((prev) => new Set(prev).add(notification.id));
+    if (notification.scanId) {
+      setSelectedScanId(notification.scanId);
+      navigate("/dashboard", { state: { bypassPrompt: true } });
+      return;
+    }
+    navigate("/dashboard/history");
   };
 
   const markAllAsRead = () => {
-    setNotifications(notifications.map((n) => ({ ...n, unread: false })));
+    setReadIds(new Set(notifications.map((notification) => notification.id)));
   };
 
   return (
@@ -85,24 +109,26 @@ function NotificationInboxPopover() {
               <div className="py-8 text-center text-sm text-muted-foreground">No notifications</div>
             ) : (
               filtered.map((n) => {
-                const Icon = n.icon;
                 return (
                   <button
                     key={n.id}
-                    onClick={() => markAsRead(n.id)}
+                    onClick={() => openNotification(n)}
                     className="flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-sunken transition-colors"
                   >
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sunken">
-                      <Icon className="h-4 w-4 text-muted-foreground" />
+                      {n.scanId ? (
+                        <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                      ) : isRunning ? (
+                        <Clock3 className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-body text-foreground">
-                        <span className="font-medium">{n.user}</span> {n.action}{" "}
-                        <span className="font-medium">{n.target}</span>
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{n.timestamp}</p>
+                      <p className="text-sm font-body text-foreground">{n.message}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatRelative(n.timestamp)}</p>
                     </div>
-                    {n.unread && <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-brand-accent" />}
+                    {!readIds.has(n.id) && <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-brand-accent" />}
                   </button>
                 );
               })

@@ -134,9 +134,9 @@ class TLSProbe:
                 pqc_group = "X25519MLKEM768"
 
         # 2. Protocol/Cipher extraction
-        version_match = re.search(r"Protocol\s*(?::|is)\s*(\S+)", output, re.IGNORECASE) or re.search(
-            r"\b(TLSv1\.[23])\b", output
-        )
+        version_match = re.search(
+            r"Protocol\s*(?::|is)\s*(\S+)", output, re.IGNORECASE
+        ) or re.search(r"\b(TLSv1\.[23])\b", output)
         cipher_match = re.search(r"Cipher\s*(?::|is)\s*(\S+)", output, re.IGNORECASE) or re.search(
             r"Ciphersuite\s*(?::|is)\s*(\S+)", output, re.IGNORECASE
         )

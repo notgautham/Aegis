@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { GitCompareArrows, Plus, LayoutDashboard } from 'lucide-react';
+import { GitCompareArrows, Plus, LayoutDashboard, Trash2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from 'recharts';
 import * as demoData from '@/data/demoData';
 import { useScanContext } from '@/contexts/ScanContext';
@@ -16,6 +16,7 @@ import { adaptScanHistory } from '@/lib/adapters';
 
 const ScanHistory = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { rootDomain } = useScanContext();
   const { setSelectedScanId } = useSelectedScan();
   const [scanA, setScanA] = useState('');
@@ -26,6 +27,15 @@ const ScanHistory = () => {
   const { data: liveScanHistory, isLoading } = useQuery({
     queryKey: ['scan-history'],
     queryFn: async () => adaptScanHistory(await api.getScanHistory({ limit: 200 })),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (scanId: string) => api.deleteScan(scanId),
+    onSuccess: async (_data, scanId) => {
+      setSelectedScanId('');
+      await queryClient.invalidateQueries({ queryKey: ['scan-history'] });
+      await queryClient.invalidateQueries({ queryKey: ['selected-scan-results', scanId] });
+    },
   });
 
   const scanHistory = useMemo(() => {
@@ -84,6 +94,15 @@ const ScanHistory = () => {
     requestAnimationFrame(() => {
       compareSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
+  };
+
+  const deleteScan = async (scanId: string) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(scanId)) {
+      return;
+    }
+    const confirmed = window.confirm('Delete this scan and all persisted artifacts from the database?');
+    if (!confirmed) return;
+    await deleteMutation.mutateAsync(scanId);
   };
 
   if (isLoading) {
@@ -146,6 +165,16 @@ const ScanHistory = () => {
                     <td className="px-3 py-2 flex gap-1" onClick={e => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0" title="Open in Dashboard" onClick={() => openInDashboard(s.id)}><LayoutDashboard className="w-3.5 h-3.5" /></Button>
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0" title="Compare Scan" onClick={() => openCompare(s.id)}><GitCompareArrows className="w-3.5 h-3.5" /></Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-[hsl(var(--status-critical))]"
+                        title="Delete Scan"
+                        disabled={deleteMutation.isPending || !/^[0-9a-f-]{36}$/i.test(s.id)}
+                        onClick={() => void deleteScan(s.id)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
                     </td>
                   </tr>
                 ))}

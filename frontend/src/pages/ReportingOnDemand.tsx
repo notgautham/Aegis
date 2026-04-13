@@ -7,6 +7,7 @@ import { ChevronRight, ChevronLeft, FileText, Download, CheckCircle2, TrendingUp
 import SectionTabBar from '@/components/dashboard/SectionTabBar';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
+import { buildPdfReport, safeFileSlug, toCsv, toIsoStamp, triggerDownload } from '@/lib/download';
 
 const reportingTabs = [
   { id: 'executive', label: 'Executive Reports', icon: TrendingUp, route: '/dashboard/reporting/executive' },
@@ -42,6 +43,9 @@ const ReportingOnDemand = () => {
   const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set());
   const [format, setFormat] = useState('pdf');
   const [generated, setGenerated] = useState(false);
+  const [generatedContent, setGeneratedContent] = useState<BlobPart | null>(null);
+  const [generatedFileName, setGeneratedFileName] = useState('');
+  const [generatedMimeType, setGeneratedMimeType] = useState('text/plain;charset=utf-8');
   const { selectedAssets, selectedScanResults } = useSelectedScan();
 
   const targetLabel = selectedScanResults?.target ?? selectedAssets[0]?.domain ?? 'selected target';
@@ -59,6 +63,86 @@ const ReportingOnDemand = () => {
     if (currentStep === 0) return !!selectedTemplate;
     if (currentStep === 1) return selectedSections.size > 0;
     return true;
+  };
+
+  const buildRows = () => selectedAssets.map((asset) => ({
+    domain: asset.domain,
+    ip: asset.ip,
+    port: asset.port,
+    q_score: asset.qScore,
+    status: asset.status,
+    tier: asset.tier,
+  }));
+
+  const generateReport = async () => {
+    const target = safeFileSlug(targetLabel);
+    const stamp = toIsoStamp();
+    const selectedSectionLabels = sections
+      .filter((section) => selectedSections.has(section.id))
+      .map((section) => section.label);
+
+    const basePayload = {
+      generated_at: new Date().toISOString(),
+      target: targetLabel,
+      scan_id: selectedScanResults?.scan_id ?? null,
+      template: templates.find((t) => t.id === selectedTemplate)?.name ?? selectedTemplate,
+      sections: selectedSectionLabels,
+      scope_assets: selectedAssets.length,
+      summary: selectedScanResults?.summary ?? null,
+      rows: buildRows(),
+    };
+
+    if (format === 'json') {
+      setGeneratedContent(JSON.stringify(basePayload, null, 2));
+      setGeneratedFileName(`${target}_on_demand_${stamp}.json`);
+      setGeneratedMimeType('application/json;charset=utf-8');
+    } else if (format === 'csv') {
+      setGeneratedContent(toCsv(basePayload.rows));
+      setGeneratedFileName(`${target}_on_demand_${stamp}.csv`);
+      setGeneratedMimeType('text/csv;charset=utf-8');
+    } else if (format === 'html') {
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>On-Demand Report</title></head><body><h1>On-Demand Report</h1><p>Target: ${targetLabel}</p><p>Generated: ${basePayload.generated_at}</p><pre>${JSON.stringify(basePayload, null, 2)}</pre></body></html>`;
+      setGeneratedContent(html);
+      setGeneratedFileName(`${target}_on_demand_${stamp}.html`);
+      setGeneratedMimeType('text/html;charset=utf-8');
+    } else {
+      const assetLines = basePayload.rows.length > 0
+        ? basePayload.rows.map((row, idx) => `#${idx + 1} ${row.domain ?? 'unknown'}:${row.port} | IP=${row.ip ?? 'n/a'} | Tier=${row.tier ?? 'n/a'} | Q-Score=${row.q_score ?? 'n/a'} | Status=${row.status ?? 'n/a'}`)
+        : ['No assets available for this report scope.'];
+
+      const pdfBytes = await buildPdfReport({
+        title: 'AEGIS On-Demand Report',
+        subtitle: `${basePayload.template ?? 'Custom'} for ${targetLabel}`,
+        sections: [
+          {
+            heading: 'Report Configuration',
+            lines: [
+              `Target: ${targetLabel}`,
+              `Scan ID: ${basePayload.scan_id ?? 'n/a'}`,
+              `Generated: ${basePayload.generated_at}`,
+              `Template: ${basePayload.template ?? 'custom'}`,
+              `Sections: ${selectedSectionLabels.join(', ') || 'none'}`,
+              `Assets in scope: ${selectedAssets.length}`,
+            ],
+          },
+          {
+            heading: 'Per-Asset Data',
+            lines: assetLines,
+          },
+        ],
+      });
+
+      setGeneratedContent(pdfBytes);
+      setGeneratedFileName(`${target}_on_demand_${stamp}.pdf`);
+      setGeneratedMimeType('application/pdf');
+    }
+
+    setGenerated(true);
+  };
+
+  const downloadGeneratedReport = () => {
+    if (generatedContent === null || !generatedFileName) return;
+    triggerDownload(generatedContent, generatedFileName, generatedMimeType);
   };
 
   return (
@@ -141,7 +225,7 @@ const ReportingOnDemand = () => {
                     <SelectItem value="pdf">PDF Report</SelectItem>
                     <SelectItem value="html">HTML Report</SelectItem>
                     <SelectItem value="csv">CSV Data Export</SelectItem>
-                    <SelectItem value="json">JSON (CycloneDX)</SelectItem>
+                    <SelectItem value="json">JSON Report Payload</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -169,7 +253,7 @@ const ReportingOnDemand = () => {
                   </p>
                   <Button
                     className="gap-2 bg-accent-amber text-brand-primary hover:brightness-105"
-                    onClick={() => setGenerated(true)}
+                    onClick={generateReport}
                   >
                     <Download className="w-4 h-4" /> Generate Report
                   </Button>
@@ -179,7 +263,7 @@ const ReportingOnDemand = () => {
                   <CheckCircle2 className="w-12 h-12 text-status-safe mb-4" />
                   <p className="font-body text-lg font-semibold text-foreground mb-2">Report Generated!</p>
                   <p className="font-body text-sm text-muted-foreground mb-6">Your report has been generated successfully</p>
-                  <Button variant="outline" className="gap-2">
+                  <Button variant="outline" className="gap-2" onClick={downloadGeneratedReport}>
                     <Download className="w-4 h-4" /> Download Report
                   </Button>
                 </>
