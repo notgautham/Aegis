@@ -13,7 +13,7 @@ import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import type { Asset } from '@/data/demoData';
 
 const ratingTabs = [
-  { id: 'enterprise', label: 'Enterprise Score', icon: Star, route: '/dashboard/rating/enterprise' },
+  { id: 'enterprise', label: 'Q-Score Overview', icon: Star, route: '/dashboard/rating/enterprise' },
   { id: 'per-asset', label: 'Per-Asset', icon: FileText, route: '/dashboard/rating/per-asset' },
 ];
 
@@ -80,18 +80,18 @@ const CyberRatingPerAsset = () => {
   return (
   <div className="space-y-5">
     <DataContextBadge />
-    <div className="flex items-center gap-3">
-      <h1 className="font-display text-2xl italic text-brand-primary">Per-Asset Ratings</h1>
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <h1 className="font-display text-2xl italic text-brand-primary">Per-Asset Ratings</h1>
+        <p className="text-xs font-body text-muted-foreground mt-0.5">Asset-by-asset scoring breakdown with dimension trends and direct remediation context.</p>
+      </div>
       <Tooltip>
-        <TooltipTrigger><Info className="w-4 h-4 text-muted-foreground" /></TooltipTrigger>
+        <TooltipTrigger><Info className="w-4 h-4 text-muted-foreground mt-1" /></TooltipTrigger>
         <TooltipContent className="max-w-sm text-xs font-mono">
           Q-Score = (TLS × 0.20) + (Cert × 0.20) + (KeyEx × 0.25) + (Cipher × 0.20) + (PQC × 0.15)
         </TooltipContent>
       </Tooltip>
     </div>
-    <p className="font-body text-sm text-muted-foreground -mt-2">
-      Asset-level cryptographic scores with weak-dimension hints and 7-day score movement.
-    </p>
     <SectionTabBar tabs={ratingTabs} />
 
     <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">

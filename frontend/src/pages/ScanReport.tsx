@@ -285,7 +285,7 @@ const ScanReport = () => {
                       </TableCell>
                       <TableCell className="font-body text-xs max-w-[250px]">{finding.action}</TableCell>
                       <TableCell>
-                        <Button size="sm" variant="outline" className="text-[10px] h-6" onClick={() => navigate(`/dashboard/remediation/ai-patch?asset=${finding.assetDomain.replace(/\./g, '-')}`)}>
+                        <Button size="sm" variant="outline" className="text-[10px] h-6" onClick={() => navigate(`/dashboard/remediation/patch?asset=${finding.assetDomain.replace(/\./g, '-')}`)}>
                           <Wrench className="w-3 h-3 mr-1" /> Fix This
                         </Button>
                       </TableCell>

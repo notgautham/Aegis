@@ -312,6 +312,40 @@ export interface MissionControlGraphResponse {
   edges: Array<[string, string]>;
 }
 
+export interface SystemHealthService {
+  name: string;
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+  details: Record<string, unknown>;
+}
+
+export interface SystemHealthEndpoint {
+  path: string;
+  methods: string[];
+  name?: string;
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+}
+
+export interface SystemHealthCheck {
+  name: string;
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+  details: Record<string, unknown>;
+}
+
+export interface SystemHealthResponse {
+  timestamp: string;
+  overall_status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+  services: SystemHealthService[];
+  system_checks?: SystemHealthCheck[];
+  api_endpoints?: SystemHealthEndpoint[];
+  infra_endpoints?: SystemHealthEndpoint[];
+  route_totals?: {
+    api: number;
+    infra: number;
+    total: number;
+  };
+  runtime: Record<string, unknown>;
+}
+
 // ========== API Object ==========
 
 export const api = {
@@ -364,4 +398,7 @@ export const api = {
     const suffix = search.toString() ? `?${search.toString()}` : '';
     return request<MissionControlGraphResponse>('GET', `/api/v1/mission-control/graph${suffix}`);
   },
+
+  getSystemHealth: () =>
+    request<SystemHealthResponse>('GET', '/api/v1/system/health'),
 };

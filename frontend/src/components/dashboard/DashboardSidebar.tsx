@@ -12,7 +12,7 @@ import {
   Shield, Home, Search, Package, ClipboardList, ShieldCheck,
   Star, Wrench, BarChart3, Settings,
   Globe, Key, FileText, Server, Cpu, Lock, ChevronRight,
-  Sparkles, Map, Calendar, PenTool, Pin, Clock, LogOut,
+  Sparkles, Map, Calendar, PenTool, Pin, Clock, LogOut, Activity,
 } from 'lucide-react';
 
 interface SubMenuItem {
@@ -39,6 +39,7 @@ const navItems: NavItem[] = [
     id: 'discovery', icon: Search, label: 'Asset Discovery', pinRoute: '/dashboard/discovery', pinIcon: 'Search',
     sub: [
       { label: 'Domains', icon: Globe, pinId: 'discovery:domains', pinRoute: '/dashboard/discovery', pinIcon: 'Globe' },
+      { label: 'Asset Inventory', icon: Package, pinId: 'discovery:inventory', pinRoute: '/dashboard/discovery?tab=inventory', pinIcon: 'Package' },
       { label: 'SSL Certificates', icon: Key, pinId: 'discovery:ssl', pinRoute: '/dashboard/discovery?tab=ssl', pinIcon: 'Key' },
       { label: 'IP Subnets', icon: Server, pinId: 'discovery:ip', pinRoute: '/dashboard/discovery?tab=ip', pinIcon: 'Server' },
       { label: 'Software & Services', icon: Cpu, pinId: 'discovery:software', pinRoute: '/dashboard/discovery?tab=software', pinIcon: 'Cpu' },
@@ -46,7 +47,6 @@ const navItems: NavItem[] = [
       { label: 'Shadow IT', icon: Shield, pinId: 'discovery:shadow', pinRoute: '/dashboard/discovery?tab=shadow', pinIcon: 'Shield' },
     ],
   },
-  { id: 'inventory', icon: Package, label: 'Asset Inventory', pinRoute: '/dashboard/inventory', pinIcon: 'Package' },
   {
     id: 'cbom', icon: ClipboardList, label: 'CBOM', pinRoute: '/dashboard/cbom', pinIcon: 'ClipboardList',
     sub: [
@@ -64,9 +64,9 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    id: 'rating', icon: Star, label: 'Cyber Rating', pinRoute: '/dashboard/rating/enterprise', pinIcon: 'Star',
+    id: 'rating', icon: Star, label: 'Q-Score Overview', pinRoute: '/dashboard/rating/enterprise', pinIcon: 'Star',
     sub: [
-      { label: 'Enterprise Score', icon: Star, pinId: 'rating:enterprise', pinRoute: '/dashboard/rating/enterprise', pinIcon: 'Star' },
+      { label: 'Q-Score Overview', icon: Star, pinId: 'rating:enterprise', pinRoute: '/dashboard/rating/enterprise', pinIcon: 'Star' },
       { label: 'Per-Asset', icon: FileText, pinId: 'rating:per-asset', pinRoute: '/dashboard/rating/per-asset', pinIcon: 'FileText' },
     ],
   },
@@ -74,7 +74,7 @@ const navItems: NavItem[] = [
     id: 'remediation', icon: Wrench, label: 'Remediation Center', pinRoute: '/dashboard/remediation/action-plan', pinIcon: 'Wrench',
     sub: [
       { label: 'Action Plan', icon: ClipboardList, pinId: 'remediation:action-plan', pinRoute: '/dashboard/remediation/action-plan', pinIcon: 'Wrench' },
-      { label: 'AI Patch Generator', icon: Sparkles, pinId: 'remediation:ai-patch', pinRoute: '/dashboard/remediation/ai-patch', pinIcon: 'Sparkles' },
+      { label: 'Patch Generator', icon: Sparkles, pinId: 'remediation:patch', pinRoute: '/dashboard/remediation/patch', pinIcon: 'Sparkles' },
       { label: 'Migration Roadmap', icon: Map, pinId: 'remediation:roadmap', pinRoute: '/dashboard/remediation/roadmap', pinIcon: 'Map' },
     ],
   },
@@ -364,6 +364,45 @@ const DashboardSidebar = ({ activeItem, onItemClick }: DashboardSidebarProps) =>
 
       {/* Bottom: Settings + User */}
       <div className="px-1.5 py-2 space-y-0.5">
+        <div className="relative group/nav">
+          <button
+            onClick={() => onItemClick('system-health')}
+            className={cn(
+              'w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors text-sm',
+              activeItem === 'system-health'
+                ? 'bg-brand-primary/10 text-brand-primary font-medium'
+                : 'text-foreground/70 hover:bg-sunken hover:text-foreground'
+            )}
+          >
+            <Activity className={cn('w-4 h-4 flex-shrink-0', activeItem === 'system-health' && 'text-accent-amber')} />
+            <AnimatePresence>
+              {!isCollapsed && (
+                <motion.span
+                  initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.15 }}
+                  className="font-body whitespace-nowrap flex-1"
+                >System Health</motion.span>
+              )}
+            </AnimatePresence>
+            {!isCollapsed && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePin({ id: 'system-health', label: 'System Health', route: '/dashboard/system-health', icon: 'Activity' });
+                }}
+                className={cn(
+                  'p-0.5 rounded transition-all',
+                  isPinned('system-health')
+                    ? 'text-accent-amber opacity-100'
+                    : 'text-muted-foreground/40 opacity-0 group-hover/nav:opacity-100 hover:text-accent-amber'
+                )}
+              >
+                <Pin className={cn('w-3 h-3', isPinned('system-health') && 'fill-accent-amber/30')} />
+              </button>
+            )}
+          </button>
+        </div>
+
         <div className="relative group/nav">
           <button
             onClick={() => onItemClick('settings')}

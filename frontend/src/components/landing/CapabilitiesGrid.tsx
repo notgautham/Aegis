@@ -16,7 +16,7 @@ const capabilities = [
   },
   {
     icon: Star,
-    title: 'Enterprise Cyber Rating',
+    title: 'Enterprise Q-Score Overview',
     desc: 'Aggregated 0–1000 score across all assets. Tier thresholds: Legacy <400, Standard 400–700, Elite-PQC >700. Mapped to NIST compliance.',
     tag: '→ 0–1000 Score',
   },
@@ -28,9 +28,9 @@ const capabilities = [
   },
   {
     icon: Bot,
-    title: 'AI Patch Generator',
-    desc: 'Claude-powered remediation. Generates exact nginx/Apache/Java config snippets to enable ML-KEM-768 hybrid key exchange per asset.',
-    tag: '→ AI-Powered',
+    title: 'Patch Generator',
+    desc: 'Deterministic remediation output. Generates exact nginx/Apache/Java config snippets to enable ML-KEM-768 hybrid key exchange per asset.',
+    tag: '→ Deterministic',
   },
   {
     icon: TrendingDown,

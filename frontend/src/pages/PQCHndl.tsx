@@ -73,6 +73,7 @@ const PQCHndl = () => {
     <div className="space-y-5">
       <DataContextBadge />
       <h1 className="font-display text-2xl italic text-brand-primary">HNDL Intelligence</h1>
+      <p className="text-xs font-body text-muted-foreground mt-0.5">Harvest-now decrypt-later exposure timelines and urgency by asset sensitivity.</p>
       <SectionTabBar tabs={pqcTabs} />
       <p className="text-xs font-body text-muted-foreground italic">
         HNDL exposure analysis: {hndlExposureCount} asset{hndlExposureCount === 1 ? '' : 's'} estimated decryptable by {earliestBreakYear ?? 'the current model horizon'}.

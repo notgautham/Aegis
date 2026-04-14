@@ -27,7 +27,7 @@
 
 ## 🌊 Overview
 
-Aegis is a scan-centric platform engineered to defend internet-facing cryptographic assets against the **Harvest Now, Decrypt Later (HNDL)** threat. By merging low-level Post-Quantum Cryptography (PQC) handshake inspection with deterministic scoring and AI-grounded remediation, Aegis provides a clear bridge to a quantum-safe future.
+Aegis is a scan-centric platform engineered to defend internet-facing cryptographic assets against the **Harvest Now, Decrypt Later (HNDL)** threat. By merging low-level Post-Quantum Cryptography (PQC) handshake inspection with deterministic scoring and deterministic remediation, Aegis provides a clear bridge to a quantum-safe future.
 
 ---
 
@@ -43,9 +43,24 @@ Aegis continuously discovers assets, evaluates their cryptographic posture, and 
 
 ---
 
+## 🚦 Scan Variations
+
+Aegis supports scan profiles that trade off speed vs depth.
+
+1. **Fast Validation:** `Standard + Bounded Port Scan + No Enumeration`
+2. **Balanced Discovery:** `Standard + Bounded Port Scan + Full Enumeration`
+3. **Full-Fledge Deep Scan:** `Deep + Full Port Scan + Full Enumeration`
+4. **PQC-Focused Audit:** `PQC Focus + Bounded Port Scan + No Enumeration`
+
+For very large domains, full-fledge scans can still be expensive. Aegis uses adaptive hostname/TLS prioritization, progressive deepening, and TLS-stage budgets to avoid indefinite probing while preserving high-value coverage first.
+
+Detailed run examples and tuning flags are available in [SETUP.md](./SETUP.md).
+
+---
+
 ## 🧮 Deterministic Scoring Model
 
-Aegis relies on a strict, deterministic, and weighted formula to evaluate quantum risk, completely independent of AI hallucination. 
+Aegis relies on a strict, deterministic, and weighted formula to evaluate quantum risk, fully independent of probabilistic inference. 
 
 **Risk Formula:**
 > **Risk = 100 × (0.45 × V<sub>KEX</sub> + 0.35 × V<sub>SIG</sub> + 0.10 × V<sub>SYM</sub> + 0.10 × V<sub>TLS</sub>) + P<sub>cert</sub>**

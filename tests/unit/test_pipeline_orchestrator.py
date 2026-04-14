@@ -323,7 +323,7 @@ async def test_runtime_store_records_degraded_amass_mode(tmp_path, session_facto
     snapshot = runtime_store.get_snapshot(scan_id)
     assert snapshot is not None
     assert snapshot.degraded_modes
-    assert any("root target only" in message.lower() for message in snapshot.degraded_modes)
+    assert any("deterministic seeds" in message.lower() for message in snapshot.degraded_modes)
 
 
 @pytest.mark.asyncio

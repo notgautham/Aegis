@@ -40,6 +40,20 @@ def test_hybrid_kex_yields_transitioning() -> None:
     assert evaluation.hybrid_algorithms == ("kex:X25519_MLKEM768",)
 
 
+def test_hybrid_kex_with_classical_signature_still_yields_transitioning() -> None:
+    evaluation = RulesEngine().evaluate(
+        ComplianceInput(
+            kex_algorithm="X25519MLKEM768",
+            auth_algorithm="ECDSA",
+            enc_algorithm="AES256GCM",
+        )
+    )
+
+    assert evaluation.kex.status is DimensionStatus.HYBRID
+    assert evaluation.sig.status is DimensionStatus.FAIL
+    assert evaluation.tier is ComplianceTier.PQC_TRANSITIONING
+
+
 def test_hybrid_signature_yields_transitioning() -> None:
     evaluation = RulesEngine().evaluate(
         ComplianceInput(

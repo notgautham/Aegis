@@ -60,7 +60,7 @@ class RulesEngine:
     """Deterministic PQC rules engine with zero AI dependence."""
 
     _PASS_KEX = {"MLKEM512", "MLKEM768", "MLKEM1024"}
-    _HYBRID_KEX = {"X25519_MLKEM768"}
+    _HYBRID_KEX = {"X25519_MLKEM768", "X25519MLKEM768"}
     _FAIL_KEX = {"RSA", "ECDHE", "ECDH", "DHE", "DH", "X25519"}
 
     _PASS_SIG = {"MLDSA44", "MLDSA65", "MLDSA87", "SLHDSA"}
@@ -214,8 +214,12 @@ class RulesEngine:
         sig: DimensionEvaluation,
         sym: DimensionEvaluation,
     ) -> ComplianceTier:
-        # Hard failures in major dimensions stay vulnerable.
-        if kex.status is DimensionStatus.FAIL or sig.status is DimensionStatus.FAIL:
+        # KEX remains the dominant quantum-readiness gate.
+        if kex.status is DimensionStatus.FAIL:
+            return ComplianceTier.QUANTUM_VULNERABLE
+
+        # Symmetric hard failures are always vulnerable regardless of PQC progress.
+        if sym.status is DimensionStatus.FAIL:
             return ComplianceTier.QUANTUM_VULNERABLE
 
         # 1. FULLY_QUANTUM_SAFE: Pure PQC on both major dimensions + OK symmetric
@@ -226,18 +230,19 @@ class RulesEngine:
         ):
             return ComplianceTier.FULLY_QUANTUM_SAFE
 
-        # 2. PQC_TRANSITIONING: At least one PQC component (HYBRID or PASS) detected in KEX or SIG.
-        # This rewards partial migration (like Discord's hybrid KEX).
-        if kex.status in {DimensionStatus.HYBRID, DimensionStatus.PASS} or sig.status in {
-            DimensionStatus.HYBRID,
-            DimensionStatus.PASS,
-        }:
-            # We still drop to VULNERABLE if the symmetric cipher is a hard FAIL (e.g. RC4)
-            if sym.status == DimensionStatus.FAIL:
-                return ComplianceTier.QUANTUM_VULNERABLE
+        # 2. PQC_TRANSITIONING:
+        # - Hybrid KEX indicates active migration in production, even when signatures are still classical.
+        # - Pure PQC KEX with non-FAIL signature/symmetric posture is also transitioning.
+        if kex.status is DimensionStatus.HYBRID:
+            return ComplianceTier.PQC_TRANSITIONING
+        if (
+            kex.status is DimensionStatus.PASS
+            and sig.status in {DimensionStatus.HYBRID, DimensionStatus.PASS}
+            and sym.status in {DimensionStatus.OK, DimensionStatus.WARN}
+        ):
             return ComplianceTier.PQC_TRANSITIONING
 
-        # 3. QUANTUM_VULNERABLE: No PQC components detected, or hard failures present.
+        # 3. QUANTUM_VULNERABLE: no qualifying transition signals.
         return ComplianceTier.QUANTUM_VULNERABLE
 
     @staticmethod

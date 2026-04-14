@@ -13,7 +13,6 @@ import DashboardLayout from "./pages/DashboardLayout.tsx";
 import DashboardHome from "./pages/DashboardHome.tsx";
 import Scanner from "./pages/Scanner.tsx";
 import AssetDiscovery from "./pages/AssetDiscovery.tsx";
-import AssetInventory from "./pages/AssetInventory.tsx";
 import AssetDetail from "./pages/AssetDetail.tsx";
 import CBOMOverview from "./pages/CBOMOverview.tsx";
 import CBOMPerAsset from "./pages/CBOMPerAsset.tsx";
@@ -35,6 +34,7 @@ import SettingsLayout from "./pages/SettingsLayout.tsx";
 import SettingsScanConfig from "./pages/SettingsScanConfig.tsx";
 import SettingsNotifications from "./pages/SettingsNotifications.tsx";
 import SettingsIntegrations from "./pages/SettingsIntegrations.tsx";
+import SystemHealth from "./pages/SystemHealth.tsx";
 import ScanReport from "./pages/ScanReport.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -62,7 +62,7 @@ const App = () => (
             <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
               <Route index element={<DashboardHome />} />
               <Route path="discovery" element={<AssetDiscovery />} />
-              <Route path="inventory" element={<AssetInventory />} />
+              <Route path="inventory" element={<Navigate to="/dashboard/discovery?tab=inventory" replace />} />
               <Route path="assets/:id" element={<AssetDetail />} />
               <Route path="cbom" element={<CBOMOverview />} />
               <Route path="cbom/per-asset" element={<CBOMPerAsset />} />
@@ -74,12 +74,14 @@ const App = () => (
               <Route path="rating/per-asset" element={<CyberRatingPerAsset />} />
               <Route path="rating/tiers" element={<Navigate to="/dashboard/rating/enterprise" replace />} />
               <Route path="remediation/action-plan" element={<RemediationActionPlan />} />
-              <Route path="remediation/ai-patch" element={<RemediationAIPatch />} />
+              <Route path="remediation/patch" element={<RemediationAIPatch />} />
+              <Route path="remediation/ai-patch" element={<Navigate to="/dashboard/remediation/patch" replace />} />
               <Route path="remediation/roadmap" element={<RemediationRoadmap />} />
               <Route path="reporting/executive" element={<ReportingExecutive />} />
               <Route path="reporting/scheduled" element={<ReportingScheduled />} />
               <Route path="reporting/on-demand" element={<ReportingOnDemand />} />
               <Route path="history" element={<ScanHistory />} />
+              <Route path="system-health" element={<SystemHealth />} />
               <Route path="scans/:scanId" element={<ScanReport />} />
               <Route path="settings" element={<SettingsLayout />}>
                 <Route index element={<SettingsScanConfig />} />

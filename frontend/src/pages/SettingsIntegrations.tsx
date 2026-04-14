@@ -34,6 +34,7 @@ const SettingsIntegrations = () => {
         <p className="font-body text-sm text-muted-foreground mt-1">Connect AEGIS with your existing security and IT tools</p>
       </div>
 
+        <p className="text-xs font-body text-muted-foreground mt-0.5">Manage downstream platform connectors for ticketing, SIEM, and team notifications.</p>
       {/* Connected */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-4">

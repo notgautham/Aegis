@@ -122,6 +122,7 @@ const PQCCompliance = () => {
     <div className="space-y-5">
       <DataContextBadge />
       <h1 className="font-display text-2xl italic text-brand-primary">PQC Compliance Dashboard</h1>
+      <p className="text-xs font-body text-muted-foreground mt-0.5">Tier distribution, criticality heatmaps, and compliance action guidance from live scan evidence.</p>
       <SectionTabBar tabs={pqcTabs} />
       <p className="text-xs font-body text-muted-foreground italic">
         PQC readiness across {selectedAssets.length} assets: {eliteCount} Elite-PQC, {transitioningCount} Transitioning, {critCount} Critical. {critCount > 0 ? `${critCount} assets require immediate remediation.` : 'No critical assets detected.'}

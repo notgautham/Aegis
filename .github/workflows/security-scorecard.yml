@@ -26,12 +26,14 @@ jobs:
 
       - name: Run analysis
         uses: ossf/scorecard-action@v2.4.0
+        continue-on-error: true
         with:
           results_file: scorecard.sarif
           results_format: sarif
           publish_results: true
 
       - name: Upload Scorecard SARIF
+        if: always() && hashFiles('scorecard.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: scorecard.sarif

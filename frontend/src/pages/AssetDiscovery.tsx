@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { useScanContext } from '@/contexts/ScanContext';
@@ -8,7 +8,7 @@ import { api, type AssetResultResponse, type DNSRecordResponse } from '@/lib/api
 import { adaptScanHistory, adaptScanResults } from '@/lib/adapters';
 import DataContextBadge from '@/components/dashboard/DataContextBadge';
 import DiscoveryDetailPanel from '@/components/dashboard/DiscoveryDetailPanel';
-import { Globe, Key, Server, Cpu, Share2, AlertTriangle, Search, Filter } from 'lucide-react';
+import { Globe, Key, Server, Cpu, Share2, AlertTriangle, Search, Filter, Package } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -19,12 +19,15 @@ import {
   softwareRecords as demoSoftwareRecords,
   shadowITAlerts as demoShadowITAlerts,
   assets as demoAssets,
+  getStatusColor,
+  getStatusLabel,
 } from '@/data/demoData';
 import type { DomainRecord, IPRecord, SoftwareRecord, Asset, ScanHistoryEntry, ShadowITAlert } from '@/data/demoData';
 import NetworkGraph from '@/components/dashboard/NetworkGraph';
 
 const tabDefs = [
   { id: 'domains', label: 'Domains', icon: Globe },
+  { id: 'inventory', label: 'Asset Inventory', icon: Package },
   { id: 'ssl', label: 'SSL Certificates', icon: Key },
   { id: 'ip', label: 'IP / Subnets', icon: Server },
   { id: 'software', label: 'Software & Services', icon: Cpu },
@@ -412,6 +415,7 @@ const includesSearch = (values: Array<string | number | null | undefined>, searc
 };
 
 const AssetDiscovery = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'domains';
   const [search, setSearch] = useState('');
@@ -592,6 +596,21 @@ const AssetDiscovery = () => {
       search,
     ));
 
+  const filteredInventoryAssets = scopedSslAssets
+    .filter((asset) => includesSearch(
+      [
+        asset.domain,
+        asset.ip,
+        asset.type,
+        asset.businessCriticality,
+        asset.tls,
+        asset.cipher,
+        asset.keyExchange,
+        asset.complianceTier,
+      ],
+      search,
+    ));
+
   const filteredIPs = ipData.filter((record) => includesSearch(
     [record.ip, record.subnet, record.asn, record.city, record.reverseDns, record.risk],
     search,
@@ -648,6 +667,7 @@ const AssetDiscovery = () => {
 
   const countMap: Record<string, number> = {
     domains: filteredDomains.length,
+    inventory: filteredInventoryAssets.length,
     ssl: filteredSslAssets.length,
     ip: filteredIPs.length,
     software: filteredSoftware.length,
@@ -666,7 +686,12 @@ const AssetDiscovery = () => {
   return (
     <div className="space-y-5">
       <DataContextBadge />
-      <h1 className="font-display text-2xl italic text-brand-primary">Asset Discovery</h1>
+      <div>
+        <h1 className="font-display text-2xl italic text-brand-primary">Asset Discovery</h1>
+        <p className="text-xs font-body text-muted-foreground mt-0.5">
+          Unified reconnaissance surface for domains, inventory, certificates, network exposure, and shadow assets.
+        </p>
+      </div>
 
       {/* Scope toggle */}
       <div className="flex items-center gap-2">
@@ -791,6 +816,57 @@ const AssetDiscovery = () => {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {activeTab === 'inventory' && (
+        <Card className="shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs font-body">
+                <thead><tr className="border-b border-border bg-[hsl(var(--bg-sunken))]">
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Asset</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">IP</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Type</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Criticality</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">TLS</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Cipher</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Key Exchange</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Status</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Q-Score</th>
+                </tr></thead>
+                <tbody>
+                  {filteredInventoryAssets.map((asset, index) => (
+                    <tr
+                      key={`${asset.id}:${asset.port}`}
+                      className={cn(
+                        'border-b border-border/50 hover:bg-[hsl(var(--bg-sunken))] transition-colors cursor-pointer',
+                        index % 2 === 0 && 'bg-[hsl(var(--bg-sunken)/0.3)]',
+                      )}
+                      onClick={() => navigate(`/dashboard/assets/${asset.domain.replace(/\./g, '-')}?port=${asset.port}`)}
+                    >
+                      <td className="px-3 py-2 font-mono font-medium text-foreground">{asset.domain}</td>
+                      <td className="px-3 py-2 font-mono text-muted-foreground">{asset.ip || 'n/a'}</td>
+                      <td className="px-3 py-2"><Badge variant="secondary" className="text-[10px]">{asset.type}</Badge></td>
+                      <td className="px-3 py-2"><Badge variant="outline" className="text-[10px]">{asset.businessCriticality.replace('_', ' ')}</Badge></td>
+                      <td className="px-3 py-2 font-mono text-muted-foreground">{asset.tls}</td>
+                      <td className="px-3 py-2 font-mono text-muted-foreground max-w-[180px] truncate">{asset.cipher}</td>
+                      <td className="px-3 py-2 font-mono text-muted-foreground max-w-[180px] truncate">{asset.keyExchange}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded"
+                          style={{ color: getStatusColor(asset.status), backgroundColor: `${getStatusColor(asset.status)}15` }}
+                        >
+                          {getStatusLabel(asset.status)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 font-mono">{asset.qScore}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {activeTab === 'ssl' && (

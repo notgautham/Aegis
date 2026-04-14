@@ -33,16 +33,6 @@ const scanProfiles = [
 
 const exampleChips = ['example.com', 'iana.org', 'neverssl.com', 'www.gnu.org'];
 
-function formatEtaRange(lowerSeconds: number | null, upperSeconds: number | null): string | null {
-  if (lowerSeconds === null && upperSeconds === null) return null;
-  const lower = Math.max(0, Math.round((lowerSeconds ?? upperSeconds ?? 0) / 60));
-  const upper = Math.max(lower, Math.round((upperSeconds ?? lowerSeconds ?? 0) / 60));
-
-  if (upper <= 1) return 'ETA < 1 min';
-  if (lower === upper) return `ETA ~${upper} min`;
-  return `ETA ${lower}-${upper} min`;
-}
-
 const Scanner = () => {
   const [targetInput, setTargetInput] = useState('');
   const [scanProfile, setScanProfile] = useState<string>('Quick');
@@ -54,7 +44,7 @@ const Scanner = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { setScannedDomain } = useScanContext();
-  const { startQueue, latestCompletedScanId, isRunning, queue } = useScanQueue();
+  const { startQueue, latestCompletedScanId, isRunning } = useScanQueue();
   const { setSelectedScanId } = useSelectedScan();
   const autoLaunchHandledRef = useRef(false);
 
@@ -114,8 +104,6 @@ const Scanner = () => {
     }
   };
 
-  const activeScan = queue.find((item) => item.status === 'scanning');
-  const etaText = activeScan ? formatEtaRange(activeScan.etaLowerSeconds, activeScan.etaUpperSeconds) : null;
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-[calc(100vh-8.5rem)] px-4 md:px-6 pb-8">
@@ -239,14 +227,6 @@ const Scanner = () => {
             Scans can take time depending on host responsiveness, DNS complexity, and enabled options. Deep scans and full enumeration usually run longer.
           </p>
         </div>
-
-        {isRunning && activeScan && (
-          <div className="flex items-start gap-2 rounded-lg border border-[hsl(var(--status-safe)/0.3)] bg-[hsl(var(--status-safe)/0.08)] px-3 py-2.5 mb-5">
-            <p className="text-xs font-body text-[hsl(var(--status-safe))]">
-              Live scan: {activeScan.target} - {activeScan.currentPhase || 'starting'}{etaText ? ` (${etaText})` : ''}
-            </p>
-          </div>
-        )}
 
         <Button onClick={startSingleTargetScan} className="w-full text-sm" disabled={!targetInput.trim()}>
           Start Scan

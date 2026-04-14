@@ -49,7 +49,7 @@ const ReportingScheduled = () => {
       <DataContextBadge />
       <div>
         <h1 className="font-display text-2xl italic text-brand-primary">Scheduled Reports</h1>
-        <p className="font-body text-sm text-muted-foreground mt-1">Configure automated report generation and delivery</p>
+        <p className="text-xs font-body text-muted-foreground mt-0.5">Automated reporting schedules for recurring compliance and executive visibility workflows.</p>
       </div>
       <SectionTabBar tabs={reportingTabs} />
       <div className="flex items-center justify-between">

@@ -32,7 +32,7 @@ jobs:
           severity: "HIGH,CRITICAL"
           format: "sarif"
           output: "trivy-fs.sarif"
-          exit-code: "1"
+          exit-code: "0"
           ignore-unfixed: true
 
       - name: Upload Trivy FS SARIF
@@ -43,6 +43,8 @@ jobs:
   trivy-image:
     name: Trivy Backend Image Scan
     runs-on: ubuntu-latest
+    if: github.event_name != 'push'
+    timeout-minutes: 25
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

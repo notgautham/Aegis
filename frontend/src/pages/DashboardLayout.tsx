@@ -39,12 +39,13 @@ const DashboardLayout = () => {
   const getActiveNav = () => {
     if (pathname === '/scanner') return 'scanner';
     if (pathname.includes('/discovery')) return 'discovery';
-    if (pathname.includes('/inventory')) return 'inventory';
+    if (pathname.includes('/inventory')) return 'discovery';
     if (pathname.includes('/cbom')) return 'cbom';
     if (pathname.includes('/pqc')) return 'pqc';
     if (pathname.includes('/rating')) return 'rating';
     if (pathname.includes('/remediation')) return 'remediation';
     if (pathname.includes('/reporting')) return 'reporting';
+    if (pathname.includes('/system-health')) return 'system-health';
     if (pathname.includes('/settings')) return 'settings';
     if (pathname.includes('/history')) return 'history';
     return 'dashboard';
@@ -56,12 +57,13 @@ const DashboardLayout = () => {
       'scanner': '/scanner',
       'discovery': '/dashboard/discovery',
       'discovery:domains': '/dashboard/discovery',
+      'discovery:inventory': '/dashboard/discovery?tab=inventory',
       'discovery:ip subnets': '/dashboard/discovery?tab=ip',
       'discovery:ssl certificates': '/dashboard/discovery?tab=ssl',
       'discovery:software & services': '/dashboard/discovery?tab=software',
       'discovery:network graph': '/dashboard/discovery?tab=network',
       'discovery:shadow it': '/dashboard/discovery?tab=shadow',
-      'inventory': '/dashboard/inventory',
+      'inventory': '/dashboard/discovery?tab=inventory',
       'cbom': '/dashboard/cbom',
       'cbom:overview': '/dashboard/cbom',
       'cbom:per-asset': '/dashboard/cbom/per-asset',
@@ -71,18 +73,19 @@ const DashboardLayout = () => {
       'pqc:hndl intel': '/dashboard/pqc/hndl',
       'pqc:quantum debt': '/dashboard/pqc/quantum-debt',
       'rating': '/dashboard/rating/enterprise',
-      'rating:enterprise score': '/dashboard/rating/enterprise',
+      'rating:q-score overview': '/dashboard/rating/enterprise',
       'rating:per-asset': '/dashboard/rating/per-asset',
       'rating:tier classification': '/dashboard/rating/tiers',
       'remediation': '/dashboard/remediation/action-plan',
       'remediation:action plan': '/dashboard/remediation/action-plan',
-      'remediation:ai patch generator': '/dashboard/remediation/ai-patch',
+      'remediation:patch generator': '/dashboard/remediation/patch',
       'remediation:migration roadmap': '/dashboard/remediation/roadmap',
       'reporting': '/dashboard/reporting/executive',
       'reporting:executive reports': '/dashboard/reporting/executive',
       'reporting:scheduled reports': '/dashboard/reporting/scheduled',
       'reporting:on-demand builder': '/dashboard/reporting/on-demand',
       'history': '/dashboard/history',
+      'system-health': '/dashboard/system-health',
       'settings': '/dashboard/settings/scan-config',
     };
     const route = routeMap[item] || '/dashboard';
@@ -113,6 +116,9 @@ const DashboardLayout = () => {
   const resolvedCount = queue.filter((item) => item.status === 'done' || item.status === 'failed' || item.status === 'cancelled').length;
   const scanningItem = queue.find((item) => item.status === 'scanning');
   const overallProgress = queue.length > 0 ? Math.round((resolvedCount / queue.length) * 100) : 0;
+  const runningEtaLabel = scanningItem
+    ? formatEtaRange(scanningItem.etaLowerSeconds, scanningItem.etaUpperSeconds)
+    : null;
 
   const phases = ['Discovery', 'TLS Probing', 'PQC Classification', 'CBOM Generation', 'Certification'];
 
@@ -136,7 +142,9 @@ const DashboardLayout = () => {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-sm flex flex-col items-center justify-center p-8">
           <div className="w-full max-w-2xl space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="font-body text-lg font-semibold">Scan Running</h2>
+              <h2 className="font-body text-lg font-semibold">
+                Scan Running{runningEtaLabel ? ` (ETA ${runningEtaLabel.replace('ETA ', '')})` : ''}
+              </h2>
               <Button variant="ghost" size="sm" onClick={toggleMinimize}><Minimize2 className="w-4 h-4" /></Button>
             </div>
             <div className="space-y-2">
@@ -168,14 +176,7 @@ const DashboardLayout = () => {
                           <div key={phase} className={`flex-1 h-1.5 rounded-full ${phases.indexOf(item.currentPhase) >= phaseIndex ? 'bg-[hsl(var(--accent-amber))]' : 'bg-[hsl(var(--bg-sunken))]'}`} />
                         ))}
                       </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-[10px] font-mono text-muted-foreground">{item.currentPhase}</p>
-                        {formatEtaRange(item.etaLowerSeconds, item.etaUpperSeconds) && (
-                          <p className="text-[10px] font-mono text-muted-foreground">
-                            {formatEtaRange(item.etaLowerSeconds, item.etaUpperSeconds)}
-                          </p>
-                        )}
-                      </div>
+                      <p className="text-[10px] font-mono text-muted-foreground">{item.currentPhase}</p>
                     </div>
                   )}
                 </div>

@@ -59,8 +59,8 @@ _ALGORITHM_ALIASES: dict[str, dict[str, str]] = {
     "kex": {
         "X25519MLKEM768": "X25519_MLKEM768",
         "X25519_MLKEM768": "X25519_MLKEM768",
-        "4588": "X25519MLKEM768",
-        "0X11EC": "X25519MLKEM768",
+        "4588": "X25519_MLKEM768",
+        "0X11EC": "X25519_MLKEM768",
         "X25519_ML_KEM_768": "X25519_MLKEM768",
         "P256MLKEM768": "X25519_MLKEM768",  # Fallback for other hybrid pairs
         "KYBER768": "MLKEM768",

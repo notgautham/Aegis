@@ -83,7 +83,7 @@ const SettingsNotifications = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display italic text-2xl text-foreground">Notifications</h1>
-          <p className="font-body text-sm text-muted-foreground mt-1">Configure alerts and notification channels</p>
+          <p className="text-xs font-body text-muted-foreground mt-0.5">Control alert channels, severity routing, and event delivery preferences.</p>
         </div>
         <button
           className="flex items-center gap-2 font-body text-sm font-semibold bg-accent-amber text-brand-primary px-4 py-2 rounded-lg hover:brightness-110 transition-all"

@@ -12,7 +12,7 @@ const DEFAULT_PINS: PinnedPage[] = [
   { id: 'pqc:compliance', label: 'PQC', route: '/dashboard/pqc/compliance', icon: 'ShieldCheck' },
   { id: 'cbom:overview', label: 'CBOM', route: '/dashboard/cbom', icon: 'ClipboardList' },
   { id: 'remediation:action-plan', label: 'Remediation', route: '/dashboard/remediation/action-plan', icon: 'Wrench' },
-  { id: 'rating:enterprise', label: 'Cyber Rating', route: '/dashboard/rating/enterprise', icon: 'Star' },
+  { id: 'rating:enterprise', label: 'Q-Score Overview', route: '/dashboard/rating/enterprise', icon: 'Star' },
 ];
 
 const STORAGE_KEY = 'aegis-pinned-pages';

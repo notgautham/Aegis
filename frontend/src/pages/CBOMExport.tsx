@@ -54,7 +54,10 @@ const CBOMExport = () => {
   return (
     <div className="space-y-5">
       <DataContextBadge />
-      <h1 className="font-display text-2xl italic text-brand-primary">CBOM Export Center</h1>
+      <div>
+        <h1 className="font-display text-2xl italic text-brand-primary">CBOM Export Center</h1>
+        <p className="text-xs font-body text-muted-foreground mt-0.5">Generate deterministic CBOM deliverables from the currently selected scan scope.</p>
+      </div>
       <SectionTabBar tabs={cbomTabs} />
 
       <Card className="shadow-sm">

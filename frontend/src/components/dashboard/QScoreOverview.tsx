@@ -7,9 +7,11 @@ interface QScoreOverviewProps {
 
 const QScoreOverview = ({ selectedAssets }: QScoreOverviewProps) => {
   const avgQScore = Math.round(selectedAssets.reduce((sum, asset) => sum + asset.qScore, 0) / Math.max(selectedAssets.length, 1));
+  const pqcReadyCount = selectedAssets.filter((asset) => asset.status === 'elite-pqc' || isTransitionAsset(asset)).length;
+  const pqcReadyRatio = selectedAssets.length > 0 ? Math.round((pqcReadyCount / selectedAssets.length) * 100) : 0;
   const circumference = 2 * Math.PI * 50;
-  const offset = circumference - (avgQScore / 100) * circumference;
-  const ringColor = avgQScore >= 70 ? 'hsl(var(--status-safe))' : avgQScore >= 40 ? 'hsl(var(--accent-amber))' : 'hsl(var(--status-critical))';
+  const offset = circumference - (pqcReadyRatio / 100) * circumference;
+  const ringColor = pqcReadyRatio >= 70 ? 'hsl(var(--status-safe))' : pqcReadyRatio >= 40 ? 'hsl(var(--accent-amber))' : 'hsl(var(--status-critical))';
 
   const breakdown = [
     { label: 'Quantum Safe', count: selectedAssets.filter((asset) => asset.status === 'elite-pqc').length, color: 'bg-status-safe' },
@@ -24,6 +26,9 @@ const QScoreOverview = ({ selectedAssets }: QScoreOverviewProps) => {
   return (
     <div className="bg-surface rounded-xl border border-[hsl(var(--border-default))] p-5 shadow-[0_18px_42px_-28px_hsl(var(--brand-primary)/0.45)]">
       <h3 className="font-body font-bold text-sm text-foreground mb-4">Q-Score Overview</h3>
+      <p className="font-body text-xs text-muted-foreground mb-4">
+        Mix and distribution view. Enterprise Cyber Rating is the portfolio score; this panel shows PQC-ready coverage.
+      </p>
 
       <div className="flex items-center gap-6 mb-6">
         <svg width="120" height="120" viewBox="0 0 120 120">
@@ -38,14 +43,18 @@ const QScoreOverview = ({ selectedAssets }: QScoreOverviewProps) => {
             transform="rotate(-90 60 60)"
           />
           <text x="60" y="56" textAnchor="middle" className="font-mono text-2xl font-bold" fill={ringColor}>
-            {avgQScore}
+            {pqcReadyRatio}
           </text>
           <text x="60" y="72" textAnchor="middle" className="font-mono text-[10px]" fill="hsl(var(--text-muted))">
-            / 100
+            % ready
           </text>
         </svg>
 
         <div className="flex-1 space-y-2">
+          <div className="flex items-center justify-between text-xs font-body mb-1">
+            <span className="text-muted-foreground">Portfolio Q-Score</span>
+            <span className="font-mono text-foreground">{avgQScore}/100</span>
+          </div>
           {breakdown.map(b => (
             <div key={b.label} className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${b.color} flex-shrink-0`} />

@@ -40,6 +40,7 @@ const AssetInventory = () => {
       <div>
         <h1 className="font-display text-2xl italic text-brand-primary">Asset Inventory</h1>
         <p className="text-xs font-body text-muted-foreground mt-0.5">{selectedAssets.length} assets</p>
+        <p className="text-xs font-body text-muted-foreground mt-0.5">Current-scan asset catalog with cryptographic posture, ownership, and drill-down access.</p>
       </div>
 
       {/* Filters + search/add on same row */}

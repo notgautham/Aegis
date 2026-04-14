@@ -5,7 +5,7 @@ interface ScanContextType {
   setScannedDomain: (domain: string) => void;
   /** e.g. "aegis.com" → "aegis.com" (root domain) */
   rootDomain: string;
-  /** e.g. "aegis.com" → "PNB" or "example.com" → "EXAMPLE" */
+  /** e.g. "example.com" → "EXAMPLE" */
   orgLabel: string;
 }
 

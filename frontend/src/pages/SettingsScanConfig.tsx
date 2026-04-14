@@ -20,7 +20,7 @@ const SettingsScanConfig = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display italic text-2xl text-foreground">Scan Configuration</h1>
-          <p className="font-body text-sm text-muted-foreground mt-1">Configure how AEGIS scans your infrastructure</p>
+            <p className="text-xs font-body text-muted-foreground mt-0.5">Tune default scan depth, discovery behavior, and analysis feature toggles.</p>
         </div>
         <button className="flex items-center gap-2 font-body text-sm font-semibold bg-accent-amber text-brand-primary px-4 py-2 rounded-lg hover:brightness-110 transition-all">
           <Save className="w-4 h-4" /> Save Changes

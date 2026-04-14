@@ -150,7 +150,7 @@ const ReportingOnDemand = () => {
       <DataContextBadge />
       <div>
         <h1 className="font-display text-2xl italic text-brand-primary">On-Demand Report Builder</h1>
-        <p className="font-body text-sm text-muted-foreground mt-1">Create custom reports by selecting templates, sections, and output format</p>
+        <p className="text-xs font-body text-muted-foreground mt-0.5">Compose custom report packs from live scan data, tiers, and remediation evidence.</p>
       </div>
       <SectionTabBar tabs={reportingTabs} />
 

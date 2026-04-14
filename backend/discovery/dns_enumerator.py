@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import shutil
 from collections.abc import AsyncIterator
 from urllib.error import HTTPError, URLError
@@ -25,7 +26,7 @@ class AmassEnumerator:
     def __init__(
         self,
         binary: str = "amass",
-        timeout_seconds: int = 45,
+        timeout_seconds: int = 180,
         fallback_max_hostnames: int = 300,
     ) -> None:
         self.binary = binary
@@ -58,7 +59,7 @@ class AmassEnumerator:
             "enum",
             "-passive",
             "-timeout",
-            "1",
+            str(max(1, math.ceil(self.timeout_seconds / 60))),
             "-d",
             scope.domain,
             stdout=asyncio.subprocess.PIPE,
@@ -91,12 +92,14 @@ class AmassEnumerator:
         except (TimeoutError, asyncio.TimeoutError) as exc:
             process.kill()
             await process.communicate()
-            if seen:
-                return
             fallback = await self._enumerate_with_crtsh(scope.domain)
             if fallback:
                 for record in fallback:
+                    if record.hostname in seen:
+                        continue
+                    seen.add(record.hostname)
                     yield record
+            if seen:
                 return
             raise DNSEnumerationError(
                 f"Amass enumeration timed out after {self.timeout_seconds} seconds."
@@ -112,6 +115,14 @@ class AmassEnumerator:
                     yield record
                 return
             raise DNSEnumerationError(stderr.decode("utf-8", errors="ignore").strip())
+
+        # Merge CT-derived hostnames even when amass succeeded, to broaden coverage.
+        fallback = await self._enumerate_with_crtsh(scope.domain)
+        for record in fallback:
+            if record.hostname in seen:
+                continue
+            seen.add(record.hostname)
+            yield record
 
     async def _enumerate_with_crtsh(self, domain: str) -> list[EnumeratedHostname]:
         """Fallback hostname discovery using Certificate Transparency data."""

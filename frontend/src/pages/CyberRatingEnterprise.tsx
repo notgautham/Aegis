@@ -12,7 +12,7 @@ import { api } from '@/lib/api';
 import type { Asset } from '@/data/demoData';
 
 const ratingTabs = [
-  { id: 'enterprise', label: 'Enterprise Score', icon: Star, route: '/dashboard/rating/enterprise' },
+  { id: 'enterprise', label: 'Q-Score Overview', icon: Star, route: '/dashboard/rating/enterprise' },
   { id: 'per-asset', label: 'Per-Asset', icon: FileText, route: '/dashboard/rating/per-asset' },
 ];
 
@@ -35,7 +35,7 @@ const tiers = [
     action: 'Accelerate migration to Elite-PQC',
   },
   {
-    id: 'standard', label: 'Tier 2 - Standard', icon: Shield, color: 'hsl(210, 70%, 50%)', bgColor: 'hsl(210, 70%, 50%/0.08)',
+    id: 'standard', label: 'Tier 2 - Standard', icon: Shield, color: 'hsl(var(--status-warn))', bgColor: 'hsl(var(--status-warn)/0.08)',
     criteria: ['TLS 1.2/1.3 supported', 'ECDHE key exchange + >=2048-bit keys', 'Strong ciphers (AES-256-GCM)', 'Forward secrecy enabled'],
     action: 'Gradually harden configuration and remove older fallbacks',
   },
@@ -68,7 +68,7 @@ function getTierLabel(score: number): string {
 
 function getTierColor(score: number): string {
   if (score >= 80) return 'hsl(var(--status-safe))';
-  if (score >= 60) return 'hsl(210, 70%, 50%)';
+  if (score >= 60) return 'hsl(var(--status-warn))';
   if (score >= 40) return 'hsl(var(--accent-amber))';
   return 'hsl(var(--status-critical))';
 }
@@ -193,7 +193,10 @@ const CyberRatingEnterprise = () => {
     <div className="space-y-5">
       <DataContextBadge />
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl italic text-brand-primary">Enterprise Cyber Rating</h1>
+        <div>
+          <h1 className="font-display text-2xl italic text-brand-primary">Q-Score Overview</h1>
+          <p className="text-xs font-body text-muted-foreground mt-0.5">Portfolio-level readiness scoring across dimensions, thresholds, and trend movement.</p>
+        </div>
         <Sheet open={tierSheetOpen} onOpenChange={setTierSheetOpen}>
           <SheetTrigger asChild>
             <button className="flex items-center gap-1 text-xs font-body text-brand-primary hover:underline">

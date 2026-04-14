@@ -10,7 +10,7 @@ import { useSelectedScan } from '@/contexts/SelectedScanContext';
 
 const remediationTabs = [
   { id: 'action-plan', label: 'Action Plan', icon: ClipboardList, route: '/dashboard/remediation/action-plan' },
-  { id: 'ai-patch', label: 'AI Patch Generator', icon: Sparkles, route: '/dashboard/remediation/ai-patch' },
+  { id: 'patch', label: 'Patch Generator', icon: Sparkles, route: '/dashboard/remediation/patch' },
   { id: 'roadmap', label: 'Migration Roadmap', icon: MapIcon, route: '/dashboard/remediation/roadmap' },
 ];
 
@@ -194,13 +194,6 @@ const RemediationAIPatch = () => {
   const patchBundle = typeof rawAsset?.remediation?.patch_config === 'string' ? rawAsset.remediation.patch_config.trim() : '';
   const roadmapSections = splitRoadmapSections(typeof rawAsset?.remediation?.migration_roadmap === 'string' ? rawAsset.remediation.migration_roadmap : '');
   const isPqcSafe = Boolean(asset) && remediationActions.length === 0 && asset.status === 'elite-pqc';
-  const scoreExplanation = rawAsset?.assessment?.score_explanation ?? null;
-  const explanationRows = [
-    { label: 'Key Exchange', value: scoreExplanation?.kex_explanation },
-    { label: 'Signature', value: scoreExplanation?.sig_explanation },
-    { label: 'Symmetric', value: scoreExplanation?.sym_explanation },
-    { label: 'TLS', value: scoreExplanation?.tls_explanation },
-  ].filter((row) => Boolean(row.value));
 
   const relevantPatches = useMemo(() => {
     if (!asset) return [];
@@ -247,7 +240,7 @@ const RemediationAIPatch = () => {
       <div className="space-y-5">
         <DataContextBadge />
         <div>
-          <h1 className="font-display text-2xl italic text-brand-primary">AI Patch Generator</h1>
+          <h1 className="font-display text-2xl italic text-brand-primary">Patch Generator</h1>
           <p className="font-body text-sm text-muted-foreground mt-1">Auto-generated configuration patches for PQC migration</p>
         </div>
         <SectionTabBar tabs={remediationTabs} />
@@ -266,7 +259,7 @@ const RemediationAIPatch = () => {
       <div className="space-y-5">
         <DataContextBadge />
         <div>
-          <h1 className="font-display text-2xl italic text-brand-primary">AI Patch Generator</h1>
+          <h1 className="font-display text-2xl italic text-brand-primary">Patch Generator</h1>
           <p className="font-body text-sm text-muted-foreground mt-1">Auto-generated configuration patches for PQC migration</p>
         </div>
         <SectionTabBar tabs={remediationTabs} />
@@ -285,7 +278,7 @@ const RemediationAIPatch = () => {
       <div className="space-y-5">
         <DataContextBadge />
         <div>
-          <h1 className="font-display text-2xl italic text-brand-primary">AI Patch Generator</h1>
+          <h1 className="font-display text-2xl italic text-brand-primary">Patch Generator</h1>
           <p className="font-body text-sm text-muted-foreground mt-1">Auto-generated configuration patches for PQC migration</p>
         </div>
         <SectionTabBar tabs={remediationTabs} />
@@ -308,7 +301,7 @@ const RemediationAIPatch = () => {
     <div className="space-y-5">
       <DataContextBadge />
       <div>
-        <h1 className="font-display text-2xl italic text-brand-primary">AI Patch Generator</h1>
+        <h1 className="font-display text-2xl italic text-brand-primary">Patch Generator</h1>
         <p className="font-body text-sm text-muted-foreground mt-1">Auto-generated configuration patches for PQC migration</p>
       </div>
       <SectionTabBar tabs={remediationTabs} />
@@ -355,31 +348,6 @@ const RemediationAIPatch = () => {
         </Card>
       ) : (
         <>
-          {explanationRows.length > 0 && (
-            <Card className="bg-surface border-border shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
-              <CardHeader className="pb-2">
-                <CardTitle className="font-body text-base">Why this score?</CardTitle>
-                <p className="font-body text-xs text-muted-foreground">
-                  Deterministic scoring explanation derived from weighted vulnerability components.
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {explanationRows.map((row) => (
-                  <div key={row.label} className="rounded-lg border border-border bg-[hsl(var(--bg-sunken)/0.4)] px-3 py-2">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{row.label}</p>
-                    <p className="mt-1 font-body text-sm text-foreground/90">{row.value}</p>
-                  </div>
-                ))}
-                {scoreExplanation?.overall_explanation && (
-                  <div className="rounded-lg border border-brand-primary/20 bg-brand-primary/5 px-3 py-2">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-brand-primary">Overall</p>
-                    <p className="mt-1 font-body text-sm text-foreground/90">{scoreExplanation.overall_explanation}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
           {relevantPatches.length === 0 ? (
             <Card className="bg-surface border-border">
               <CardContent className="py-8 text-center">

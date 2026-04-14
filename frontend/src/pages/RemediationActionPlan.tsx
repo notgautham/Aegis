@@ -15,7 +15,7 @@ import { addDays, format, differenceInDays } from 'date-fns';
 
 const remediationTabs = [
   { id: 'action-plan', label: 'Action Plan', icon: ClipboardList, route: '/dashboard/remediation/action-plan' },
-  { id: 'ai-patch', label: 'AI Patch Generator', icon: Sparkles, route: '/dashboard/remediation/ai-patch' },
+  { id: 'patch', label: 'Patch Generator', icon: Sparkles, route: '/dashboard/remediation/patch' },
   { id: 'roadmap', label: 'Migration Roadmap', icon: Map, route: '/dashboard/remediation/roadmap' },
 ];
 
@@ -90,7 +90,7 @@ const RemediationActionPlan = () => {
       <DataContextBadge />
       <div>
         <h1 className="font-display text-2xl italic text-brand-primary">Remediation Action Plan</h1>
-        <p className="font-body text-sm text-muted-foreground mt-1">Prioritized actions for {targetLabel} quantum readiness</p>
+        <p className="text-xs font-body text-muted-foreground mt-0.5">Prioritized actions, effort bands, and execution status for closing PQC risk gaps.</p>
       </div>
       <SectionTabBar tabs={remediationTabs} />
       {(() => {

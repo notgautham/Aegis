@@ -1,9 +1,8 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import KPIStrip from '@/components/dashboard/KPIStrip';
 import NetworkGraph from '@/components/dashboard/NetworkGraph';
 import CyberRating from '@/components/dashboard/CyberRating';
-import QScoreOverview from '@/components/dashboard/QScoreOverview';
 import IntelligencePanel from '@/components/dashboard/IntelligencePanel';
 import CertExpiryTimeline from '@/components/dashboard/CertExpiryTimeline';
 import AssetRiskDistribution from '@/components/dashboard/AssetRiskDistribution';
@@ -17,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Shield, FileText, AlertTriangle, Wrench, CheckCircle2, FileBarChart, ExternalLink } from 'lucide-react';
+import { Shield, FileText, AlertTriangle, Wrench, CheckCircle2, FileBarChart, ExternalLink, ArrowRight } from 'lucide-react';
 import { getStatusColor, getStatusLabel, getQScoreColor } from '@/data/demoData';
 import { useSelectedScan } from '@/contexts/SelectedScanContext';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
@@ -32,7 +31,22 @@ const DashboardHome = () => {
   const [complianceModalOpen, setComplianceModalOpen] = useState(false);
   const [scanDetailSearch, setScanDetailSearch] = useState('');
   const isExec = activeRole === 'executive';
-  const { selectedScanId, selectedScan, selectedAssets } = useSelectedScan();
+  const { selectedScanId, selectedScan, selectedAssets, selectedAssetResults } = useSelectedScan();
+
+  const scoreExplanation = useMemo(
+    () => (
+      selectedAssetResults.find((asset) => asset.assessment?.score_explanation?.overall_explanation)?.assessment?.score_explanation
+      ?? selectedAssetResults.find((asset) => asset.assessment?.score_explanation)?.assessment?.score_explanation
+    ),
+    [selectedAssetResults],
+  );
+  const explanationRows = [
+    { label: 'Key Exchange', value: scoreExplanation?.kex_explanation },
+    { label: 'Signature', value: scoreExplanation?.sig_explanation },
+    { label: 'Symmetric', value: scoreExplanation?.sym_explanation },
+    { label: 'TLS', value: scoreExplanation?.tls_explanation },
+  ].filter((row) => Boolean(row.value));
+  const overallExplanation = scoreExplanation?.overall_explanation ?? null;
 
   // Scan detail data
   const scanAssets = selectedAssets;
@@ -97,16 +111,51 @@ const DashboardHome = () => {
             <NetworkGraph />
             <CyberRating selectedAssets={selectedAssets} />
           </div>
+
+          <Card className="mb-5 shadow-[0_8px_30px_-12px_hsl(var(--brand-primary)/0.15)]">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-body">Why this score?</CardTitle>
+              <p className="text-xs font-body text-muted-foreground">Deterministic breakdown of the main scoring dimensions used for this dashboard rating.</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {overallExplanation && (
+                <div className="rounded-lg border border-brand-primary/20 bg-brand-primary/5 px-3 py-2">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-brand-primary">Overall</p>
+                  <p className="mt-1 font-body text-sm text-foreground/90">{overallExplanation}</p>
+                </div>
+              )}
+              {explanationRows.length > 0 ? (
+                explanationRows.map((row) => (
+                  <div key={row.label} className="rounded-lg border border-border bg-[hsl(var(--bg-sunken)/0.4)] px-3 py-2">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{row.label}</p>
+                    <p className="mt-1 font-body text-sm text-foreground/90">{row.value}</p>
+                  </div>
+                ))
+              ) : (
+                !overallExplanation && (
+                  <p className="text-xs font-body text-muted-foreground">No score-explanation payload is available for the currently selected scan yet.</p>
+                )
+              )}
+
+              <p className="text-xs font-body text-muted-foreground">
+                For full patch-level remediation guidance, open
+                {' '}
+                <Link to="/dashboard/remediation/patch" className="inline-flex items-center gap-1 text-brand-primary hover:underline">
+                  Patch Generator
+                  <ArrowRight className="w-3 h-3" />
+                </Link>
+                .
+              </p>
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-            <QScoreOverview selectedAssets={selectedAssets} />
             <IntelligencePanel assets={selectedAssets} />
+            <RecentActivityFeed />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
             <CertExpiryTimeline selectedAssets={selectedAssets} />
             <AssetRiskDistribution selectedAssets={selectedAssets} />
-          </div>
-          <div className="mb-5">
-            <RecentActivityFeed />
           </div>
 
           {/* Scan Detail Section */}
@@ -222,7 +271,7 @@ const DashboardHome = () => {
                           </TableCell>
                           <TableCell className="font-body text-xs max-w-[250px]">{f.action}</TableCell>
                           <TableCell>
-                            <Button size="sm" variant="outline" className="text-[10px] h-6" onClick={() => navigate(`/dashboard/remediation/ai-patch?asset=${f.assetDomain.replace(/\./g, '-')}`)}>
+                            <Button size="sm" variant="outline" className="text-[10px] h-6" onClick={() => navigate(`/dashboard/remediation/patch?asset=${f.assetDomain.replace(/\./g, '-')}`)}>
                               <Wrench className="w-3 h-3 mr-1" /> Fix This
                             </Button>
                           </TableCell>

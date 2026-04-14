@@ -57,6 +57,29 @@ function phaseProgress(phase: string): number {
   return Math.round(((idx + 1) / phases.length) * 100);
 }
 
+function formatEtaLabel(lower: number | null, upper: number | null): string | null {
+  if (lower === null && upper === null) return null;
+  const l = Math.max(0, Math.round((lower ?? upper ?? 0) / 60));
+  const u = Math.max(l, Math.round((upper ?? lower ?? 0) / 60));
+  if (u <= 1) return '<1 min';
+  if (l === u) return `~${u} min`;
+  return `${l}-${u} min`;
+}
+
+function stageDisplayName(stage: string | null | undefined): string {
+  if (!stage) return 'Discovery';
+  const normalized = stage.toLowerCase();
+  if (normalized.includes('enumerat')) return 'Discovery';
+  if (normalized.includes('validating_dns')) return 'DNS Validation';
+  if (normalized.includes('scanning_ports')) return 'Port Scanning';
+  if (normalized.includes('probing_tls')) return 'TLS Probing';
+  if (normalized.includes('persisting_assets')) return 'Persistence';
+  if (normalized.includes('preparing')) return 'Preparing';
+  if (normalized.includes('completed')) return 'Completed';
+  if (normalized.includes('failed')) return 'Failed';
+  return stage;
+}
+
 const ScanQueueContext = createContext<ScanQueueContextType | undefined>(undefined);
 
 export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
@@ -76,6 +99,8 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
   const activeItemIdRef = useRef<string | null>(null);
   const queueItemCounterRef = useRef(0);
   const queueCompleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastStageSnapshotRef = useRef<Map<string, string>>(new Map());
+  const seenRuntimeEventsRef = useRef<Map<string, Set<string>>>(new Map());
 
   const addLog = useCallback((msg: string) => {
     setLogs((prev) => {
@@ -168,6 +193,7 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
             ? { ...item, scanId: scan_id }
             : item
         )));
+        seenRuntimeEventsRef.current.set(scan_id, new Set());
         addLog(`Scan created: ${scanId}`);
 
         let done = false;
@@ -192,7 +218,36 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
                 }
                 : item
             )));
-            addLog(`${phase}: ${nextItem.target}`);
+
+            const etaLabel = formatEtaLabel(
+              status.estimated_remaining_lower_seconds ?? null,
+              status.estimated_remaining_upper_seconds ?? null,
+            );
+            const detail = status.stage_detail ?? nextItem.target;
+            const stageName = stageDisplayName(status.stage);
+            const assetsDiscovered = status.progress?.assets_discovered ?? 0;
+            const snapshot = `${stageName}|${detail}|${etaLabel ?? 'n/a'}|${assetsDiscovered}`;
+            const previous = lastStageSnapshotRef.current.get(scanId);
+            if (snapshot !== previous) {
+              lastStageSnapshotRef.current.set(scanId, snapshot);
+              addLog(
+                `${stageName}: ${detail}${etaLabel ? ` (ETA ${etaLabel})` : ''} · assets discovered: ${assetsDiscovered}`,
+              );
+            }
+
+            const seenKeys = seenRuntimeEventsRef.current.get(scanId) ?? new Set<string>();
+            for (const event of status.events ?? []) {
+              const kind = (event.kind || 'info').toLowerCase();
+              const eventKey = kind === 'error'
+                ? `${kind}|${event.message}`
+                : `${event.timestamp}|${event.kind}|${event.message}`;
+              if (seenKeys.has(eventKey)) continue;
+              seenKeys.add(eventKey);
+              if (kind === 'degraded' || kind === 'error' || kind === 'success' || kind === 'stage') {
+                addLog(`${kind.toUpperCase()}: ${event.message}`);
+              }
+            }
+            seenRuntimeEventsRef.current.set(scanId, seenKeys);
 
             if (status.status === 'completed') {
               done = true;
@@ -203,6 +258,8 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
               )));
               setLatestCompletedScanId(scanId);
               addLog(`Scan complete: ${nextItem.target}`);
+              lastStageSnapshotRef.current.delete(scanId);
+              seenRuntimeEventsRef.current.delete(scanId);
 
               const assetsFound = status.progress?.assets_discovered ?? 0;
               setNotifications((prev) => [...prev, {
@@ -220,6 +277,8 @@ export const ScanQueueProvider = ({ children }: { children: ReactNode }) => {
                   : item
               )));
               addLog(`Scan failed: ${nextItem.target}`);
+              lastStageSnapshotRef.current.delete(scanId);
+              seenRuntimeEventsRef.current.delete(scanId);
             }
           } catch (pollErr) {
             addLog(`Poll error for ${nextItem.target}: ${pollErr}`);

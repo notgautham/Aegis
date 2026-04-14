@@ -36,9 +36,9 @@ const EnterpriseIntel = () => {
           </div>
         </div>
 
-        {/* Cyber Rating + PQC Intel */}
+        {/* Q-Score Overview + PQC Intel */}
         <div>
-          <span className="font-mono text-[10px] text-muted-foreground uppercase block mb-3">Cyber Rating &amp; PQC Intelligence</span>
+          <span className="font-mono text-[10px] text-muted-foreground uppercase block mb-3">Q-Score Overview &amp; PQC Intelligence</span>
           <div className="space-y-2">
             {intel.map(item => (
               <div key={item.label} className="flex items-center justify-between">

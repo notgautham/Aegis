@@ -201,7 +201,7 @@ const ReportingExecutive = () => {
       <DataContextBadge />
       <div>
         <h1 className="font-display text-2xl italic text-brand-primary">Executive Reports</h1>
-        <p className="font-body text-sm text-muted-foreground mt-1">Pre-built report templates for stakeholder communication and compliance documentation</p>
+        <p className="text-xs font-body text-muted-foreground mt-0.5">Leadership-ready summaries of quantum readiness, risk concentration, and remediation progress.</p>
       </div>
       <SectionTabBar tabs={reportingTabs} />
 

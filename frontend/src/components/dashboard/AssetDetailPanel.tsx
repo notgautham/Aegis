@@ -221,7 +221,7 @@ const AssetDetailPanel = ({ asset, open, onClose }: AssetDetailPanelProps) => {
 
             <div className="flex gap-2">
               <button className="flex-1 font-body text-xs font-semibold bg-accent-amber text-brand-primary py-2 rounded-lg">
-                Generate AI Patch
+                Generate Patch
               </button>
               <button className="flex-1 font-body text-xs text-brand-primary border border-[hsl(var(--border-default))] py-2 rounded-lg">
                 Export CBOM

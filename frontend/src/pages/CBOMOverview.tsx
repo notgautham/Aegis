@@ -99,6 +99,7 @@ const CBOMOverview = () => {
     <div className="space-y-5">
       <DataContextBadge />
       <h1 className="font-display text-2xl italic text-brand-primary">Cryptographic Bill of Materials</h1>
+      <p className="text-xs font-body text-muted-foreground mt-0.5">Inventory-wide cryptographic components, algorithm posture, and certificate authority distribution.</p>
       <SectionTabBar tabs={cbomTabs} />
       <p className="text-xs font-body text-muted-foreground italic">
         Showing cryptographic inventory for {displayAssets.length} asset{displayAssets.length !== 1 ? 's' : ''} with {cbomAssetIds.size} persisted CBOM document{cbomAssetIds.size !== 1 ? 's' : ''}. {weakCount} asset{weakCount !== 1 ? 's' : ''} use weak cryptography requiring immediate attention.

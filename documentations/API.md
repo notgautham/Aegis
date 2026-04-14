@@ -1,6 +1,6 @@
 # Aegis API Reference
 
-Last updated: 2026-04-12
+Last updated: 2026-04-14
 
 This document describes the live HTTP API exposed by the backend in local Docker mode.
 
@@ -8,7 +8,7 @@ This document describes the live HTTP API exposed by the backend in local Docker
 
 - Base URL: http://localhost:8000
 - API prefix: /api/v1
-- OpenAPI JSON: http://localhost:8000/openapi.json
+- OpenAPI JSON: http://localhost:8000/api/v1/openapi.json
 - Swagger UI: http://localhost:8000/docs
 - Health: GET /health
 - Content type: application/json
@@ -173,6 +173,49 @@ Returns latest persisted compliance certificate for one asset.
 ### GET /api/v1/assets/{asset_id}/remediation
 
 Returns latest persisted remediation bundle for one asset.
+
+## 4.5 System Health
+
+### GET /api/v1/system/health
+
+Returns live backend system diagnostics assembled at request time (no hardcoded status payloads).
+
+Top-level fields:
+- timestamp
+- overall_status
+- services[]: backend_api, postgres, qdrant dependency checks
+- system_checks[]: runtime/app-state, docs corpus, frontend bundle checks
+- api_endpoints[]: discovered API routes with methods/path/status
+- infra_endpoints[]: non-API routes (health/docs/spa routes) with methods/path/status
+- route_totals: counts for api, infra, total
+- runtime: live runtime configuration snapshot
+
+Example response shape:
+
+```json
+{
+  "timestamp": "2026-04-14T12:00:00Z",
+  "overall_status": "healthy",
+  "services": [
+    {"name": "backend_api", "status": "healthy", "details": {}},
+    {"name": "postgres", "status": "healthy", "details": {}},
+    {"name": "qdrant", "status": "healthy", "details": {}}
+  ],
+  "system_checks": [
+    {"name": "docs_corpus", "status": "healthy", "details": {}},
+    {"name": "frontend_bundle", "status": "healthy", "details": {}},
+    {"name": "app_runtime", "status": "healthy", "details": {}}
+  ],
+  "api_endpoints": [
+    {"path": "/api/v1/scan", "methods": ["POST"], "status": "healthy"}
+  ],
+  "infra_endpoints": [
+    {"path": "/health", "methods": ["GET"], "status": "healthy"}
+  ],
+  "route_totals": {"api": 10, "infra": 3, "total": 13},
+  "runtime": {}
+}
+```
 
 ## 5. Key Response Shapes
 

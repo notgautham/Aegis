@@ -76,7 +76,10 @@ const CBOMPerAsset = () => {
     <div className="space-y-5">
       <DataContextBadge />
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl italic text-brand-primary">Per-Asset CBOM</h1>
+        <div>
+          <h1 className="font-display text-2xl italic text-brand-primary">Per-Asset CBOM</h1>
+          <p className="text-xs font-body text-muted-foreground mt-0.5">Deep component-level cryptographic bill of materials for each discovered asset.</p>
+        </div>
         <Button variant="outline" size="sm" className="text-xs" onClick={() => window.location.href = '/dashboard/cbom/export'}>Open Export Center</Button>
       </div>
       <SectionTabBar tabs={cbomTabs} />

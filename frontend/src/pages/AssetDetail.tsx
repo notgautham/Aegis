@@ -398,7 +398,7 @@ const AssetDetail = () => {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-body">Remediation Actions</CardTitle>
-            <Button size="sm" className="text-xs h-7 gap-1" onClick={() => navigate(`/dashboard/remediation/ai-patch?asset=${asset.domain.replace(/\./g, '-')}`)}>Generate Patch</Button>
+            <Button size="sm" className="text-xs h-7 gap-1" onClick={() => navigate(`/dashboard/remediation/patch?asset=${asset.domain.replace(/\./g, '-')}`)}>Generate Patch</Button>
           </div>
         </CardHeader>
         <CardContent>

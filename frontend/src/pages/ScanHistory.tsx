@@ -110,7 +110,7 @@ const ScanHistory = () => {
       <div className="space-y-5">
         <div>
           <h1 className="font-display text-2xl italic text-brand-primary">Scan History</h1>
-          <p className="font-body text-sm text-muted-foreground mt-1">Loading scan history...</p>
+          <p className="text-xs font-body text-muted-foreground mt-0.5">Historical run archive for trend analysis, profile comparison, and scan replay context.</p>
         </div>
       </div>
     );
@@ -121,7 +121,7 @@ const ScanHistory = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl italic text-brand-primary">Scan History</h1>
-          <p className="font-body text-sm text-muted-foreground mt-1">All past scans for {rootDomain || 'target'} infrastructure. Click any row to view in Dashboard.</p>
+          <p className="text-xs font-body text-muted-foreground mt-0.5">Historical run archive for trend analysis, profile comparison, and scan replay context.</p>
         </div>
         <Button onClick={() => navigate('/scanner')} className="gap-1.5 text-xs">
           <Plus className="w-3.5 h-3.5" /> Run New Scan
