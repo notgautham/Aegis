@@ -1527,6 +1527,23 @@ class PipelineOrchestrator:
         This attempts direct TLS handshakes to common HTTPS ports using hostname+SNI.
         """
         common_tls_ports = (443, 8443)
+        scan_ipv6 = os.getenv("AEGIS_SCAN_IPV6", "false").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+        def _selected_probe_ips(addresses: Sequence[str]) -> tuple[str, ...]:
+            if scan_ipv6:
+                return tuple(addresses)
+            ipv4_addresses = tuple(
+                address
+                for address in addresses
+                if ipaddress.ip_address(address).version == 4
+            )
+            return ipv4_addresses or tuple(addresses)
+
         targets: list[TLSScanTarget] = []
         seen: set[tuple[str | None, str, int]] = set()
 
@@ -1534,7 +1551,7 @@ class PipelineOrchestrator:
             normalized_hostname = validated.hostname.strip().lower().rstrip(".")
             if not scope.contains(hostname=normalized_hostname):
                 continue
-            for ip_address in validated.ip_addresses:
+            for ip_address in _selected_probe_ips(validated.ip_addresses):
                 for port in common_tls_ports:
                     key = (normalized_hostname, ip_address, port)
                     if key in seen:
@@ -1550,7 +1567,7 @@ class PipelineOrchestrator:
                     )
 
         if not targets and scope.scope_type in {"ip", "network"}:
-            for ip_address in ip_addresses:
+            for ip_address in _selected_probe_ips(ip_addresses):
                 for port in common_tls_ports:
                     key = (None, ip_address, port)
                     if key in seen:

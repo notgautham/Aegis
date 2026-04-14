@@ -6,15 +6,21 @@ lifespan management, and health check endpoint.
 """
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 
 from backend.api.v1.router import api_router
 from backend.core.config import get_settings
+from backend.core.database import async_session_factory
+from backend.models.enums import ScanStatus
+from backend.models.scan_event import ScanEvent
+from backend.models.scan_job import ScanJob
 from backend.pipeline import (
     PipelineOrchestrator,
     ScanNotFoundError,
@@ -33,6 +39,45 @@ def _initialize_app_state(app: FastAPI) -> None:
     app.state.scan_read_service = ScanReadService(runtime_store=runtime_store)
 
 
+async def _reconcile_inflight_scans_on_startup() -> None:
+    """Mark in-flight scans as failed when the process restarts.
+
+    Background scan tasks live in process memory. After a reload/restart there is no task to
+    continue those scans, so we fail them explicitly instead of leaving them stuck in running.
+    """
+    async with async_session_factory() as session:
+        rows = (
+            await session.execute(
+                select(ScanJob).where(
+                    ScanJob.status.in_([ScanStatus.PENDING, ScanStatus.RUNNING]),
+                    ScanJob.completed_at.is_(None),
+                )
+            )
+        ).scalars().all()
+
+        if not rows:
+            return
+
+        now = datetime.now(UTC)
+        for scan in rows:
+            scan.status = ScanStatus.FAILED
+            scan.completed_at = now
+            session.add(
+                ScanEvent(
+                    scan_id=scan.id,
+                    timestamp=now,
+                    kind="error",
+                    stage="failed",
+                    message=(
+                        "Scan marked failed after backend restart because in-memory "
+                        "worker state was lost. Please retry the scan."
+                    ),
+                )
+            )
+
+        await session.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan — startup and shutdown hooks."""
@@ -40,6 +85,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Database engine is created lazily on first query;
     # explicit table creation will be handled by Alembic migrations.
     _initialize_app_state(app)
+    await _reconcile_inflight_scans_on_startup()
     yield
     # ── Shutdown ────────────────────────────────────────
     from backend.core.database import engine
