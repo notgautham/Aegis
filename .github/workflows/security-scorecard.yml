@@ -2,8 +2,6 @@ name: Security Scorecard
 
 on:
   branch_protection_rule:
-  schedule:
-    - cron: "42 2 * * 2"
   push:
     branches: ["main"]
   workflow_dispatch:
