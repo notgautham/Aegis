@@ -32,7 +32,8 @@ jobs:
           python-version: "3.11"
       
       - name: Install ruff
-        run: pip install ruff
+        # Pinned: ruff 0.16+ adds rules that flag ~150 existing lines; bump after fixing them.
+        run: pip install "ruff==0.15.22"
         
       - name: Run Ruff Linter
         run: ruff check backend tests scripts simulation migrations

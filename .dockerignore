@@ -73,3 +73,10 @@ Icon
 .vscode/
 *.swp
 *.swo
+
+# Secrets and caches (keep out of images)
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.ruff_cache/

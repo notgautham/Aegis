@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import time
@@ -15,6 +16,8 @@ from sqlalchemy import text
 
 from backend.core.config import get_settings
 from backend.core.database import async_session_factory
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["System"])
 _APP_START_TS = time.time()
@@ -104,8 +107,9 @@ async def get_system_health(request: Request) -> dict[str, object]:
             "migration_revision": migration_revision,
         }
     except Exception as exc:
+        logger.warning("Database health check failed", exc_info=True)
         db_status["status"] = "unhealthy"
-        db_status["details"] = {"error": str(exc)[:220]}
+        db_status["details"] = {"error": type(exc).__name__}
 
     qdrant_status: dict[str, object] = {
         "name": "qdrant",
@@ -130,11 +134,13 @@ async def get_system_health(request: Request) -> dict[str, object]:
             "points_count": collection_points_count,
         }
     except Exception as exc:
+        logger.warning("Qdrant health check failed", exc_info=True)
         qdrant_status["status"] = "unhealthy"
         qdrant_status["details"] = {
             "url": settings.QDRANT_URL,
             "collection": settings.QDRANT_COLLECTION_NAME,
-            "error": str(exc)[:220],
+            # Exception class only: full messages can leak internals to API callers.
+            "error": type(exc).__name__,
         }
 
     docs_source = Path(settings.DOCS_SOURCE_DIR)

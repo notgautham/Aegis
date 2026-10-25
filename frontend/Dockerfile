@@ -1,4 +1,6 @@
-FROM node:20-alpine
+FROM node:22-alpine
+# Security patches for Alpine and the bundled npm CLI
+RUN apk upgrade --no-cache && npm install -g npm@11 && npm cache clean --force
 WORKDIR /app
 COPY package*.json ./
 RUN npm install

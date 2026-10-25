@@ -6,6 +6,17 @@ RUN npm install
 COPY frontend/ .
 RUN npm run build
 
+# ── Stage 1b: Build Amass from source with a current Go toolchain ──
+# The release binaries are built with an older Go and carry its stdlib CVEs.
+FROM golang:1.26-alpine AS amass-builder
+ARG AMASS_VERSION=5.1.1
+RUN apk add --no-cache git && \
+    git clone --depth 1 --branch v${AMASS_VERSION} https://github.com/owasp-amass/amass.git /src && \
+    cd /src && \
+    go get golang.org/x/crypto@latest golang.org/x/net@latest github.com/klauspost/compress@latest google.golang.org/grpc@latest && \
+    go mod tidy && \
+    CGO_ENABLED=0 go build -trimpath -o /amass ./cmd/amass
+
 # ─────────────────────────────────────────────────────────
 # Stage 2: Aegis – PQC-Enabled Infrastructure (Alpine Native Build)
 # ─────────────────────────────────────────────────────────
@@ -34,6 +45,9 @@ RUN apk add --no-cache \
     libtool \
     pkgconf \
     gcompat
+
+# Pull in Alpine security patches released after the base image was built
+RUN apk upgrade --no-cache
 
 # samurai provides samu, we symlink it to ninja for CMake compatibility
 RUN ln -sf /usr/bin/samu /usr/local/bin/ninja
@@ -84,21 +98,14 @@ RUN mkdir -p /usr/local/ssl && \
 # Set up library paths
 RUN ldconfig /usr/local/lib || true
 
-# Install Amass with architecture detection
-ARG AMASS_VERSION=5.0.1
-RUN ARCH=$(uname -m) && \
-    if [ "$ARCH" = "x86_64" ]; then AMASS_ARCH="amd64"; else AMASS_ARCH="arm64"; fi && \
-    wget -O /tmp/amass.tar.gz "https://github.com/owasp-amass/amass/releases/download/v${AMASS_VERSION}/amass_linux_${AMASS_ARCH}.tar.gz" && \
-    mkdir -p /tmp/amass && \
-    tar -xzf /tmp/amass.tar.gz -C /tmp/amass && \
-    install "$(find /tmp/amass -type f -name amass | head -n 1)" /usr/local/bin/amass && \
-    rm -rf /tmp/amass /tmp/amass.tar.gz
+COPY --from=amass-builder /amass /usr/local/bin/amass
 
 WORKDIR /app
 
 # Install Python dependencies (build tools still present for C extension compilation)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && \
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir liboqs-python
 
 # Remove build-only dependencies and source trees to reduce CVE surface
@@ -122,6 +129,8 @@ COPY --from=frontend-builder /frontend/dist /app/frontend/dist
 
 # Set OQS configuration at runtime
 ENV LD_LIBRARY_PATH=/usr/local/lib
+# liboqs-python cannot auto-discover liboqs once build tools are removed
+ENV OQS_INSTALL_PATH=/usr/local
 ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
 
 EXPOSE 8000
